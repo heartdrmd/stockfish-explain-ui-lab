@@ -201,8 +201,13 @@
 body.nav-collapsed .site-nav > * {
   display: none !important;
 }
-body.nav-collapsed .site-nav > .always-visible,
-body.nav-collapsed .always-visible {
+/* `:not([hidden])` so JS-driven hides via the [hidden] attribute
+   still take effect on .always-visible elements. Without this guard,
+   the !important here beat .btn-auth[hidden]'s !important (later
+   source order wins on tie), so the Sign in button stayed visible
+   even after login. */
+body.nav-collapsed .site-nav > .always-visible:not([hidden]),
+body.nav-collapsed .always-visible:not([hidden]) {
   display: inline-flex !important;
 }
 body.nav-collapsed .site-header { min-height: 40px; padding: 6px 14px; }
