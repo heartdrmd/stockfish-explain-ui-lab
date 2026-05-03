@@ -1559,6 +1559,10 @@ async function main() {
   // Boot flush + 5-minute interval.
   setTimeout(() => flushEngineCrashHistory(), 8000);   // small delay so auth has settled
   setInterval(flushEngineCrashHistory, 5 * 60 * 1000);
+  // Expose a manual flush for on-demand diagnostics. Lets the user
+  // (or me, asking them) push the local crash buffer to the server
+  // immediately instead of waiting up to 5 min for the next interval.
+  window.__flushEngineCrashes = flushEngineCrashHistory;
   // Refresh the engine-mode pill every time a crash happens to show
   // the per-session counter, so you don't have to open the console.
   function refreshCrashBadge() {
