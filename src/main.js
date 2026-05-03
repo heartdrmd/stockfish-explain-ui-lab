@@ -9014,6 +9014,10 @@ async function main() {
     } else {
       if (authSignin) authSignin.hidden = false;
       if (authUser)   authUser.hidden = true;
+      // Clear the username text explicitly so any rogue CSS that
+      // overrides [hidden] still doesn't leak the previous user's
+      // name onto the page after a logout.
+      if (authUserEl) authUserEl.textContent = '';
     }
   }
   function openAuth(mode = 'signin') {
@@ -9055,9 +9059,39 @@ async function main() {
     });
   }
   if (authLogout) authLogout.addEventListener('click', async () => {
-    try { await api.logout(); } catch {}
+    const wasUser = window.__currentUser?.username || '';
+    let serverOk = false;
+    try { await api.logout(); serverOk = true; } catch (err) {
+      console.warn('[auth] logout request failed (clearing client-side anyway)', err.message || err);
+    }
     window.__currentUser = null;
     renderAuthUi();
+    console.log('[auth] logged out', { wasUser, serverOk });
+    // Visible confirmation toast at the top of the page so the user
+    // gets unambiguous feedback that logout actually happened. The
+    // username has already been hidden + textContent cleared by
+    // renderAuthUi above; this just adds a "✓ Signed out" message
+    // that auto-dismisses after 2 s.
+    try {
+      let toast = document.getElementById('auth-toast');
+      if (!toast) {
+        toast = document.createElement('div');
+        toast.id = 'auth-toast';
+        toast.style.cssText =
+          'position:fixed;top:70px;left:50%;transform:translateX(-50%);' +
+          'z-index:10002;padding:10px 18px;border-radius:6px;' +
+          'background:rgba(60,160,90,0.95);color:#fff;font-weight:600;' +
+          'box-shadow:0 4px 14px rgba(0,0,0,0.4);font-family:var(--font-body);' +
+          'transition:opacity 0.3s';
+        document.body.appendChild(toast);
+      }
+      toast.textContent = wasUser
+        ? `✓ Signed out (was ${wasUser})`
+        : '✓ Signed out';
+      toast.style.opacity = '1';
+      setTimeout(() => { toast.style.opacity = '0'; }, 2000);
+      setTimeout(() => { toast.remove(); }, 2500);
+    } catch {}
   });
 
   // On page load, check if we have an existing session.
