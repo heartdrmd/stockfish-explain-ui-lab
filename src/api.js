@@ -110,6 +110,8 @@ export const api = {
   // Engine crash telemetry (Phase-3-decision visibility)
   reportEngineCrashes: (crashes)        => req('POST',   '/api/engine-crashes', { crashes }),
   engineCrashStats:    ()               => req('GET',    '/api/engine-crashes/stats'),
+  // One-click diagnostic-log upload to Postgres
+  uploadDiagnosticLog: (log_text)       => req('POST',   '/api/diagnostic-logs', { log_text }),
 
   listCustomOpenings: ()                => req('GET',    '/api/custom-openings'),
   saveCustomOpening:  (op)              => req('POST',   '/api/custom-openings', op),

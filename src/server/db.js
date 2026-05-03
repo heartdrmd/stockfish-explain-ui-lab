@@ -292,6 +292,29 @@ const migrations = [
         ON engine_crashes(guest_id, crashed_at DESC) WHERE guest_id IS NOT NULL;
     `,
   },
+  {
+    // Diagnostic-log uploads. The user can hit the 📤 Upload log
+    // button mid-session and POST their full LOG_BUFFER straight to
+    // Postgres, instead of downloading a file + sending it. Lets me
+    // (or them) query the latest log directly from the DB. Same
+    // dual-ownership pattern as games.
+    name: '013_diagnostic_logs',
+    sql: `
+      CREATE TABLE IF NOT EXISTS diagnostic_logs (
+        id           SERIAL PRIMARY KEY,
+        user_id      INT REFERENCES users(id) ON DELETE CASCADE,
+        guest_id     TEXT,
+        user_agent   TEXT,
+        log_text     TEXT NOT NULL,
+        size_bytes   INT,
+        uploaded_at  TIMESTAMPTZ DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_diagnostic_logs_user_when
+        ON diagnostic_logs(user_id, uploaded_at DESC) WHERE user_id IS NOT NULL;
+      CREATE INDEX IF NOT EXISTS idx_diagnostic_logs_guest_when
+        ON diagnostic_logs(guest_id, uploaded_at DESC) WHERE guest_id IS NOT NULL;
+    `,
+  },
 ];
 
 export async function runMigrations() {

@@ -7600,6 +7600,56 @@ async function main() {
       flashPill(ui.engineMode, `Log downloaded (${LOG_BUFFER.length} lines)`, 1400);
     });
   }
+  // 📤 Upload log — POST the same log content directly to Postgres
+  // so I can pull the latest one without the user needing to email
+  // / paste a file. Returns a numeric id that the user can quote.
+  const btnUploadLog = document.getElementById('btn-upload-log');
+  if (btnUploadLog) {
+    btnUploadLog.addEventListener('click', async () => {
+      const original = btnUploadLog.textContent;
+      btnUploadLog.disabled = true;
+      btnUploadLog.textContent = '⏳ Uploading…';
+      try {
+        const content = buildLogFile();
+        const result = await api.uploadDiagnosticLog(content);
+        const sizeKb = Math.round((result.size_bytes || content.length) / 1024);
+        btnUploadLog.textContent = `✓ Uploaded (id ${result.id}, ${sizeKb} KB)`;
+        flashPill(ui.engineMode, `Log uploaded — id ${result.id}`, 2200);
+        console.log('[upload-log] success', result);
+        // Show a visible toast at top of page so the user gets a clear
+        // signal AND can quote the id back to me ("just uploaded log
+        // id 7"). Same toast component pattern as the auth-toast.
+        try {
+          let toast = document.getElementById('upload-log-toast');
+          if (!toast) {
+            toast = document.createElement('div');
+            toast.id = 'upload-log-toast';
+            toast.style.cssText =
+              'position:fixed;top:70px;left:50%;transform:translateX(-50%);' +
+              'z-index:10002;padding:10px 18px;border-radius:6px;' +
+              'background:rgba(60,160,90,0.95);color:#fff;font-weight:600;' +
+              'box-shadow:0 4px 14px rgba(0,0,0,0.4);font-family:var(--font-body);' +
+              'transition:opacity 0.3s';
+            document.body.appendChild(toast);
+          }
+          toast.textContent = `✓ Log uploaded — id ${result.id} (${sizeKb} KB). Tell me the id to debug.`;
+          toast.style.opacity = '1';
+          setTimeout(() => { toast.style.opacity = '0'; }, 3500);
+          setTimeout(() => { toast.remove(); }, 4000);
+        } catch {}
+      } catch (err) {
+        console.error('[upload-log] failed', err);
+        btnUploadLog.textContent = `❌ Upload failed`;
+        alert('Log upload failed: ' + (err.message || err) +
+              '\n\nTry the 📄 Log download button instead and send me the file.');
+      } finally {
+        setTimeout(() => {
+          btnUploadLog.disabled = false;
+          btnUploadLog.textContent = original;
+        }, 3000);
+      }
+    });
+  }
   document.getElementById('btn-undo').addEventListener('click', () => {
     // Double-check during an ACTIVE practice game so a stray click on
     // the header Undo button doesn't wipe the last move you just

@@ -155,6 +155,34 @@ export function wireLibrary(app) {
     }
   });
 
+  // ── Diagnostic log upload (one-click "send the log") ─────────
+  //
+  // POST /api/diagnostic-logs
+  //   body: { log_text: <full LOG_BUFFER content> }
+  // Returns: { id, size_bytes }
+  // Cap at ~2 MB per upload (typical session log is < 200 KB).
+  app.post('/api/diagnostic-logs', requireAuthOrGuest, async (req, res) => {
+    try {
+      const text = String(req.body?.log_text || '');
+      if (!text) return res.status(400).json({ error: 'log_text required' });
+      if (text.length > 2_000_000) {
+        return res.status(413).json({ error: 'log too large (max 2 MB)' });
+      }
+      const userId  = req.user  ? req.user.id  : null;
+      const guestId = req.guest ? req.guest.id : null;
+      const ua = String(req.get('User-Agent') || '').slice(0, 300);
+      const { rows } = await query(
+        `INSERT INTO diagnostic_logs(user_id, guest_id, user_agent, log_text, size_bytes)
+         VALUES($1,$2,$3,$4,$5) RETURNING id, uploaded_at`,
+        [userId, guestId, ua, text, text.length],
+      );
+      res.json({ id: rows[0].id, size_bytes: text.length, uploaded_at: rows[0].uploaded_at });
+    } catch (err) {
+      console.error('[diagnostic-logs] upload failed', err);
+      res.status(500).json({ error: 'upload failed' });
+    }
+  });
+
   // ── Engine crash telemetry (Phase-3-decision visibility) ──────
   //
   // POST /api/engine-crashes
