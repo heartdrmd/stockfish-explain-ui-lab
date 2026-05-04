@@ -540,7 +540,14 @@ export class Engine extends EventTarget {
    * mobile network downloading the 100 MB big NNUE.
    */
   _waitForInfoString(prefix, timeoutMs = 120_000) {
+    // Capture the worker reference at promise-creation time. If main.js's
+    // boot timeout fires earlier than ours and calls terminate(), this.worker
+    // becomes null. The setTimeout below would then call null.removeEventListener
+    // and throw an uncaught TypeError. Holding our own reference guarantees
+    // cleanup never references a null worker.
+    const w = this.worker;
     return new Promise((resolve, reject) => {
+      let settled = false;
       const wrapped = (e) => {
         const line = e.data;
         if (typeof line !== 'string') return;
@@ -558,10 +565,14 @@ export class Engine extends EventTarget {
         reject(new Error(`timeout waiting for "info string ${prefix}" after ${timeoutMs}ms`));
       }, timeoutMs);
       const cleanup = () => {
+        if (settled) return;
+        settled = true;
         clearTimeout(t);
-        this.worker.removeEventListener('message', wrapped);
+        // Guard with optional chaining + try — w may have been terminated
+        // (and its event-target methods torn down) between then and now.
+        try { w?.removeEventListener?.('message', wrapped); } catch {}
       };
-      this.worker.addEventListener('message', wrapped);
+      w.addEventListener('message', wrapped);
     });
   }
 

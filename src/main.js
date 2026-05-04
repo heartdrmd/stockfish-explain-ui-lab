@@ -966,11 +966,27 @@ async function main() {
       // Race boot against a size-aware timeout so users see an error
       // instead of an infinite "booting…" when something upstream (stuck
       // SW, corrupt cached WASM, CDN stall) wedges engine.boot().
-      // Lite (7 MB) should boot in <15 s on any sane connection; full
-      // NNUE (108 MB) may legitimately need up to ~90 s over a slow
-      // cold CDN fetch.
+      //
+      //   Lite (7 MB)             →  <15 s on any sane connection → 25 s budget
+      //   nmrugg full (108 MB)    →  embedded NNUE in .wasm → 90 s budget
+      //   lichess-full (cold)     →  104 MB NNUE fetched separately + 700 KB wasm,
+      //                              both have to land before bignet ack arrives;
+      //                              first-visit on a slow connection has been
+      //                              measured at >90 s (user log 2026-05-04).
+      //                              Give cold-cache 240 s; warm-cache hits this
+      //                              path in <5 s anyway, so the long ceiling
+      //                              only affects the genuinely-slow case.
       const sizeStr = ENGINE_FLAVORS[flavor]?.size || '';
-      const timeoutMs = sizeStr.includes('108') ? 90_000 : 25_000;
+      let timeoutMs;
+      if (flavor === 'lichess-full') {
+        // Cold-cache: 240 s. Disk-cache hit: still capped at 240 s but
+        // resolves in seconds — no harm.
+        timeoutMs = 240_000;
+      } else if (sizeStr.includes('108')) {
+        timeoutMs = 90_000;
+      } else {
+        timeoutMs = 25_000;
+      }
       const info = await Promise.race([
         engine.boot({ flavor }),
         new Promise((_, reject) =>
