@@ -825,17 +825,46 @@ async function main() {
     try { localStorage.removeItem(FLAVOR_STORAGE); } catch {}
     savedFlavor = null;
   }
+  // Phase 3b (2026-05-04): migrate persisted nmrugg 'full' → lichess-full.
+  // nmrugg full was wedging on Windows/Edge (RuntimeError: memory access
+  // out of bounds). Anyone whose dropdown was set to "Stock Full" gets
+  // bumped to the lichess SF18 default. They can still pick "Stock Full"
+  // manually from the dropdown if they want.
+  if (savedFlavor === 'full') {
+    console.log('[engine] migrating persisted full (nmrugg) → lichess-full default');
+    try { localStorage.removeItem(FLAVOR_STORAGE); } catch {}
+    savedFlavor = null;
+  }
+  // Also auto-migrate the old aspirational 'sf-fast' key which was
+  // renamed to 'lichess-full' in Phase 3a. Saved values from a prior
+  // experiment would otherwise be invalid and silently fall through
+  // to the default picker.
+  if (savedFlavor === 'sf-fast') {
+    console.log('[engine] migrating persisted sf-fast → lichess-full');
+    try { localStorage.setItem(FLAVOR_STORAGE, 'lichess-full'); } catch {}
+    savedFlavor = 'lichess-full';
+  }
   const flavorValid = savedFlavor && flavorOptions.includes(savedFlavor);
   // Default picker (only used when no persisted choice exists):
-  //   desktop, threadable, not Pages      → full          (stock 108 MB MT, strongest stable)
-  //   mobile, threadable, not Pages       → lite          (stock 7 MB MT,  fast first-load)
-  //   anywhere threadable on Pages host   → lite          (full-net not bundled)
+  //   desktop, threadable, not Pages      → lichess-full  (Stockfish 18, lichess WASM, browser-stable)
+  //   mobile, threadable, not Pages       → lite          (stock 7 MB MT, fast first-load)
+  //   anywhere threadable on Pages host   → lite          (full-net + lichess NNUE not bundled to Pages)
   //   no threads, mobile OR desktop       → lite-single   (stock 7 MB ST)
+  //
+  // Phase 3b (2026-05-04): default flipped from nmrugg 'full' to
+  // lichess-full. nmrugg full was wedging on Windows/Edge with
+  // RuntimeError: memory access out of bounds (see latest user logs +
+  // engine_crashes telemetry). Lichess SF18 is what lichess.org runs
+  // for millions of analyses — much better browser stability.
+  //
+  // First-visit cost: ~108 MB blocking download (sf_18.wasm + small
+  // NNUE + big NNUE). Subsequent visits hit disk cache → <5s boot.
+  //
   // Deliberately NEVER picks any custom/patched build (avrukh, kaufman,
   // classical, alphazero, avrukhplus). Those are opt-in only.
   function pickDefaultFlavor() {
     if (isPagesHost) return 'lite';
-    if (threadable)  return IS_MOBILE ? 'lite' : 'full';
+    if (threadable)  return IS_MOBILE ? 'lite' : 'lichess-full';
     return 'lite-single';
   }
   let currentFlavor = flavorValid ? savedFlavor : pickDefaultFlavor();
