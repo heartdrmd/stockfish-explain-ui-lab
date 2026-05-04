@@ -37,8 +37,13 @@ export const ENGINE_FLAVORS = {
     threaded: true,
     requiresBigNetForPractice: true,
     externalNnue: {
-      small: 'assets/nnue/small.nnue',
-      big:   'assets/nnue/big.nnue',
+      // Leading slash IS REQUIRED. The shim runs inside a Worker whose
+      // location is /assets/stockfish-web/lichess-shim.js — relative URLs
+      // resolve against THAT, so 'assets/nnue/big.nnue' became
+      // /assets/stockfish-web/assets/nnue/big.nnue (404). Page-rooted
+      // absolute paths bypass that resolution entirely.
+      small: '/assets/nnue/small.nnue',
+      big:   '/assets/nnue/big.nnue',
     },
   },
 
