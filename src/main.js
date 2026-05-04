@@ -923,8 +923,13 @@ async function main() {
     engineReady = false;
     ui.engineMode.textContent = 'booting…';
     ui.engineMode.classList.remove('threaded');
-    ui.narrationText.textContent = `Loading ${ENGINE_FLAVORS[flavor].label} (${ENGINE_FLAVORS[flavor].size})…`;
-    // Visible progress in console so it's obvious from a uploaded log
+    // For lichess-full we render a live progress bar instead of static
+    // text — see block below. For all other flavors keep the legacy
+    // text-only "Loading…" message.
+    if (flavor !== 'lichess-full') {
+      ui.narrationText.textContent = `Loading ${ENGINE_FLAVORS[flavor].label} (${ENGINE_FLAVORS[flavor].size})…`;
+    }
+    // Visible progress in console so it's obvious from an uploaded log
     // exactly when boot started. Without this, lichess-full on a fresh
     // browser cache (large NNUE download) shows ZERO engine logs for
     // 30-60 s, looking like a hard hang.
@@ -933,20 +938,9 @@ async function main() {
       flavor, label: ENGINE_FLAVORS[flavor]?.label, size: ENGINE_FLAVORS[flavor]?.size,
     });
 
-    // First-visit hint for lichess-full: display a one-time banner
-    // explaining the 108 MB download. Skipped on subsequent visits
-    // (we set a localStorage flag once boot succeeds with this flavor).
     const FIRST_BOOT_KEY = 'stockfish-explain.lichess-full-first-boot-done';
     const isFirstLichessBoot = flavor === 'lichess-full' &&
       !localStorage.getItem(FIRST_BOOT_KEY);
-    if (isFirstLichessBoot) {
-      try {
-        ui.narrationText.innerHTML =
-          `⏳ <strong>First-time setup:</strong> downloading Stockfish 18 + neural network ` +
-          `(~108 MB total). This only happens once — your browser will cache it for next time. ` +
-          `Expected: 30 – 60 s on a typical connection.`;
-      } catch {}
-    }
 
     // Live progress bar for lichess-full boot. Listens for the
     // boot-progress events that engine.js dispatches when the shim
@@ -956,10 +950,38 @@ async function main() {
       const fmt = (b) => (b >= 1_048_576) ? (b / 1_048_576).toFixed(1) + ' MB'
                        : (b >= 1024)      ? (b / 1024).toFixed(0) + ' KB'
                        : b + ' B';
+      const renderBar = (label, pct, sub) => {
+        const barW = pct > 0 ? pct : 5;
+        try {
+          ui.narrationText.innerHTML =
+            `⏳ ${label}` +
+            `<div style="margin-top:6px;height:8px;background:#222;border-radius:4px;overflow:hidden">` +
+            `<div style="height:100%;width:${barW}%;background:linear-gradient(90deg,#4a90e2,#67d2ff);` +
+            `transition:width .25s ease"></div></div>` +
+            (sub ? `<div style="margin-top:4px;font-size:0.85em;opacity:0.75">${sub}</div>` : '');
+        } catch {}
+      };
+
+      // Render an INITIAL bar immediately so the user sees something
+      // within ~10 ms of clicking. Without this, the bar only appears
+      // when the shim's first FETCH_START arrives (~500-800 ms later)
+      // — long enough that an impatient user uploads a log thinking
+      // nothing is happening.
+      renderBar(
+        `Initialising <strong>Lichess Stockfish 18</strong>…`,
+        0,
+        isFirstLichessBoot
+          ? `Loading WASM + neural network. First-time setup — only happens once.`
+          : `Loading from browser cache.`
+      );
+
       const onBootProgress = (ev) => {
         const d = ev.detail || {};
         const labelMap = { 0: 'Stockfish brain (big NNUE)', 1: 'Quick-eval network (small NNUE)' };
         const lbl = labelMap[d.index] || 'NNUE';
+        // Mirror to console so we can SEE progress in uploaded logs
+        // (without this, a slow boot looks identical to a hung boot).
+        console.log('[engine] boot-progress', d);
         if (d.phase === 'fail') {
           try {
             ui.narrationText.innerHTML =
@@ -968,29 +990,22 @@ async function main() {
           return;
         }
         if (d.phase === 'loaded') {
-          // Only show "loaded" briefly; the next progress / loaded line
-          // (or the final "Engine ready" message at boot complete) takes
-          // it over.
-          try {
-            ui.narrationText.innerHTML =
-              `✓ ${lbl} loaded (${fmt(d.received)})`;
-          } catch {}
+          renderBar(
+            `<strong>${lbl}</strong> loaded (${fmt(d.received)}) — initialising engine…`,
+            100, ''
+          );
           return;
         }
-        // fetch-start or progress: render a bar.
+        // fetch-start or progress: render a bar with bytes + percent.
         const pct = d.total ? Math.min(100, Math.round((d.received / d.total) * 100)) : 0;
-        const barW = pct > 0 ? pct : 5;     // tiny sliver while indeterminate
-        try {
-          ui.narrationText.innerHTML =
-            `⏳ Downloading <strong>${lbl}</strong> ${fmt(d.received)}` +
-            (d.total ? ` / ${fmt(d.total)} (${pct}%)` : ' …') +
-            `<div style="margin-top:6px;height:8px;background:#222;border-radius:4px;overflow:hidden">` +
-            `<div style="height:100%;width:${barW}%;background:linear-gradient(90deg,#4a90e2,#67d2ff);` +
-            `transition:width .25s ease"></div></div>` +
-            (isFirstLichessBoot
-              ? `<div style="margin-top:4px;font-size:0.85em;opacity:0.75">First-time setup — only happens once. Your browser will cache it.</div>`
-              : '');
-        } catch {}
+        renderBar(
+          `Downloading <strong>${lbl}</strong> ${fmt(d.received)}` +
+            (d.total ? ` / ${fmt(d.total)} (${pct}%)` : ' …'),
+          pct,
+          isFirstLichessBoot
+            ? `First-time setup — only happens once. Your browser will cache it.`
+            : ''
+        );
       };
       engine.addEventListener('boot-progress', onBootProgress);
       // Detach when boot finishes (success or fail) — the post-boot
