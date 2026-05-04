@@ -1574,6 +1574,25 @@ async function main() {
     eng.addEventListener('engine-crashed', (ev) => {
       const crashedFlavor = ev.detail?.flavor;
       const crashMsg      = ev.detail?.message || '';
+      // ── RECOVERY MUTEX (per GPT review 2026-05-04) ─────────────
+      // Both the synthetic-stuck path (_fireStuckSynthetic) and the
+      // worker.onerror path (_handleWorkerCrash) dispatch
+      // engine-crashed. If they fire close together (e.g. the
+      // synthetic-stuck happens, we begin recovery, then a queued
+      // runtime error from the dying worker fires), THIS handler
+      // runs twice and kicks off TWO concurrent switchEngineFlavor
+      // calls. Log artifact: "ritual: PRIVATE lite-single → flavor"
+      // appears twice with two bootEngine() start lines.
+      //
+      // Mutex via window.__engineRecovering (already set+cleared by
+      // switchEngineFlavor itself). If recovery is in flight, this
+      // event is a duplicate — log + return.
+      if (window.__engineRecovering) {
+        console.log('[engine] crashed — duplicate event during active recovery, ignored', {
+          flavor: crashedFlavor, message: String(crashMsg).slice(0, 80),
+        });
+        return;
+      }
       window.__engineCrashCount = (window.__engineCrashCount || 0) + 1;
       const attempt = window.__engineCrashCount;
       const MAX_RETRIES = 3;

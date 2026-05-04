@@ -412,7 +412,14 @@ export class Engine extends EventTarget {
     if (this._healthCheckId) { clearTimeout(this._healthCheckId); this._healthCheckId = 0; }
     if (this._stallTimer)    { clearTimeout(this._stallTimer);    this._stallTimer = 0; }
     this._bestmoveAwaited = false;
+    // Now that stop() doesn't clear searching itself, terminate() must
+    // — otherwise an Engine that's been terminate()'d still reports
+    // searching=true and any subsequent code path that gates on
+    // searching gets confused.
+    this.searching = false;
+    this.stopRequested = false;
     this._pendingRequest = null;
+    this._pendingGos = 0;
     if (this.worker) { this.worker.terminate(); this.worker = null; }
     this.ready = false;
   }
@@ -712,11 +719,19 @@ export class Engine extends EventTarget {
     this.searching = true;
     this.stopRequested = false;
     this.currentFen = fen;
-    // Separate from `searching` because stop() sets searching=false
+    // Separate from `searching` because stop() used to set searching=false
     // immediately on the JS side while the worker may still owe us a
     // bestmove. The synthetic-bestmove backup in the watchdog checks
     // THIS flag so it actually fires when the worker really is wedged.
+    // (Phase-3 follow-up: stop() no longer lies — see stop() comment
+    // for the new contract. _bestmoveAwaited is now redundant with
+    // searching but kept for defense-in-depth and back-compat.)
     this._bestmoveAwaited = true;
+    // Track whether THIS search is `go infinite` so the stall detector
+    // can apply a much longer timeout (per GPT consultation: 6 s
+    // silence is normal at deeper plies of an infinite search; using
+    // it as a wedge signal is a false positive).
+    this._currentSearchIsInfinite = !!opts.infinite;
 
     // ───── Mismatch detector ─────
     // Track per-search diagnostics so we can catch the "engine should
@@ -784,37 +799,50 @@ export class Engine extends EventTarget {
     //      info line (truly silent / wedged at boot). This is the
     //      one signal we can trust to mean "the worker is dead".
     //
-    // Budget bumped 3x → 5x movetime to give legitimately slow boots
-    // (108 MB net cold-cache, mobile Safari) plenty of room to complete
-    // before the watchdog even fires.
+    // Budget tuned per GPT consultation 2026-05-04:
+    //   - movetime: 1.5 × movetime + 2 s slack. (3000 ms search → 6.5 s
+    //     budget instead of the old 15 s.) GPT: "if no bestmove by ~5s,
+    //     terminate/reboot. Don't wait 20+ seconds." We give a small
+    //     extra buffer because the bestmove flush after movetime
+    //     expires can legitimately take 200-500 ms.
+    //   - depth-bounded / infinite: 60 s ceiling unchanged.
     if (this._watchdogId) clearTimeout(this._watchdogId);
     const budget = opts.movetime
-      ? Math.max(5000, opts.movetime * 5)
+      ? Math.max(5000, Math.round(opts.movetime * 1.5) + 2000)
       : (opts.depth ? 60_000 : 60_000);
+    // Capture flag in closure so the post-stop checks know whether
+    // this was a movetime/depth search (tight grace) or infinite/free
+    // analysis (longer grace).
+    const isBounded = !!(opts.movetime || opts.depth);
+    // Movetime/depth searches are "the user is waiting on this move":
+    // grace must be tight (post-GPT review). Infinite/free analysis
+    // can afford a longer wait — the engine is just feeding info.
+    const POST_STOP_HARD_MS = isBounded ? 1500 : 5000;
     this._watchdogId = setTimeout(() => {
       if (!this._bestmoveAwaited) return;
       const responsive = (this._infoReceived || 0) > 0;
       console.warn('[engine] bestmove watchdog fired — forcing stop', {
         responsive, infoReceived: this._infoReceived || 0,
+        bounded: isBounded, postStopMs: POST_STOP_HARD_MS,
       });
       this.stop();
       // Two-stage post-stop check (cf. _fireStuckSynthetic helper):
       //   t+1.5s — silent at boot? declare wedged immediately.
-      //   t+5s   — hard backstop. responsive engines must answer
-      //            stop within 5 s. If they haven't by then, the
-      //            worker is genuinely stuck — fire synthetic so
-      //            the UI unfreezes + main.js routes to recovery.
+      //   t+POST_STOP_HARD_MS — hard backstop. Responsive engines must
+      //            answer stop within this window. If they haven't,
+      //            worker is wedged — fire synthetic so UI unfreezes
+      //            and main.js routes to recovery.
       setTimeout(() => {
         if (!this._bestmoveAwaited) return;
         if (responsive) {
-          console.warn('[engine] watchdog: responsive engine still owes bestmove after stop — waiting up to 5 s more');
+          console.warn('[engine] watchdog: responsive engine still owes bestmove after stop — waiting up to ' + (POST_STOP_HARD_MS/1000) + ' s more');
           return;
         }
         this._fireStuckSynthetic('silent');
       }, 1500);
       setTimeout(() => {
         this._fireStuckSynthetic('responsive but stop ignored');
-      }, 5000);
+      }, POST_STOP_HARD_MS);
     }, budget);
 
     this._send(`position fen ${fen}`);
@@ -846,7 +874,17 @@ export class Engine extends EventTarget {
       this.stopRequested = true;
     }
     this._send('stop');
-    this.searching = false;
+    // Per GPT review 2026-05-04: do NOT flip searching=false here.
+    // The previous behaviour was: send stop → set searching=false →
+    // next start() sees searching=false → fires a brand-new go BEFORE
+    // the prior search's bestmove has arrived. That's the same
+    // overlap bug we hit in nmrugg, just reincarnated.
+    //
+    // New contract: searching stays true until the bestmove handler
+    // actually clears it (or until terminate()/_fireStuckSynthetic
+    // tears the search down). start()'s "while searching → queue"
+    // gate is now accurate, and the engine's commands stay in
+    // protocol order.
   }
 
   /** Analyse one specific move. Used for the "why not X?" feature. */
@@ -914,19 +952,27 @@ export class Engine extends EventTarget {
       // position the UI has moved on from.
       this._infoReceived = (this._infoReceived || 0) + 1;
       this._lastInfoAt = Date.now();
-      // Reset the stall watchdog (per GPT consultation): if info
-      // stops flowing for STALL_MS while we're still searching, the
-      // worker is wedged — fire a synthetic stuck-bestmove and let
-      // main.js auto-recover via switchEngineFlavor.
+      // Reset the stall watchdog. Per GPT review 2026-05-04:
+      //   - For BOUNDED searches (movetime/depth) the 6 s no-info
+      //     window is a real wedge signal; the engine should be
+      //     emitting info regularly.
+      //   - For INFINITE searches (free analysis), 6 s of silence is
+      //     normal at deeper plies — Stockfish backs off info-line
+      //     emission frequency as depth grows. Treating that as a
+      //     wedge causes false-positive recovery churn (kill + reboot
+      //     a healthy engine right before the user's first practice
+      //     move). Use a 30 s window for infinite searches instead.
       if (this._stallTimer) clearTimeout(this._stallTimer);
+      const stallMs = this._currentSearchIsInfinite ? 30_000 : 6_000;
       this._stallTimer = setTimeout(() => {
         if (!this._bestmoveAwaited) return;
-        console.error('[engine] STALL: no info for 6s during search — declaring wedged', {
+        console.error(`[engine] STALL: no info for ${stallMs/1000}s during search — declaring wedged`, {
           searchId: this._searchId,
           infoReceived: this._infoReceived,
+          infinite: this._currentSearchIsInfinite,
         });
-        this._fireStuckSynthetic('stalled — no info 6s');
-      }, 6000);
+        this._fireStuckSynthetic(`stalled — no info ${stallMs/1000}s`);
+      }, stallMs);
       if (this.stopRequested) {
         this._infoDropped = (this._infoDropped || 0) + 1;
         return;
