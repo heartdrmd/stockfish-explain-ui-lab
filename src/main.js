@@ -3034,6 +3034,33 @@ async function main() {
           <button class="retro-btn retro-continue" id="learn-restart">🔁 Start over</button>
           <button class="retro-btn" id="learn-close-end">Done</button>
         </div>`;
+    } else if (state === 'computing') {
+      // Fallback-probe in flight (verifier didn't pre-cache this fen).
+      // The "View solution" button is replaced by a disabled spinner so
+      // re-clicks are visibly ignored. Skip stays available so the user
+      // can move on if they don't want to wait.
+      inner = `
+        <p class="retro-prompt">⏳ Computing best move…</p>
+        <p class="retro-played" style="opacity:0.7;font-size:11px;">
+          The verifier didn't reach this position yet — running a fresh search (≤ 5 s).
+        </p>
+        <div class="retro-choices">
+          <button class="retro-btn" disabled>⏳ Computing…</button>
+          <button class="retro-btn" id="learn-skip">Skip</button>
+        </div>`;
+    } else if (state === 'compute-fail') {
+      inner = `
+        <div class="retro-icon-line retro-fail">
+          <span class="retro-icon">⚠</span>
+          <span>Couldn't compute solution</span>
+        </div>
+        <p class="retro-played" style="opacity:0.8;">
+          The engine didn't return a move within 5 s. Try again, or skip.
+        </p>
+        <div class="retro-choices">
+          <button class="retro-btn" id="learn-solution">Try again</button>
+          <button class="retro-btn" id="learn-skip">Skip</button>
+        </div>`;
     }
     p.innerHTML = titleBar + `<div class="retro-body">${inner}</div>`;
     p.querySelector('#learn-close')?.addEventListener('click', _closeLearnPanel);
@@ -3127,10 +3154,6 @@ async function main() {
             brush: 'green',
             modifiers: { lineWidth: 22 },
           }]);
-          // Remember which FEN this arrow belongs to so we can auto-
-          // clear it the moment the user navigates / moves away.
-          // Without this the green arrow stayed glued to the board
-          // through 3+ subsequent moves, looking like a stuck overlay.
           _learn.arrowFen = prev.fen;
         }
       } catch {}
@@ -3138,66 +3161,109 @@ async function main() {
       _renderLearnPanel('view');
       return;
     }
-    // Fall-back probe — happens when verify hasn't run yet (e.g. the
-    // user clicked Show solution before verification completed). Save
-    // user's preferred multipv so we can restore it after.
+
+    // ── FALLBACK PROBE ────────────────────────────────────────────
+    // Happens when verify hasn't completed for THIS fen. User log
+    // 2026-05-04T01:57 showed user clicking "View solution" 11 times
+    // with no result — each click attached a new bestmove listener
+    // and re-fired engine.start, but a competing `fireAnalysis` from
+    // board navigation kept overwriting the probe's queued slot with
+    // an infinite search. The probe's bestmove never arrived.
+    //
+    // Fixes:
+    //   1. Debounce: ignore re-clicks while a probe is in flight.
+    //   2. Visible "⏳ Computing solution…" panel state immediately.
+    //   3. Stop any in-flight analysis BEFORE kicking off the probe.
+    //   4. One-shot listener guarded by sequence token (not just FEN).
+    //   5. Hard timeout — surface "couldn't compute" instead of
+    //      hanging forever.
+    if (_learn._computingSolution) {
+      console.log('[learn-mode] View solution clicked while probe in flight — ignored');
+      return;
+    }
+    _learn._computingSolution = true;
+    _renderLearnPanel('computing');   // <- shows ⏳ Computing… spinner
+
+    const probeFen = prev.fen;
+    const probeId = (_learn._probeSeq = (_learn._probeSeq || 0) + 1);
     const savedMultiPV = engine.multipv;
     engine.setMultiPV(1);
-    // Snapshot the fen we're probing at. If a concurrent call (e.g.
-    // fireAnalysis) interrupts us, engine.currentFen will no longer
-    // match — in which case the bestmove event we receive is for the
-    // INTERRUPTING search, not our probe. Check and bail.
-    const probeFen = prev.fen;
-    const onBest = (ev) => {
-      if (engine.currentFen !== probeFen) {
-        console.log('[learn-mode] bestmove ignored — probe was interrupted', { probeFen, currentFen: engine.currentFen });
-        return;   // wait for the real one (we'll re-fire if no arrow appears)
-      }
-      engine.removeEventListener('bestmove', onBest);
+
+    let timeoutId = 0;
+    const finish = (bestUci, reason) => {
+      // Idempotent: only the first finish() call matters.
+      if (_learn._activeProbeId !== probeId) return;
+      _learn._activeProbeId = 0;
+      _learn._computingSolution = false;
+      clearTimeout(timeoutId);
+      try { engine.removeEventListener('bestmove', onBest); } catch {}
       try { engine.setMultiPV(savedMultiPV); } catch {}
-      // If the user closed the panel while we were probing, do NOT
-      // resurrect it. Without this guard the panel would silently
-      // pop back up the moment the probe finished, "minutes later"
-      // looking like a random reappearance bug.
       if (!_learn.active) {
-        console.log('[learn-mode] _showSolution bestmove arrived after close — skipping render');
+        console.log('[learn-mode] probe finished after panel close — skipping render', { reason });
         return;
       }
-      const hist = engine.history || [];
-      const last = hist[hist.length - 1];
-      const cp = last?.score ?? 0;
-      const stm = prev.fen.split(' ')[1];
-      const cpPov = stm === 'w' ? cp : -cp;
-      const bestUci = ev.detail?.best;
-      if (bestUci) {
-        _learn.bestUci = bestUci;
-        try {
-          const c = new Chess(prev.fen);
-          const m = c.move({ from: bestUci.slice(0,2), to: bestUci.slice(2,4), promotion: bestUci[4] || undefined });
-          _learn.bestSan = m ? m.san : bestUci;
-        } catch { _learn.bestSan = bestUci; }
-        // Re-check the board is still on the pre-mistake position
-        // before drawing — guards against late-arriving arrows
-        // painting over a different position.
-        try {
-          if (board.drawArrows && board.fen() === probeFen) {
-            board.drawArrows([{
-              orig: bestUci.slice(0, 2),
-              dest: bestUci.slice(2, 4),
-              brush: 'green',
-              modifiers: { lineWidth: 22 },
-            }]);
-            _learn.arrowFen = probeFen;   // for auto-clear on nav
-          }
-        } catch {}
+      if (!bestUci) {
+        console.warn('[learn-mode] probe failed', { reason, probeFen });
+        _renderLearnPanel('compute-fail');
+        return;
       }
-      // View-solution counts as done (matches lila: solvedPlies pushed).
+      _learn.bestUci = bestUci;
+      try {
+        const c = new Chess(probeFen);
+        const m = c.move({ from: bestUci.slice(0, 2), to: bestUci.slice(2, 4), promotion: bestUci[4] || undefined });
+        _learn.bestSan = m ? m.san : bestUci;
+      } catch { _learn.bestSan = bestUci; }
+      try {
+        if (board.drawArrows && board.fen() === probeFen) {
+          board.drawArrows([{
+            orig: bestUci.slice(0, 2),
+            dest: bestUci.slice(2, 4),
+            brush: 'green',
+            modifiers: { lineWidth: 22 },
+          }]);
+          _learn.arrowFen = probeFen;
+        }
+      } catch {}
       _learn.solvedPlies.add(_learn.targetPly);
-      _learn.bestEvalFmt = `${cpPov >= 0 ? '+' : ''}${(cpPov/100).toFixed(2)}`;
+      // Store eval if we have it (best-effort).
+      try {
+        const hist = engine.history || [];
+        const last = hist[hist.length - 1];
+        const cp = last?.score ?? 0;
+        const stm = probeFen.split(' ')[1];
+        const cpPov = stm === 'w' ? cp : -cp;
+        _learn.bestEvalFmt = `${cpPov >= 0 ? '+' : ''}${(cpPov/100).toFixed(2)}`;
+      } catch {}
       _renderLearnPanel('view');
     };
+
+    const onBest = (ev) => {
+      // Accept ANY bestmove that fires while we're the active probe —
+      // the FEN check still matters (don't render an answer to the
+      // wrong position) but we don't bail just because currentFen
+      // drifted to a re-issued analysis search.
+      if (engine.currentFen !== probeFen) {
+        // Probe got interrupted by a different-FEN search. Re-issue
+        // ONCE — engine.start with stop() first to ensure we win.
+        try { engine.stop(); } catch {}
+        engine.start(probeFen, { movetime: 1500 });
+        return;
+      }
+      finish(ev.detail?.best, 'bestmove');
+    };
+    _learn._activeProbeId = probeId;
     engine.addEventListener('bestmove', onBest);
-    engine.start(prev.fen, { movetime: 1500 });
+
+    // Stop whatever's running before we issue our probe — without this
+    // an infinite analysis at the same FEN swallows our movetime probe.
+    try { engine.stop(); } catch {}
+    engine.start(probeFen, { movetime: 1500 });
+
+    // Hard timeout: 5 s. After that, surface a failure rather than
+    // letting the panel hang in "Computing…" forever.
+    timeoutId = setTimeout(() => {
+      finish(null, 'timeout');
+    }, 5000);
   }
   function _enterLearnMode(targetPly) {
     const plies = collectTimelinePlies();
