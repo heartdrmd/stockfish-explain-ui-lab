@@ -924,6 +924,29 @@ async function main() {
     ui.engineMode.textContent = 'booting…';
     ui.engineMode.classList.remove('threaded');
     ui.narrationText.textContent = `Loading ${ENGINE_FLAVORS[flavor].label} (${ENGINE_FLAVORS[flavor].size})…`;
+    // Visible progress in console so it's obvious from a uploaded log
+    // exactly when boot started. Without this, lichess-full on a fresh
+    // browser cache (large NNUE download) shows ZERO engine logs for
+    // 30-60 s, looking like a hard hang.
+    const _bootT0 = performance.now();
+    console.log('[engine] bootEngine() start', {
+      flavor, label: ENGINE_FLAVORS[flavor]?.label, size: ENGINE_FLAVORS[flavor]?.size,
+    });
+
+    // First-visit hint for lichess-full: display a one-time banner
+    // explaining the 108 MB download. Skipped on subsequent visits
+    // (we set a localStorage flag once boot succeeds with this flavor).
+    const FIRST_BOOT_KEY = 'stockfish-explain.lichess-full-first-boot-done';
+    const isFirstLichessBoot = flavor === 'lichess-full' &&
+      !localStorage.getItem(FIRST_BOOT_KEY);
+    if (isFirstLichessBoot) {
+      try {
+        ui.narrationText.innerHTML =
+          `⏳ <strong>First-time setup:</strong> downloading Stockfish 18 + neural network ` +
+          `(~108 MB total). This only happens once — your browser will cache it for next time. ` +
+          `Expected: 30 – 60 s on a typical connection.`;
+      } catch {}
+    }
 
     // Pre-boot hygiene: proactively nuke any lingering service worker
     // + sf-engines-* caches before asking the engine to boot. Prevents
@@ -967,7 +990,16 @@ async function main() {
       ui.engineMode.title = spec?.label || info.flavor;
       if (info.threaded) ui.engineMode.classList.add('threaded');
       ui.narrationText.textContent = 'Engine ready. Make a move — I\'ll explain what I see.';
-      console.log('[engine] booted', { flavor: info.flavor, threads: info.threads, threaded: info.threaded });
+      const _bootMs = Math.round(performance.now() - _bootT0);
+      console.log('[engine] booted', {
+        flavor: info.flavor, threads: info.threads, threaded: info.threaded,
+        bootMs: _bootMs,
+      });
+      // Mark this flavor as "we've booted it once on this browser" so the
+      // first-time-download banner doesn't reappear on subsequent visits.
+      if (info.flavor === 'lichess-full') {
+        try { localStorage.setItem(FIRST_BOOT_KEY, String(Date.now())); } catch {}
+      }
       // Hot-swap notification: when the bignet finishes loading in
       // the background, update the engine-mode pill so the user sees
       // that max strength is now active.
