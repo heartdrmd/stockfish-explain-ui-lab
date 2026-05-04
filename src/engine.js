@@ -6,15 +6,31 @@
 //   - full:      108 MB, full NNUE, multi-thread (strongest)
 
 export const ENGINE_FLAVORS = {
-  // ─── Fast-boot: lichess-org/stockfish-web + smallnet ───
-  // Boots with the 6 MB small NNUE (external file, not embedded),
-  // swaps to the 75 MB big NNUE in the background once it's cached.
-  // ~1-2 s cold boot vs 10-60 s for embedded 108 MB variants.
-  'sf-fast': {
-    js: 'assets/stockfish-web/sf_18.js',
-    label: '★ Fast — lichess stockfish-web (smallnet → bignet hot-swap)',
-    size: '6 MB (boot) + 75 MB (background)',
+  // ─── Lichess Stockfish 18 — full bignet, FULL THROTTLE policy ───
+  //
+  // Wraps @lichess-org/stockfish-web@0.3.0 / sf_18 (the dual-net
+  // build) behind a Worker shim that speaks the same UCI string
+  // protocol as our nmrugg flavors. See:
+  //
+  //   assets/stockfish-web/lichess-shim.js     (~50 LOC adapter)
+  //   CONSULTATION-phase-3-lichess-migration.md (v4, GPT-greenlit)
+  //
+  // requiresBigNetForPractice=true means engine.ready does NOT fire
+  // until the big NNUE buffer is confirmed loaded. Smallnet boots in
+  // parallel as a worker-warmup but never plays a real go in
+  // practice mode. Per repeated user requirement: "i want FULL
+  // always I dont want light".
+  //
+  // Cold-cache first-visit: ~0.7 MB wasm + 3.4 MB small + 104 MB
+  // big = ~108 MB blocking. Subsequent visits hit disk cache → <1s.
+  // We can show a one-time toast ("downloading engine brain — only
+  // happens once").
+  'lichess-full': {
+    js: 'assets/stockfish-web/lichess-shim.js',
+    label: 'Lichess Stockfish 18 Full',
+    size: '~108 MB cold-cache · disk-cached after first visit',
     threaded: true,
+    requiresBigNetForPractice: true,
     externalNnue: {
       small: 'assets/nnue/small.nnue',
       big:   'assets/nnue/big.nnue',
@@ -292,13 +308,29 @@ export class Engine extends EventTarget {
     // the OPFS-backed NNUE cache warmed a ghost state), this drains it.
     this._send('stop');
 
-    // External-NNUE flavors (e.g. sf-fast using lichess stockfish-web):
-    // load the smallnet IMMEDIATELY so the engine is usable fast, then
-    // background-fetch the bignet and hot-swap via EvalFile setoption.
+    // External-NNUE flavors (lichess-full): the worker is the
+    // lichess-shim.js adapter — it doesn't accept UCI 'EvalFile'.
+    // Instead it understands two meta-commands which we ack via
+    // info-string lines:
+    //
+    //   __sfw_load_small <url>  →  info string LSF_NNUE_LOADED index=1
+    //   __sfw_load_big   <url>  →  info string LSF_NNUE_LOADED index=0
+    //
+    // FULL THROTTLE policy (Phase 3 consultation v4):
+    //   • Big NNUE is the engine. Ready BLOCKS on its ack.
+    //   • Small NNUE is fired in parallel as a worker-warmup so
+    //     `isready` answers fast, but it never becomes the active
+    //     opponent in practice mode.
+    //   • If small fetch fails: we don't care, log + proceed.
+    //   • If big fetch fails: fatal boot error → Phase 1 retry-same-
+    //     flavor kicks in.
     if (spec.externalNnue) {
-      this._send(`setoption name EvalFile value ${spec.externalNnue.small}`);
-      this.activeNet = 'small';
-      this._swapToBignetWhenReady(spec.externalNnue.big);
+      // Fire both fetches inside the shim, in parallel.
+      this._send('__sfw_load_small ' + spec.externalNnue.small);
+      this._send('__sfw_load_big '   + spec.externalNnue.big);
+      // BLOCKING wait for the BIG net ack. requiresBigNetForPractice.
+      await this._waitForInfoString('LSF_NNUE_LOADED index=0', 120_000);
+      this.activeNet = 'big';
     }
 
     this._send('isready');
@@ -353,45 +385,12 @@ export class Engine extends EventTarget {
     return { flavor, threaded: spec.threaded, threads: this.threads };
   }
 
-  /**
-   * Background-fetch the big NNUE and hot-swap via UCI setoption.
-   * Fire-and-forget — failure just means we keep using smallnet.
-   */
-  async _swapToBignetWhenReady(bigUrl) {
-    try {
-      // Prime the browser HTTP cache with a warm fetch so the engine's
-      // subsequent open of EvalFile completes instantly. The actual
-      // file load happens in the WASM worker when we post setoption.
-      const ctrl = new AbortController();
-      const timer = setTimeout(() => ctrl.abort('timeout'), 5 * 60 * 1000);
-      const resp = await fetch(bigUrl, { signal: ctrl.signal, priority: 'low' });
-      clearTimeout(timer);
-      if (!resp.ok) return;
-      await resp.arrayBuffer().catch(() => {});
-      // Only swap if we haven't been terminated in the meantime and
-      // no search is in flight (switching EvalFile mid-search is a
-      // UCI spec violation).
-      if (!this.worker) return;
-      if (this.searching) {
-        // Defer until current search ends.
-        const onDone = () => {
-          this.removeEventListener('bestmove', onDone);
-          if (this.worker && !this.searching) this._actuallySwapToBig(bigUrl);
-        };
-        this.addEventListener('bestmove', onDone);
-        return;
-      }
-      this._actuallySwapToBig(bigUrl);
-    } catch {}
-  }
-
-  _actuallySwapToBig(bigUrl) {
-    this._send(`setoption name EvalFile value ${bigUrl}`);
-    this._send('isready');
-    this.activeNet = 'big';
-    this.dispatchEvent(new CustomEvent('nnue-swapped', { detail: { activeNet: 'big' } }));
-    console.log('[engine] hot-swapped to bignet');
-  }
+  // Note: _swapToBignetWhenReady / _actuallySwapToBig were removed in
+  // Phase 3a — they were the nmrugg `setoption name EvalFile value …`
+  // hot-swap path. The lichess-shim build uses setNnueBuffer() and
+  // loads BOTH nets at boot (ready blocks on big), so there's nothing
+  // to swap mid-session. If we ever add a non-blocking smallnet-first
+  // mode for `?fastboot=1`, that lives in the shim, not here.
 
   /** Tear down the worker — for switching engine flavor. */
   terminate() {
@@ -523,6 +522,44 @@ export class Engine extends EventTarget {
           this.worker.removeEventListener('message', wrapped);
           resolve();
         }
+      };
+      this.worker.addEventListener('message', wrapped);
+    });
+  }
+
+  /**
+   * Wait for an `info string <prefix>…` line from the Worker.
+   *
+   * Used by the lichess-full boot path to await the
+   *   info string LSF_NNUE_LOADED index=0
+   * ack from lichess-shim.js before signalling engine.ready.
+   *
+   * Times out (rejects) after `timeoutMs` so a stuck NNUE fetch can't
+   * silently freeze boot — engine.js's existing 15s boot timeout would
+   * then fire too late if we used it. Default 120s covers a slow
+   * mobile network downloading the 100 MB big NNUE.
+   */
+  _waitForInfoString(prefix, timeoutMs = 120_000) {
+    return new Promise((resolve, reject) => {
+      const wrapped = (e) => {
+        const line = e.data;
+        if (typeof line !== 'string') return;
+        // Match `info string <prefix>` (the rest of the line is data
+        // — bytes, error message, etc.).
+        if (line.startsWith('info string ' + prefix) ||
+            // tolerate exact match too (some shim outputs may not have data)
+            line === 'info string ' + prefix) {
+          cleanup();
+          resolve(line);
+        }
+      };
+      const t = setTimeout(() => {
+        cleanup();
+        reject(new Error(`timeout waiting for "info string ${prefix}" after ${timeoutMs}ms`));
+      }, timeoutMs);
+      const cleanup = () => {
+        clearTimeout(t);
+        this.worker.removeEventListener('message', wrapped);
       };
       this.worker.addEventListener('message', wrapped);
     });

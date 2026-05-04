@@ -48,8 +48,11 @@ fi
 # ─── 2. NNUE files from the canonical test server ───
 # Filenames live in Stockfish's src/evaluate.h. Update here if a new
 # official network ships; the runtime UCI setoption reference must match.
-SMALL_NET="nn-47fc8b7fff06.nnue"
-BIG_NET="nn-f68ec79f0fe3.nnue"
+#
+# These match @lichess-org/stockfish-web@0.3.0 / sf_18 (per its README).
+# If you bump the package, re-check the README and update these.
+SMALL_NET="nn-37f18f62d772.nnue"
+BIG_NET="nn-c288c895ea92.nnue"
 BASE="https://tests.stockfishchess.org/api/nn"
 
 fetch_net() {

@@ -29,6 +29,12 @@ assets/stockfish/stockfish-avrukh.js
 assets/stockfish/stockfish-avrukhplus.wasm
 assets/stockfish/stockfish-avrukhplus.js
 
+# Lichess Stockfish 18 big NNUE — 104 MB, over GitHub's hard 100 MB
+# limit. Fetched at deploy time by scripts/fetch-lichess-stockfish.sh
+# (Render runs it via buildCommand). Small NNUE (3.4 MB) and the
+# sf_18.{js,wasm} binaries (~720 KB total) ARE committed.
+assets/nnue/big.nnue
+
 # Local dev / IDE
 .claude/
 .DS_Store

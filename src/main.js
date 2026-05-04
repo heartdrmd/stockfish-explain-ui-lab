@@ -839,6 +839,19 @@ async function main() {
     return 'lite-single';
   }
   let currentFlavor = flavorValid ? savedFlavor : pickDefaultFlavor();
+
+  // Phase 3a: ?engine=<flavor> URL flag overrides everything (saved
+  // pref + default picker). Lets us dogfood the lichess-full migration
+  // without flipping the default for everyone. Trusted only when the
+  // flavor exists — silently ignored otherwise.
+  try {
+    const urlFlavor = new URLSearchParams(location.search).get('engine');
+    if (urlFlavor && ENGINE_FLAVORS[urlFlavor]) {
+      console.log('[engine] URL override: ?engine=' + urlFlavor);
+      currentFlavor = urlFlavor;
+    }
+  } catch {}
+
   ui.selectFlavor.value = currentFlavor;
 
   // Disable multi-thread flavors if the page isn't cross-origin-isolated
