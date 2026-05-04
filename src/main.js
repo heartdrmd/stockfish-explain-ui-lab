@@ -4271,6 +4271,8 @@ async function main() {
         movable: { color: 'both', dests: toDestsFrom(board.chess) },
       });
     } catch (err) { console.warn('[new-game] could not reset playerColor', err); }
+    // Clear practice-color backup signal too (mirrors the playerColor reset above).
+    try { delete document.body.dataset.practiceColor; } catch {}
     document.body.classList.remove('practice-mode', 'practice-thinking', 'practice-finished', 'analysis-archived');
     // Close any lingering learn-from-mistakes panel from the previous
     // game. Without this, the floating panel from the LAST game's
@@ -6280,6 +6282,8 @@ async function main() {
         // black move. User saw clicks select squares but no move
         // executed until they opened practice a second time.
         board.playerColor = color;
+        // Backup signal for the off-turn defense in board.js _onUserMove.
+        try { document.body.dataset.practiceColor = color; } catch {}
         board.newGame();
         try { clearDraft(); } catch {}
         try { if (typeof fenEvalCache !== 'undefined') fenEvalCache.clear(); } catch {}
@@ -6351,6 +6355,11 @@ async function main() {
       practiceSearchToken++;   // invalidate any in-flight bestmove listener
       document.body.classList.add('practice-mode');
       document.body.classList.remove('practice-finished');
+      // Backup signal for board.js's off-turn defense — survives any
+      // transient reset of board.playerColor mid-game (we saw a 2026-05-04
+      // log where playerColor drifted to 'both' and the user accidentally
+      // moved white pieces during white's turn while playing black).
+      try { document.body.dataset.practiceColor = color; } catch {}
       // Opening variation session — starts a fresh fork counter.
       // If the feature is disabled in settings, startSession still
       // runs but isActive() returns false so the engine-turn block
@@ -6482,6 +6491,9 @@ async function main() {
     if (document.body.classList.contains('practice-finished')) return;
     document.body.classList.add('practice-finished');
     document.body.classList.remove('practice-thinking');
+    // Clear the practice-color backup signal — game's over, free
+    // analysis allows moves for both sides.
+    try { delete document.body.dataset.practiceColor; } catch {}
     // Free-analysis mode: user can now move BOTH sides on the live
     // board so they can explore the position freely. Variations they
     // play branch off the mainline tree; the original game's plies

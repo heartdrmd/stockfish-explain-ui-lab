@@ -580,6 +580,47 @@ export class BoardController extends EventTarget {
       viewPly: this.viewPly,
       fenBefore: this.chess.fen(),
     });
+
+    // ── DEFENSE-IN-DEPTH: off-turn rejection at move-application ──
+    //
+    // The pointerdown handler (line ~201) has an off-turn guard that
+    // rejects target-first clicks during the engine's turn in practice.
+    // BUT: in a 2026-05-04 user log we saw the guard SILENTLY MISS — a
+    // black-side practice game let the user move a white queen on
+    // white's turn (Qxd7 capture) and the move went through. The
+    // pointerdown's `playerColor` was somehow 'both' at that moment, so
+    // the guard's `=== 'white' || === 'black'` skipped.
+    //
+    // Catch it here too. Two independent signals:
+    //   1. this.playerColor — primary (set by practice-start in main.js)
+    //   2. document.body.dataset.practiceColor — backup (set by the
+    //      same practice-start path). Survives even if playerColor was
+    //      transiently reset to 'both' by some intermediate flow we
+    //      haven't fully traced.
+    //
+    // If EITHER signal indicates the user has a fixed color and the
+    // current chess.turn() is the OTHER color → reject the move.
+    const turnLetter = this.chess.turn();   // 'w' | 'b'
+    let userColor = null;
+    if (this.playerColor === 'white' || this.playerColor === 'black') {
+      userColor = this.playerColor;
+    } else {
+      try {
+        const ds = document.body?.dataset?.practiceColor;
+        if (ds === 'white' || ds === 'black') userColor = ds;
+      } catch {}
+    }
+    if (userColor) {
+      const userLetter = userColor[0];
+      if (turnLetter !== userLetter) {
+        console.warn('[move] off-turn rejection: not your move to make', {
+          orig, dest, via: _meta?.via, turn: turnLetter, user: userLetter,
+          playerColor: this.playerColor,
+          dsPractice: document.body?.dataset?.practiceColor || null,
+        });
+        return;   // ← do not apply the move
+      }
+    }
     // Post-game exploration is allowed: archiveCurrentGame uses a
     // snapshot taken at finishPracticeGame time (board._archiveSnapshot),
     // not live chess.history(), so extending the tree after game-end
