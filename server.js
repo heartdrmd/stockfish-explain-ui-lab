@@ -110,15 +110,21 @@ app.use((req, res, next) => {
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     res.setHeader('Service-Worker-Allowed', '/');
   }
-  // Engine assets (WASM + JS glue + NNUE files) are content-addressed
-  // via release hash — they NEVER change at a given URL without a
-  // redeploy. Tell Chrome to cache them for 1 year and skip
-  // revalidation (`immutable`). This is the single biggest win for
-  // repeat-visit cold-boot: after the first ever visit, engine files
-  // serve from disk cache with no network round-trip.
-  if (req.path.startsWith('/assets/stockfish/') ||
-      req.path.startsWith('/assets/stockfish-web/') ||
-      req.path.startsWith('/assets/nnue/')) {
+  // Engine assets that are content-addressed (vendored from npm with
+  // explicit versions, NNUE files with hash filenames) genuinely never
+  // change at a given URL without a redeploy. `immutable` is correct
+  // for them — single biggest win for repeat-visit cold-boot.
+  //
+  // EXCEPTION: lichess-shim.js is OUR file that we update across
+  // deploys but keeps the same URL. `immutable` would lock browsers
+  // on stale versions for up to a year. Use must-revalidate instead
+  // (browser sends If-Modified-Since on next visit, gets 304 if
+  // unchanged — cheap).
+  if (req.path === '/assets/stockfish-web/lichess-shim.js') {
+    res.setHeader('Cache-Control', 'public, max-age=0, must-revalidate');
+  } else if (req.path.startsWith('/assets/stockfish/') ||
+             req.path.startsWith('/assets/stockfish-web/') ||
+             req.path.startsWith('/assets/nnue/')) {
     res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
   }
   next();

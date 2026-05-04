@@ -26,7 +26,12 @@ export const ENGINE_FLAVORS = {
   // We can show a one-time toast ("downloading engine brain — only
   // happens once").
   'lichess-full': {
-    js: 'assets/stockfish-web/lichess-shim.js',
+    // ?v=4 cache-busts a previously-cached shim. Bump if the shim
+    // changes in a way old browsers must not keep using. (server.js
+    // also serves this file with must-revalidate, but the query
+    // string here forces the cache miss for already-warmed clients
+    // who hit the immutable header before the fix.)
+    js: 'assets/stockfish-web/lichess-shim.js?v=4',
     label: 'Lichess Stockfish 18 Full',
     size: '~108 MB cold-cache · disk-cached after first visit',
     threaded: true,
