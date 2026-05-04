@@ -948,6 +948,58 @@ async function main() {
       } catch {}
     }
 
+    // Live progress bar for lichess-full boot. Listens for the
+    // boot-progress events that engine.js dispatches when the shim
+    // streams NNUE chunks. Rendered into the narration area as a
+    // simple bar using inline CSS so it works without theme changes.
+    if (flavor === 'lichess-full') {
+      const fmt = (b) => (b >= 1_048_576) ? (b / 1_048_576).toFixed(1) + ' MB'
+                       : (b >= 1024)      ? (b / 1024).toFixed(0) + ' KB'
+                       : b + ' B';
+      const onBootProgress = (ev) => {
+        const d = ev.detail || {};
+        const labelMap = { 0: 'Stockfish brain (big NNUE)', 1: 'Quick-eval network (small NNUE)' };
+        const lbl = labelMap[d.index] || 'NNUE';
+        if (d.phase === 'fail') {
+          try {
+            ui.narrationText.innerHTML =
+              `❌ ${lbl} download failed. Engine will retry.`;
+          } catch {}
+          return;
+        }
+        if (d.phase === 'loaded') {
+          // Only show "loaded" briefly; the next progress / loaded line
+          // (or the final "Engine ready" message at boot complete) takes
+          // it over.
+          try {
+            ui.narrationText.innerHTML =
+              `✓ ${lbl} loaded (${fmt(d.received)})`;
+          } catch {}
+          return;
+        }
+        // fetch-start or progress: render a bar.
+        const pct = d.total ? Math.min(100, Math.round((d.received / d.total) * 100)) : 0;
+        const barW = pct > 0 ? pct : 5;     // tiny sliver while indeterminate
+        try {
+          ui.narrationText.innerHTML =
+            `⏳ Downloading <strong>${lbl}</strong> ${fmt(d.received)}` +
+            (d.total ? ` / ${fmt(d.total)} (${pct}%)` : ' …') +
+            `<div style="margin-top:6px;height:8px;background:#222;border-radius:4px;overflow:hidden">` +
+            `<div style="height:100%;width:${barW}%;background:linear-gradient(90deg,#4a90e2,#67d2ff);` +
+            `transition:width .25s ease"></div></div>` +
+            (isFirstLichessBoot
+              ? `<div style="margin-top:4px;font-size:0.85em;opacity:0.75">First-time setup — only happens once. Your browser will cache it.</div>`
+              : '');
+        } catch {}
+      };
+      engine.addEventListener('boot-progress', onBootProgress);
+      // Detach when boot finishes (success or fail) — the post-boot
+      // narration ("Engine ready…") would otherwise fight the progress
+      // renderer if a stray late progress event arrives.
+      const detach = () => engine.removeEventListener('boot-progress', onBootProgress);
+      engine.addEventListener('ready', detach, { once: true });
+    }
+
     // Pre-boot hygiene: proactively nuke any lingering service worker
     // + sf-engines-* caches before asking the engine to boot. Prevents
     // a stuck/legacy SW from intercepting the WASM fetch and wedging

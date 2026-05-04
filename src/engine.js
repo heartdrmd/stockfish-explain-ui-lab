@@ -871,6 +871,33 @@ export class Engine extends EventTarget {
     // calls stop being blocked by the pre-uciok gate.
     if (line.startsWith('uciok')) this.uciokReceived = true;
 
+    // Lichess-shim NNUE download progress. Forward as a structured
+    // event so main.js can render a progress bar during cold-cache
+    // boot (without this, "booting…" stays visible 30-60+ s with no
+    // hint that anything is happening).
+    if (line.startsWith('info string LSF_NNUE_FETCH_START ')) {
+      // index=<n> total=<bytes> url=<url>
+      const m = /index=(\d+)\s+total=(\d+)/.exec(line);
+      if (m) this.dispatchEvent(new CustomEvent('boot-progress', {
+        detail: { phase: 'fetch-start', index: +m[1], total: +m[2], received: 0 },
+      }));
+    } else if (line.startsWith('info string LSF_NNUE_PROGRESS ')) {
+      const m = /index=(\d+)\s+received=(\d+)\s+total=(\d+)/.exec(line);
+      if (m) this.dispatchEvent(new CustomEvent('boot-progress', {
+        detail: { phase: 'progress', index: +m[1], received: +m[2], total: +m[3] },
+      }));
+    } else if (line.startsWith('info string LSF_NNUE_LOADED ')) {
+      const m = /index=(\d+)\s+bytes=(\d+)/.exec(line);
+      if (m) this.dispatchEvent(new CustomEvent('boot-progress', {
+        detail: { phase: 'loaded', index: +m[1], received: +m[2], total: +m[2] },
+      }));
+    } else if (line.startsWith('info string LSF_NNUE_FAIL ')) {
+      const m = /index=(\d+)/.exec(line);
+      if (m) this.dispatchEvent(new CustomEvent('boot-progress', {
+        detail: { phase: 'fail', index: +m[1] },
+      }));
+    }
+
     if (line.startsWith('info')) {
       // Drop info lines that arrive AFTER we've asked to stop. They
       // belong to the old search; using them mutates state under a
