@@ -589,6 +589,18 @@ export class Engine extends EventTarget {
     this.dispatchEvent(new CustomEvent('bestmove', {
       detail: { best: null, ponder: null, topMoves: [], history: this.history, stuck: true }
     }));
+    // ALSO dispatch engine-crashed so the main.js telemetry pipeline
+    // counts it. Without this, "responsive-but-frozen" wedges (which
+    // never trigger worker.onerror because the WASM didn't throw —
+    // it just stopped responding to stop) were going un-counted in
+    // engine_crashes, undercounting the Phase-3-decision data.
+    // Skip when reason starts with 'worker crashed:' — that path
+    // already dispatches engine-crashed via _handleWorkerCrash.
+    if (!String(reason).startsWith('worker crashed:')) {
+      this.dispatchEvent(new CustomEvent('engine-crashed', {
+        detail: { flavor: this.lastFlavor, message: 'wedge: ' + reason },
+      }));
+    }
     return true;
   }
 
