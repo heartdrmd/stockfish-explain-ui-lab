@@ -635,7 +635,7 @@ export class Engine extends EventTarget {
     // already dispatches engine-crashed via _handleWorkerCrash.
     if (!String(reason).startsWith('worker crashed:')) {
       this.dispatchEvent(new CustomEvent('engine-crashed', {
-        detail: { flavor: this.lastFlavor, message: 'wedge: ' + reason },
+        detail: { flavor: this.flavor, message: 'wedge: ' + reason },
       }));
     }
     return true;
@@ -656,7 +656,7 @@ export class Engine extends EventTarget {
     this._crashed = true;
     const msg = (errEvent && (errEvent.message || errEvent.error?.message))
       || 'Stockfish worker crashed (no message)';
-    console.error('[engine] runtime worker crash — terminating', { msg, flavor: this.lastFlavor });
+    console.error('[engine] runtime worker crash — terminating', { msg, flavor: this.flavor });
     // Mark not ready BEFORE dispatching events so listeners checking
     // engine.ready see false.
     this.ready = false;
@@ -667,7 +667,7 @@ export class Engine extends EventTarget {
     try { this.terminate(); } catch {}
     // Tell main.js: route to one-way fallback (full → lite, etc.).
     this.dispatchEvent(new CustomEvent('engine-crashed', {
-      detail: { flavor: this.lastFlavor, message: msg },
+      detail: { flavor: this.flavor, message: msg },
     }));
   }
 
