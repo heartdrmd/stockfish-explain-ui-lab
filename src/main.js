@@ -4306,6 +4306,25 @@ async function main() {
                 }, 150);
                 return;
               }
+              // ── Durable-turn queue check FIRST (audit P3) ──────────
+              // Moved ABOVE the variation setup below. Previously the
+              // not-ready bail sat after consumeFork()+setSkill(20) but
+              // before onBest (which restores skill) was attached — so an
+              // engine turn that arrived while the engine was booting /
+              // recovering burned a variation fork AND left Skill 20
+              // applied for the REST of the practice game (the opponent
+              // silently jumped to full strength). Bailing here, before
+              // any of that setup, means the durable-queue replay redoes
+              // noteEngineTurn/consumeFork/setSkill exactly once.
+              if (!engine || !engine.ready || window.__engineRecovering) {
+                console.warn('[practice] engine not ready — queueing engine turn for replay', {
+                  ready: engine?.ready, recovering: !!window.__engineRecovering,
+                });
+                window.__pendingEngineTurnFen = fen;
+                ui.narrationText.innerHTML = '⏳ Engine is starting up — your move queued, will play in a moment…';
+                return;
+              }
+
               // ─── Opening variation mode: in-window engine turn ────
               // When the user enabled the variation feature AND we're
               // still inside the N-fork window (and past the startAt
@@ -4523,23 +4542,8 @@ async function main() {
                   ui.narrationText.innerHTML = 'Engine has no legal moves — game over.';
                 }
               };
-              // ── Durable-turn queue (consultation Phase 1.3) ───
-              // If engine isn't ready (booting / recovering / fresh
-              // crash), DON'T fire engine.start — it'd be lost. Stash
-              // the FEN, and the `engine.ready` listener (in
-              // wireEngineCaptureListeners) will replay fireAnalysis
-              // once boot/recovery completes. Combined with private
-              // warmup (1.2) + worker.onerror=fatal (1.1), this makes
-              // "engine never moves after a crash" structurally
-              // impossible.
-              if (!engine || !engine.ready || window.__engineRecovering) {
-                console.warn('[practice] engine not ready — queueing engine turn for replay', {
-                  ready: engine?.ready, recovering: !!window.__engineRecovering,
-                });
-                window.__pendingEngineTurnFen = fen;
-                ui.narrationText.innerHTML = '⏳ Engine is starting up — your move queued, will play in a moment…';
-                return;
-              }
+              // Durable-turn queue not-ready check now runs ABOVE the
+              // variation setup (audit P3) — by here the engine is ready.
               window.__pendingEngineTurnFen = null;     // dispatching now
               engine.addEventListener('bestmove', onBest);
               engine.start(fen, thinkLimits);
