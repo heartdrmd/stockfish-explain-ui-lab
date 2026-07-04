@@ -48,5 +48,8 @@ node_modules/
 
 # Private notes
 PRIVATE_*.md
+# Internal audit / review docs — detail attack surfaces + fix plans;
+# keep out of the public repo.
+REVIEW-*.md
 *.key
 *.pem
