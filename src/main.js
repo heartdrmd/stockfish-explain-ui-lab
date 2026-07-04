@@ -6863,6 +6863,16 @@ async function main() {
   if (btnDraw) btnDraw.addEventListener('click', async () => {
     if (!practiceColor) return;
     const drawResp = document.getElementById('practice-draw-response');
+    // Only allow a draw offer on YOUR turn with the engine idle and the
+    // board live (audit P7). Offering mid-engine-think calls engine.stop()
+    // below, which releases the in-flight practice search's bestmove (still
+    // token-valid) → a partial-search move gets played, and the probe then
+    // evaluates a now-stale position. Gate it out.
+    const engineThinking = document.body.classList.contains('practice-thinking');
+    if (engineThinking || !board.isAtLive() || board.chess.turn() !== practiceColor[0]) {
+      if (drawResp) drawResp.textContent = '⏳ Offer a draw on your own turn (after the engine has moved).';
+      return;
+    }
     btnDraw.disabled = true;
     if (drawResp) drawResp.textContent = '⏳ Engine is deciding…';
     try {
