@@ -18,6 +18,8 @@
 //   - Division computed client-side by counting pieces (lila computes
 //     it server-side; we don't have a backend for that).
 
+import { moverWinDrop, classifySeverity } from './evals.js';
+
 // ─── Constants (lila: ui/chart/src/index.ts) ──────────────────────
 const CHART_Y_MAX = 1.05;
 const CHART_Y_MIN = -CHART_Y_MAX;
@@ -44,14 +46,20 @@ export const cpToWinChance = povChances;
 // plyToTurn: ply 1 → move 1; ply 2 → move 1; ply 3 → move 2…
 function plyToTurn(ply) { return Math.ceil(ply / 2); }
 
-// Convert stored plies array to {pts, raw, sans}.
+// Convert stored plies array to {pts, raw, sans}. Unanalysed plies (no
+// cp AND no mate) and terminal mate:0 positions push NULL so Chart.js
+// GAPS the line there instead of drawing it down to 0.00 — the old code
+// plotted a null as equality, producing a sawtooth and (via the point
+// tinting below) phantom blunder dots on either side of the gap (audit
+// A3 graph half + A11).
 export function pliesToSeries(plies) {
   const pts  = [];
   const raw  = [];
   const sans = [];
   for (let i = 0; i < plies.length; i++) {
     const p = plies[i] || {};
-    pts.push(povChances(p.cpWhite, p.mate));
+    const hasEval = p.cpWhite != null || (p.mate != null && p.mate !== 0);
+    pts.push(hasEval ? povChances(p.cpWhite, p.mate) : null);
     raw.push({ cp: p.cpWhite, mate: p.mate });
     sans.push(p.san || '');
   }
@@ -200,19 +208,17 @@ export class EvalGraph {
       const turn = plyToTurn(ply);
       const dots = (ply & 1) === 1 ? '.' : '...';
       moveLabels.push(`${turn}${dots} ${san}`);
-      // Classify this move's win-% drop vs previous; tint the point.
+      // Classify this move via the shared classifier (audit A5) so the
+      // dot colours match the accuracy pills / My Games / Mistake Bank,
+      // and skip unevaluated plies so a gap doesn't paint phantom
+      // blunder dots (it returns null when either side has no eval).
       let color = ORANGE_ACCENT;
       let size = 0;
       if (i > 0) {
-        const mover = (ply & 1) === 1 ? 'white' : 'black';
-        const wBefore = pts[i - 1];
-        const wAfter = pts[i];
-        const wb = mover === 'white' ? wBefore : -wBefore;
-        const wa = mover === 'white' ? wAfter : -wAfter;
-        const drop = wb - wa;
-        if      (drop >= 0.20) { color = '#db3031'; size = 4; } // blunder
-        else if (drop >= 0.12) { color = '#e69d00'; size = 4; } // mistake
-        else if (drop >= 0.06) { color = '#4da3d5'; size = 3; } // inaccuracy
+        const sev = classifySeverity(moverWinDrop(plies[i - 1], plies[i]));
+        if      (sev === 'blunder')    { color = '#db3031'; size = 4; }
+        else if (sev === 'mistake')    { color = '#e69d00'; size = 4; }
+        else if (sev === 'inaccuracy') { color = '#4da3d5'; size = 3; }
       }
       pointColors.push(color);
       pointSizes.push(size);
@@ -227,6 +233,9 @@ export class EvalGraph {
       label: 'Advantage',
       data,
       borderWidth: 1,
+      // Break the line at null points (unanalysed / terminal plies)
+      // instead of drawing through 0.00.
+      spanGaps: false,
       fill: { target: 'origin', above: WHITE_FILL, below: BLACK_FILL },
       pointRadius: pointSizes,
       pointHoverRadius: 5,
