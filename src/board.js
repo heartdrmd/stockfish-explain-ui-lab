@@ -318,6 +318,7 @@ export class BoardController extends EventTarget {
   }
 
   goToPly(n /* int or null for live */) {
+    this._clearTargetFirst();   // audit B5 — see _navigateTo
     // Rebuild from the TREE mainline, not chess.history. If the user
     // had made a non-mainline exploratory move earlier, chess.history
     // contains that branch instead of the original game's moves — so
@@ -391,6 +392,10 @@ export class BoardController extends EventTarget {
   // to the mainline but stays on the branch. Click a different
   // branch in the move list to switch branches.
   _navigateTo(newPath) {
+    // Clear any armed target-first pending state — otherwise a click
+    // that armed a target, followed by navigation, then a click on a
+    // source square, would fire a move on the NEW position (audit B5).
+    this._clearTargetFirst();
     const nodes = this.tree.nodesAlong(newPath);
     const replay = new Chess(this.startingFen);
     for (const n of nodes) {
@@ -618,6 +623,12 @@ export class BoardController extends EventTarget {
           playerColor: this.playerColor,
           dsPractice: document.body?.dataset?.practiceColor || null,
         });
+        // Re-render from truth + reset input state (audit B3). Chessground
+        // may have optimistically moved the dragged piece to `dest`; a bare
+        // return would leave it there visually while chess.js disagrees,
+        // until the next unrelated sync. Snap it back now.
+        this._renderPosition(this.chess.fen(), lastMoveFromHistory(this.chess));
+        this._resetInputState();
         return;   // ← do not apply the move
       }
     }
@@ -803,6 +814,7 @@ export class BoardController extends EventTarget {
   }
 
   newGame() {
+    this._clearTargetFirst();   // audit B5
     this.chess.reset();
     this.startingFen = this.chess.fen();   // back to standard start
     this.viewPly = null;
@@ -819,6 +831,7 @@ export class BoardController extends EventTarget {
   }
 
   undo() {
+    this._clearTargetFirst();   // audit B5
     // Analysis mode: undo one ply at a time.
     const undone = this.chess.undo();
     if (!undone) return null;

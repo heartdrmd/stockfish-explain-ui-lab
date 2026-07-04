@@ -4845,7 +4845,11 @@ async function main() {
       case 'End':        case '$':           board.toEnd();    e.preventDefault(); break;
       // Board actions
       case 'f': case 'F': board.flipBoard(); e.preventDefault(); break;
-      case 'u': case 'U': board.undo?.(); e.preventDefault(); break;
+      // u — undo. Route through the toolbar button's handler so the
+      // active-practice confirm applies here too (audit P8: the key
+      // used to call board.undo() directly, bypassing the "take back
+      // the last move?" prompt that btn-undo shows mid-game).
+      case 'u': case 'U': document.getElementById('btn-undo')?.click(); e.preventDefault(); break;
       case 'n': case 'N':
         // n — new game (same as clicking 🆕).
         document.getElementById('btn-new')?.click(); e.preventDefault(); break;
@@ -10817,7 +10821,11 @@ async function main() {
     // with the current best move + eval as depth climbs.
     threatInfoListener = (ev) => {
       if (!window.__threatMode) return;
-      const info = ev.detail;
+      // Engine dispatches 'thinking' with detail = { info, topMoves,
+      // history } — NOT a bare 'info' event (audit E9: threat mode was
+      // dead because it listened for a never-fired 'info' event and read
+      // ev.detail as if it were the info object).
+      const info = ev.detail?.info;
       // Pick multipv=1 (best line)
       if (!info || info.multipv !== 1 || !info.pv || !info.pv.length) return;
       try {
@@ -10859,7 +10867,7 @@ async function main() {
         }
       } catch {}
     };
-    engine.addEventListener('info', threatInfoListener);
+    engine.addEventListener('thinking', threatInfoListener);
 
     // Kick engine onto the flipped FEN with INFINITE search — same as
     // a normal analysis, just on the flipped position. engine.stop()
@@ -10873,7 +10881,7 @@ async function main() {
     if (!window.__threatMode) return;
     window.__threatMode = false;
     if (threatInfoListener) {
-      engine.removeEventListener('info', threatInfoListener);
+      engine.removeEventListener('thinking', threatInfoListener);
       threatInfoListener = null;
     }
     threatFlippedFen = null;
