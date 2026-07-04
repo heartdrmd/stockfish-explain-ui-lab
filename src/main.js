@@ -2399,6 +2399,13 @@ async function main() {
           orientation:  board.orientation,
           practiceColor,
           practiceFinished: document.body.classList.contains('practice-finished'),
+          // Audit P1: persist the fields the restore needs to fully
+          // rehydrate practice state — without these, restore left
+          // board.playerColor='both' (off-turn guards inert) and
+          // __practiceOpeningPlies=0 (learn mode blamed the user for
+          // book moves).
+          practiceSkill:  (typeof ui !== 'undefined' && ui.rangeSkill) ? +ui.rangeSkill.value : null,
+          openingPlies:   window.__practiceOpeningPlies || 0,
         };
         localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
       } catch (err) { console.warn('[draft] save failed', err); }
@@ -2457,6 +2464,30 @@ async function main() {
         practiceColor = draft.practiceColor;
         document.body.classList.add('practice-mode');
         if (draft.practiceFinished) document.body.classList.add('practice-finished');
+        // ── AUDIT P1 ROOT-CAUSE FIX ────────────────────────────────
+        // board.newGame() above reset board.playerColor to 'both' and
+        // deleted document.body.dataset.practiceColor. Re-establish them
+        // for an UNFINISHED practice game so the off-turn guards work.
+        // Without this, after a page reload mid-practice the user could
+        // move the ENGINE's pieces on the engine's turn (the 2026-05-04
+        // Qxd7 log). A finished game correctly stays 'both' (free
+        // analysis of both sides is allowed post-game).
+        if (!draft.practiceFinished) {
+          board.playerColor = draft.practiceColor;
+          try { document.body.dataset.practiceColor = draft.practiceColor; } catch {}
+          // Re-sync chessground's movable colour to the restored value.
+          try {
+            const turn = board.chess.turn() === 'w' ? 'white' : 'black';
+            board.cg.set({ turnColor: turn, movable: { color: draft.practiceColor } });
+          } catch {}
+        }
+        // Restore practice skill + opening-ply accounting.
+        if (draft.practiceSkill != null && ui.rangeSkill) {
+          ui.rangeSkill.value = String(draft.practiceSkill);
+          if (ui.skillVal) ui.skillVal.textContent = String(draft.practiceSkill);
+          try { engine.setSkill(+draft.practiceSkill); } catch {}
+        }
+        window.__practiceOpeningPlies = draft.openingPlies || 0;
         const pActions = document.getElementById('practice-actions');
         if (pActions) pActions.hidden = false;
         const pLive = document.getElementById('practice-live');
