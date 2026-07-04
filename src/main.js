@@ -3987,9 +3987,14 @@ async function main() {
   function archiveCurrentGame({ result, ending, mode }) {
     // Prefer the snapshot taken at finishPracticeGame time over the
     // live chess.history — so post-game exploration (user playing
-    // 'what-if' moves after resign/mate) doesn't change what gets
-    // saved. The snapshot is cleared once archive succeeds.
-    const snap = board._archiveSnapshot;
+    // 'what-if' moves after resign/mate) doesn't change what gets saved.
+    //
+    // AUDIT A1: the snapshot is NEVER cleared, so an analysis-mode
+    // archive after a finished practice game would save the OLD practice
+    // game's moves. Scope the snapshot to a PRACTICE archive only —
+    // analysis mode always uses live history — and clear it after use
+    // below. (The new-game listener also clears it between games.)
+    const snap = (mode === 'practice') ? board._archiveSnapshot : null;
     const history     = (snap && snap.history) || board.chess.history({ verbose: true });
     const startingFen = (snap && snap.startingFen) || board.startingFen;
     if (!history.length) return false;
@@ -4078,6 +4083,9 @@ async function main() {
       plies,
     };
     const ok = Archive.archiveGame(game);
+    // A1: consume the snapshot — it's been archived, so a later archive
+    // (e.g. an analysis game after this practice game) must not reuse it.
+    if (snap) board._archiveSnapshot = null;
     if (ok && ui.narrationText) {
       // Append a short note to the existing narration.
       const suffix = ` · 💾 Archived to My Games (${plies.length} plies).`;
@@ -4579,6 +4587,11 @@ async function main() {
     // Exiting any active / finished practice game when a fresh board
     // starts. The practice card hides via CSS once the class is gone.
     practiceColor = null;
+    // A1: drop any archive snapshot from the previous game so the next
+    // archive can't reuse it. Also clear the pending engine-turn FEN so
+    // a stale replay can't fire on the fresh board.
+    board._archiveSnapshot = null;
+    window.__pendingEngineTurnFen = null;
     // CRITICAL: also reset board.playerColor to 'both'. Without this,
     // the off-turn guard in board.js _onUserMove keeps rejecting moves
     // for the OPPOSITE side of whatever the previous practice game's
