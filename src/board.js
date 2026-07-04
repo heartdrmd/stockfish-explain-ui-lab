@@ -681,10 +681,17 @@ export class BoardController extends EventTarget {
         this.overlayEl, dest, piece.color === 'w' ? 'white' : 'black', this.orientation,
       );
     }
+    // showPromotion returns a full role word ('queen'|'rook'|'bishop'|
+    // 'knight'). chess.js + UCI need the single letter — and 'knight'[0]
+    // is 'k' (invalid), so the old `promotion[0]` made KNIGHT PROMOTION
+    // IMPOSSIBLE (audit B2): the move threw and the board snapped back.
+    // Q/R/B only worked because their first letters happen to be right.
+    const PROMO_LETTER = { queen: 'q', rook: 'r', bishop: 'b', knight: 'n' };
+    const promoLetter = promotion ? (PROMO_LETTER[promotion] || 'q') : undefined;
 
     let move;
     try {
-      move = this.chess.move({ from: orig, to: dest, promotion: promotion ? promotion[0] : undefined });
+      move = this.chess.move({ from: orig, to: dest, promotion: promoLetter });
     } catch (e) {
       // Illegal — reset board to current truth and clear input state so
       // the user can try a different move immediately.
@@ -711,8 +718,10 @@ export class BoardController extends EventTarget {
     // Mirror the move into the variation tree. If the move matches an
     // existing child of the current node, we navigate to it; otherwise a
     // new branch is added (which will render as a sideline in the move
-    // list and be preserved in PGN export).
-    const uci = orig + dest + (promotion || '');
+    // list and be preserved in PGN export). Use the UCI LETTER, not the
+    // role word — otherwise the tree stored 'e7e8knight' and never merged
+    // with the engine's canonical 'e7e8n' node (audit B2).
+    const uci = orig + dest + (promoLetter || '');
     const addRes = this.tree.addNode(
       { uci, san: move.san, fen: this.chess.fen() },
       this.tree.currentPath,
