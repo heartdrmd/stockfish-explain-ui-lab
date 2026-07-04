@@ -851,17 +851,30 @@ export class BoardController extends EventTarget {
     this.dispatchEvent(new CustomEvent('new-game'));
   }
 
-  undo() {
+  undo({ prune = false } = {}) {
     this._clearTargetFirst();   // audit B5
     // Analysis mode: undo one ply at a time.
+    const retractedPath = this.tree.currentPath;   // node being undone
     const undone = this.chess.undo();
     if (!undone) return null;
     this.viewPly = null;
-    // Move tree cursor back one node on the current path. (Keeps the
-    // undone move in the tree — user can re-enter that branch later if
-    // they want.)
+    // Move tree cursor back one node on the current path.
     if (this.tree.currentPath) {
       this.tree.currentPath = this.tree.parentPath(this.tree.currentPath) || '';
+    }
+    // AUDIT T1: practice takeback = REPLACE, not branch. When prune is
+    // set (an active-practice takeback), delete the retracted node so
+    // the move the user plays next becomes the tree MAINLINE (children[0])
+    // rather than a sibling variation. Without this, the abandoned line
+    // stayed mainline and every consumer that walks children[0] (move
+    // list, timeline, learn mode, PGN export) kept showing the retracted
+    // move — the user's "the new line is always MAIN LINE" report.
+    // Analysis mode (prune=false) keeps the old branch so the user can
+    // re-enter it later, as before.
+    if (prune && retractedPath) {
+      try { this.tree.deleteAt(retractedPath); } catch (err) {
+        console.warn('[undo] prune failed', err);
+      }
     }
     this._syncToChessground(lastMoveFromHistory(this.chess));
     this.dispatchEvent(new CustomEvent('undo'));

@@ -4913,7 +4913,7 @@ async function main() {
         !document.body.classList.contains('practice-finished');
       if (inActivePractice) {
         if (!confirm('Take back the last move? The engine will re-think its next reply.')) return;
-        board.undo();
+        board.undo({ prune: true });   // T1: replace, don't branch
         return;
       }
       board.backward();
@@ -8066,7 +8066,9 @@ async function main() {
     if (inActivePractice) {
       if (!confirm('Take back the last move? The engine will re-think its next reply.')) return;
     }
-    board.undo();
+    // T1: in active practice, prune the retracted node so the next move
+    // is the mainline; in analysis, keep it as a re-enterable branch.
+    board.undo(inActivePractice ? { prune: true } : undefined);
   });
 
   // Copy FEN
