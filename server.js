@@ -253,6 +253,34 @@ wireGames(app);
 wireVariations(app);
 wireLibrary(app);
 
+// ───── source/secret blocklist (audit S2) ─────
+// express.static(__dirname) serves the REPO ROOT, so without this guard
+// GET /server.js, /src/server/db.js, /HANDOFF.md, /render.yaml, etc. are
+// all downloadable from the live site — leaking server code, schema, and
+// (pre-S1) the password scheme. The browser legitimately needs /src/*.js
+// CLIENT modules (main.js imports engine.js, board.js, …) but NOT the
+// server tree. 404 anything that isn't a real static asset.
+//
+// dotfiles (.git, .gitignore, .env) are already withheld by express.static's
+// default `dotfiles: 'ignore'`, so we don't need to list them.
+const BLOCKED_EXACT = new Set(['/server.js', '/package.json', '/package-lock.json']);
+function isBlockedPath(p) {
+  if (BLOCKED_EXACT.has(p)) return true;
+  if (p.startsWith('/src/server/')) return true;   // server-only code
+  if (p.startsWith('/scripts/'))    return true;   // build/fetch scripts
+  if (p.endsWith('.md'))   return true;            // HANDOFF, REVIEW, CONSULTATION…
+  if (p.endsWith('.yaml') || p.endsWith('.yml')) return true;  // render.yaml
+  if (p.endsWith('.sh'))   return true;
+  if (p.endsWith('.mjs') && p.startsWith('/scripts')) return true;
+  return false;
+}
+app.use((req, res, next) => {
+  if (isBlockedPath(req.path)) {
+    return res.status(404).type('text/plain').send('Not found');
+  }
+  next();
+});
+
 // ───── static site ─────
 // Served after the API routes so /api/* takes precedence.
 app.use(express.static(__dirname, {
