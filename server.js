@@ -75,17 +75,26 @@ function tomorrowDayCT() {
   return String(tomorrow.getUTCDate()).padStart(2, '0');
 }
 
-// Dev fallbacks used ONLY when env prefixes are unset (localhost). These
-// are intentionally NOT the historical production prefixes — the old ones
-// leaked in git history, so they're rotated here too.
+// Dev fallbacks used ONLY when env prefixes are unset AND we're not in
+// production (i.e. localhost). In PRODUCTION with unset prefixes we fail
+// SAFE: return an unguessable random each call so NO password passes the
+// gate (better a temporarily-locked AI coach than a public dev password
+// that anyone reading this repo could use to burn the API key).
+const IS_PROD = process.env.NODE_ENV === 'production';
 const DEV_SITE_PREFIX    = 'devsite';
 const DEV_PREMIUM_PREFIX = 'devprem';
 
+function unguessable() { return crypto.randomBytes(24).toString('hex'); }
+
 function expectedSitePassword() {
-  return (SITE_PW_PREFIX || DEV_SITE_PREFIX) + tomorrowDayCT();
+  if (SITE_PW_PREFIX) return SITE_PW_PREFIX + tomorrowDayCT();
+  if (IS_PROD) return unguessable();            // fail safe
+  return DEV_SITE_PREFIX + tomorrowDayCT();     // localhost only
 }
 function expectedPremiumPassword() {
-  return (PREMIUM_PW_PREFIX || DEV_PREMIUM_PREFIX) + tomorrowDayCT();
+  if (PREMIUM_PW_PREFIX) return PREMIUM_PW_PREFIX + tomorrowDayCT();
+  if (IS_PROD) return unguessable();            // fail safe
+  return DEV_PREMIUM_PREFIX + tomorrowDayCT();  // localhost only
 }
 
 // Constant-time compare that does NOT leak length (audit S6). Hash both
