@@ -8328,16 +8328,26 @@ async function main() {
   // Inaccuracies / Mistakes / Blunders row clickable (cycles through
   // each matching ply) and the 🔄 Reanalyze button runs
   // retrospectiveSweep over the current mainline.
-  function wireStatsInteractions(wrap, { plies, loadFirst } = {}) {
+  function wireStatsInteractions(wrap, opts = {}) {
     if (!wrap) return;
-    let gameLoaded = false;
+    // Stash the CURRENT render's callbacks on the element so the single
+    // delegated listener below always uses the latest game's handlers —
+    // this function can be called repeatedly (each My Games detail open,
+    // and after each Reanalyze repaint) without stacking listeners.
+    wrap._statsOpts = opts;
+    if (opts.resetLoaded) wrap._statsLoaded = false;   // fresh game detail
+    if (wrap._statsWired) return;
+    wrap._statsWired = true;
+    const ensureLoaded = () => {
+      const o = wrap._statsOpts || {};
+      if (!wrap._statsLoaded && o.loadFirst) { try { o.loadFirst(); } catch {} wrap._statsLoaded = true; }
+    };
     wrap.addEventListener('click', async (ev) => {
+      const o = wrap._statsOpts || {};
       const reanBtn = ev.target.closest('.gs-reanalyze');
       if (reanBtn) {
         if (reanBtn._busy) return;
-        // Reanalyze only makes sense against the currently-loaded
-        // mainline. Load the game onto the board first if we haven't.
-        if (!gameLoaded && loadFirst) { try { loadFirst(); } catch {} gameLoaded = true; }
+        ensureLoaded();
         reanBtn._busy = true;
         const statusEl = wrap.querySelector('.gs-reanalyze-status');
         const original = reanBtn.textContent;
@@ -8348,6 +8358,10 @@ async function main() {
             if (statusEl) statusEl.textContent = ` ${d}/${t}`;
           }});
           if (statusEl) statusEl.textContent = ' ✓ done';
+          // A10: repaint the panel with the fresh evals — the sweep only
+          // populated the cache; without this the numbers never changed
+          // so the button visibly "did nothing".
+          if (typeof o.onReanalyzed === 'function') { try { o.onReanalyzed(); } catch (e) { console.warn('[reanalyze] repaint failed', e); } }
         } catch (err) {
           if (statusEl) statusEl.textContent = ' ✗ failed';
           console.warn('[reanalyze] failed', err);
@@ -8363,16 +8377,17 @@ async function main() {
       const pliesCsv = row.dataset.plies || '';
       const plyList = pliesCsv.split(',').map(n => +n).filter(Boolean);
       if (!plyList.length) return;
-      if (!gameLoaded && loadFirst) { try { loadFirst(); } catch {} gameLoaded = true; }
+      const wasLoaded = wrap._statsLoaded;
+      ensureLoaded();
       // Cycle index stored on the element so repeated clicks advance.
       const idx = ((row._cycleIdx | 0) % plyList.length);
       row._cycleIdx = idx + 1;
       const targetPly = plyList[idx];
-      // Small delay so a just-loaded game has time to populate the
-      // tree before we try to navigate.
+      // If we JUST loaded the game, give the tree a moment to populate
+      // before navigating; if it was already loaded, jump immediately.
       setTimeout(() => {
         try { board.goToPly?.(targetPly); } catch {}
-      }, gameLoaded ? 180 : 0);
+      }, wasLoaded ? 0 : 180);
     });
   }
 
@@ -8709,17 +8724,50 @@ async function main() {
         };
         if (!graph) graph = new EvalGraph(dGraphCanv, { onClickPly: graphJump });
         else graph.onClickPly = graphJump;
-        graph.render(plies);
-        // Per-side stats
-        const stats = computeGameStats(plies);
         const whiteName = game.white_name || (game.user_color === 'white' ? (window.__currentUser?.username || 'You') : 'Stockfish');
         const blackName = game.black_name || (game.user_color === 'black' ? (window.__currentUser?.username || 'You') : 'Stockfish');
-        dStatsWrap.innerHTML = [
-          renderStatsPanel({ side: 'white', name: whiteName, stats: stats.white, isUser: game.user_color === 'white', byKind: stats.byKind }),
-          renderStatsPanel({ side: 'black', name: blackName, stats: stats.black, isUser: game.user_color === 'black', byKind: stats.byKind }),
-          `<div class="gs-reanalyze-wrap"><button class="gs-reanalyze" data-plies-count="${plies.length}" title="Re-run Stockfish on every position to refresh the mistake/blunder counts">🔄 Reanalyze for mistakes</button><span class="gs-reanalyze-status"></span></div>`,
-        ].join('');
-        wireStatsInteractions(dStatsWrap, { plies, loadFirst: () => loadCloudGameOntoBoard(game) });
+        // Render the graph + per-side stats from a given plies array.
+        // Only touches the DOM — the click handling is wired ONCE below
+        // (a single delegated listener on dStatsWrap), so repaints don't
+        // stack listeners.
+        const paintStats = (pliesToUse) => {
+          graph.render(pliesToUse);
+          const stats = computeGameStats(pliesToUse);
+          dStatsWrap.innerHTML = [
+            renderStatsPanel({ side: 'white', name: whiteName, stats: stats.white, isUser: game.user_color === 'white', byKind: stats.byKind }),
+            renderStatsPanel({ side: 'black', name: blackName, stats: stats.black, isUser: game.user_color === 'black', byKind: stats.byKind }),
+            `<div class="gs-reanalyze-wrap"><button class="gs-reanalyze" data-plies-count="${pliesToUse.length}" title="Re-run Stockfish on every position to refresh the mistake/blunder counts">🔄 Reanalyze for mistakes</button><span class="gs-reanalyze-status"></span></div>`,
+          ].join('');
+        };
+        // AUDIT A10: after Reanalyze finishes, rebuild the plies from the
+        // board mainline enriched with the freshly-swept fenEvalCache
+        // evals (incl. fen so the shared classifier attributes moves
+        // correctly), then repaint. Previously the sweep populated the
+        // cache but the panel kept showing the stale stored numbers, so
+        // the button "did nothing" visibly.
+        function buildFreshPlies() {
+          const out = [];
+          let cur = board.tree && board.tree.root;
+          while (cur && cur.children && cur.children.length) {
+            const n = cur.children[0];
+            if (!n || !n.fen) break;
+            const ev = fenEvalCache.get(n.fen) || {};
+            out.push({ ply: out.length + 1, san: n.san, fen: n.fen,
+                       cpWhite: ev.cpWhite ?? null, mate: ev.mate ?? null, depth: ev.depth ?? null });
+            cur = n;
+          }
+          return out;
+        }
+        const onReanalyzed = () => {
+          const fresh = buildFreshPlies();
+          paintStats(fresh.length >= 2 ? fresh : plies);
+        };
+        paintStats(plies);
+        wireStatsInteractions(dStatsWrap, {
+          loadFirst: () => loadCloudGameOntoBoard(game),
+          onReanalyzed,
+          resetLoaded: true,
+        });
         // Stash for action buttons
         detailEl._currentGame = game;
       } catch (err) {
@@ -9159,7 +9207,10 @@ async function main() {
         // no game-load step needed.
         if (!statsWrap._wired) {
           statsWrap._wired = true;
-          wireStatsInteractions(statsWrap, { plies: null, loadFirst: null });
+          // A10: repaint via the card's own update() after a Reanalyze
+          // so the fresh evals show immediately (was: numbers unchanged
+          // until the next board event happened to re-render).
+          wireStatsInteractions(statsWrap, { plies: null, loadFirst: null, onReanalyzed: update });
         }
         // Relocate stats to the notation-below-slot when review mode is
         // active — so the graph stays below the board and the stats
