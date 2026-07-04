@@ -201,6 +201,18 @@ app.use((req, res, next) => {
              req.path.startsWith('/assets/stockfish-web/') ||
              req.path.startsWith('/assets/nnue/')) {
     res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+  } else if (req.path.startsWith('/src/') || req.path.endsWith('.js') ||
+             req.path === '/' || req.path.endsWith('.html') ||
+             req.path.endsWith('.css')) {
+    // Our own app code (src/*.js, index.html, styles). These change on
+    // every deploy at the SAME URL. `max-age=0` alone let Chrome's memory
+    // cache serve a STALE copy within a session — a user whose tab was
+    // open across a deploy kept running old JS and never got fixes
+    // (observed 2026-07-04: browser ran a pre-fix engine.js). `no-cache`
+    // forbids using any cached copy without revalidating first (still
+    // allows a cheap 304 when unchanged), so a normal reload always
+    // picks up the latest deploy.
+    res.setHeader('Cache-Control', 'no-cache');
   }
   next();
 });
