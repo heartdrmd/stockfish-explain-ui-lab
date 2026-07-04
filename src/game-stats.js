@@ -44,8 +44,14 @@ function moveAccuracy(drop) {
   if (drop <= 0) return 100;
   // Lichess: accuracy = 103.1668 * exp(-0.04354 * (win%before - win%after))
   //                     - 3.1669 + random 1%  (skip the jitter)
-  // win% here is 0..100, so multiply our [0,1] drop by 100.
-  const delta100 = drop * 100;
+  // where win% is on a 0..100 scale.
+  //
+  // AUDIT A4: our win-chance (povChances) is on a [-1,+1] scale, so the
+  // full range is 2.0 units = 100 percentage points → win% = 50*(w+1),
+  // and (win%before - win%after) = 50 * drop, NOT 100 * drop. The old
+  // `drop * 100` double-counted every move's loss, systematically
+  // deflating accuracy.
+  const delta100 = drop * 50;
   const v = 103.1668 * Math.exp(-0.04354 * delta100) - 3.1669;
   if (!Number.isFinite(v)) return 0;
   return Math.max(0, Math.min(100, v));
@@ -94,6 +100,18 @@ export function computeGameStats(plies) {
       ? { cpWhite: 20, mate: null }        // startpos ≈ +0.2 for white
       : plies[i - 1];
     const after = plies[i];
+    // AUDIT A3 + A11: skip plies we can't score cleanly, so they don't
+    // distort accuracy / ACPL / mistake counts:
+    //   • null eval (unanalysed) — treating it as 0.00 created phantom
+    //     blunders (a real +5 followed by an unevaluated ply looked like
+    //     a huge drop).
+    //   • mate:0 (terminal checkmate) — the winning move, which the
+    //     white-POV sign convention can't represent (Math.sign(0)=0), so
+    //     it was charged as a ~full-cap loss and classified a blunder
+    //     FOR THE WINNER.
+    const hasEval = (p) => p && (p.cpWhite != null || p.mate != null);
+    if (!hasEval(before) || !hasEval(after)) continue;
+    if (before.mate === 0 || after.mate === 0) continue;
     const cls = classify(mover, before, after);
     const acc = moveAccuracy(Math.max(0, cls.drop));
     // True ACPL: drop in centipawns from mover's POV between
