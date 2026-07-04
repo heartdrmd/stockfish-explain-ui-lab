@@ -3316,7 +3316,14 @@ async function main() {
     const probeFen = prev.fen;
     const probeId = (_learn._probeSeq = (_learn._probeSeq || 0) + 1);
     const savedMultiPV = engine.multipv;
+    // P6: the fallback probe must run at FULL strength — this path fires
+    // exactly when the verifier didn't pre-cache this FEN, and the engine
+    // skill is currently the PRACTICE skill (practice-start overwrote the
+    // toolbar slider). Without this a skill-3 "best move" could be shown
+    // as the solution. Restore in finish().
+    const savedSkill = engine.skill;
     engine.setMultiPV(1);
+    try { engine.setSkill(20); } catch {}
 
     let timeoutId = 0;
     const finish = (bestUci, reason) => {
@@ -3327,6 +3334,7 @@ async function main() {
       clearTimeout(timeoutId);
       try { engine.removeEventListener('bestmove', onBest); } catch {}
       try { engine.setMultiPV(savedMultiPV); } catch {}
+      try { engine.setSkill(savedSkill); } catch {}
       if (!_learn.active) {
         console.log('[learn-mode] probe finished after panel close — skipping render', { reason });
         return;

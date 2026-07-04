@@ -24,6 +24,11 @@ function newGuestId() {
   return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
+// In-memory memo so a single page session always uses ONE guest id even
+// when localStorage is unavailable (audit A7). Previously private/
+// incognito mode minted a NEW id on every request, so each cloud save
+// landed under a different guest and listGames() returned nothing.
+let _memoGuestId = null;
 export function getGuestId() {
   try {
     let id = localStorage.getItem(GUEST_ID_KEY);
@@ -31,11 +36,14 @@ export function getGuestId() {
       id = newGuestId();
       localStorage.setItem(GUEST_ID_KEY, id);
     }
+    _memoGuestId = id;
     return id;
   } catch {
-    // Private-mode / quota-exceeded: return a transient one — cloud save
-    // still works for this session, just won't persist across reloads.
-    return newGuestId();
+    // Private-mode / quota-exceeded: memoize a transient id so it stays
+    // STABLE for the session (cloud save works, just won't persist across
+    // reloads).
+    if (!_memoGuestId) _memoGuestId = newGuestId();
+    return _memoGuestId;
   }
 }
 
