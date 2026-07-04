@@ -150,6 +150,41 @@ export function requireAuthOrGuest(req, res, next) {
   });
 }
 
+// Claim a guest's data for a freshly authenticated user (audit A6).
+// When a guest (games/favourites/openings scoped by X-Guest-Id) signs up
+// or logs in, reassign their rows from guest_id → user_id so nothing
+// "disappears" on sign-in (previously listGames became user-scoped and
+// the guest rows were orphaned, then the local copies re-uploaded as
+// duplicates). Best-effort: failures are logged, never block the login.
+async function claimGuestData(userId, guestId) {
+  if (!userId || !guestId || !GUEST_ID_RE.test(guestId)) return;
+  // Tables with NO owner-unique constraint → straight reassign.
+  for (const tbl of ['games', 'engine_crashes', 'diagnostic_logs']) {
+    try {
+      await query(`UPDATE ${tbl} SET user_id = $1, guest_id = NULL WHERE guest_id = $2`, [userId, guestId]);
+    } catch (e) { console.warn(`[auth] claim ${tbl} failed`, e.message); }
+  }
+  // favourites + custom_openings have an owner-unique index — a guest row
+  // that collides with an existing user row would violate it on reassign.
+  // Delete the colliding guest rows first (the user's own copy wins), then
+  // reassign the rest.
+  try {
+    await query(
+      `DELETE FROM favourites f WHERE f.guest_id = $2
+         AND EXISTS (SELECT 1 FROM favourites u WHERE u.user_id = $1 AND u.opening_key = f.opening_key)`,
+      [userId, guestId]);
+    await query(`UPDATE favourites SET user_id = $1, guest_id = NULL WHERE guest_id = $2`, [userId, guestId]);
+  } catch (e) { console.warn('[auth] claim favourites failed', e.message); }
+  try {
+    await query(
+      `DELETE FROM custom_openings c WHERE c.guest_id = $2
+         AND EXISTS (SELECT 1 FROM custom_openings u
+                      WHERE u.user_id = $1 AND u.group_name = c.group_name AND u.opening_name = c.opening_name)`,
+      [userId, guestId]);
+    await query(`UPDATE custom_openings SET user_id = $1, guest_id = NULL WHERE guest_id = $2`, [userId, guestId]);
+  } catch (e) { console.warn('[auth] claim custom_openings failed', e.message); }
+}
+
 export function wireAuth(app) {
   // Brute-force / DoS limiter shared from server.js (audit S4). No-op
   // passthrough if it isn't wired (e.g. a test harness), so these routes
@@ -173,6 +208,8 @@ export function wireAuth(app) {
       );
       const { token, expiresAt } = await createSession(rows[0].id);
       setSessionCookie(res, token, expiresAt, req);
+      // A6: claim any guest data this browser accumulated before signup.
+      await claimGuestData(rows[0].id, readGuestId(req));
       res.json({ user: { id: rows[0].id, username: rows[0].username } });
     } catch (err) {
       console.error('[auth] signup failed', err);
@@ -194,6 +231,8 @@ export function wireAuth(app) {
       if (!ok) return res.status(401).json({ error: 'invalid username or password' });
       const { token, expiresAt } = await createSession(rows[0].id);
       setSessionCookie(res, token, expiresAt, req);
+      // A6: claim any guest data this browser accumulated before login.
+      await claimGuestData(rows[0].id, readGuestId(req));
       res.json({ user: { id: rows[0].id, username: rows[0].username } });
     } catch (err) {
       console.error('[auth] login failed', err);
