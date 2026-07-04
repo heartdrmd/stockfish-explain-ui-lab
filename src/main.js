@@ -4255,6 +4255,26 @@ async function main() {
           if (practiceColor && board.isAtLive() && !practiceOver) {
             const playerChar = practiceColor[0];
             const engineTurn = chessNow.turn() !== playerChar;
+            // AUDIT B1/P2 fail-safe: don't let the engine move on a
+            // position the user is only REVIEWING. isAtLive() can wrongly
+            // report true after arrow-key / pill navigation (goToPly and
+            // _navigateTo truncate board.chess), which let the engine
+            // play on the inspected ply and silently FORK the live game.
+            // Compare the live board's ply count to the tree mainline
+            // length; if the board is behind the head we're reviewing —
+            // skip. Fail-safe: worst case the engine skips a turn (the
+            // durable-turn queue or the user's next action re-triggers
+            // it), it can NEVER play a wrong move here.
+            let atLiveHead = true;
+            try {
+              atLiveHead = board.chess.history().length >= board.tree.mainlineNodes().length;
+            } catch {}
+            if (engineTurn && !atLiveHead) {
+              console.log('[practice] engine turn suppressed — reviewing history, not at live head', {
+                boardPlies: board.chess.history().length,
+              });
+              return;
+            }
             if (engineTurn) {
               // Forced-move short-circuit: if there's exactly one legal
               // move, play it instantly without invoking the engine at
