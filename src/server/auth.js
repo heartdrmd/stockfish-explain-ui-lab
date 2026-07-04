@@ -86,10 +86,50 @@ export function requireAuth(req, res, next) {
 // Guest-id validator: ~UUIDv4 shape but we also accept any 16-64 char
 // token of [a-zA-Z0-9_-]. Keeps the server from trusting whatever the
 // client posts (rate-limiting / abuse belongs in a separate layer).
+//
+// NOTE (audit S3): we deliberately read the guest id ONLY from the
+// X-Guest-Id header, never from the query string. A query-param guest
+// id leaks into server/proxy logs, browser history, and Referer headers
+// — and since the id is the sole access token for a guest's data, that
+// leak = full read/delete of their archive. The one flow that can't send
+// a header (a browser download navigation) uses a signed short-lived
+// export token instead (see mintGuestExportToken below).
 const GUEST_ID_RE = /^[A-Za-z0-9_-]{16,64}$/;
 function readGuestId(req) {
-  const raw = req.get('X-Guest-Id') || req.query?.guest_id || '';
+  const raw = req.get('X-Guest-Id') || '';
   return GUEST_ID_RE.test(raw) ? raw : null;
+}
+
+// ── Signed guest export token (audit S3) ──────────────────────────
+// HMAC-signed, 2-minute-lived token that carries a guest id through a
+// download URL without exposing the raw id. Secret from env; falls back
+// to a per-boot random (a restart just invalidates outstanding tokens —
+// negligible, they live 2 min).
+const EXPORT_SECRET = process.env.EXPORT_TOKEN_SECRET ||
+  crypto.randomBytes(32).toString('hex');
+const EXPORT_TOKEN_TTL_MS = 2 * 60 * 1000;
+
+export function mintGuestExportToken(guestId) {
+  const payload = Buffer.from(JSON.stringify({ g: guestId, e: Date.now() + EXPORT_TOKEN_TTL_MS }))
+    .toString('base64url');
+  const sig = crypto.createHmac('sha256', EXPORT_SECRET).update(payload).digest('base64url');
+  return `${payload}.${sig}`;
+}
+
+export function verifyGuestExportToken(token) {
+  if (typeof token !== 'string' || !token.includes('.')) return null;
+  const [payload, sig] = token.split('.');
+  if (!payload || !sig) return null;
+  const expected = crypto.createHmac('sha256', EXPORT_SECRET).update(payload).digest('base64url');
+  // Constant-time compare; guard against length-mismatch throw.
+  const a = Buffer.from(sig), b = Buffer.from(expected);
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
+  try {
+    const { g, e } = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
+    if (typeof g !== 'string' || !GUEST_ID_RE.test(g)) return null;
+    if (typeof e !== 'number' || Date.now() > e) return null;   // expired
+    return g;
+  } catch { return null; }
 }
 
 // Attach req.user (logged in) OR req.guest (guest token) and call next.

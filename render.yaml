@@ -29,6 +29,11 @@ services:
         sync: false
       - key: PREMIUM_PW_PREFIX
         sync: false
+      # HMAC secret for signed guest export tokens (audit S3). Optional —
+      # if unset the server uses a per-boot random (tokens live 2 min, so
+      # a restart only invalidates in-flight downloads). Set for stability.
+      - key: EXPORT_TOKEN_SECRET
+        generateValue: true
       - key: NODE_ENV
         value: production
       # DATABASE_URL is auto-populated by Render when the web service

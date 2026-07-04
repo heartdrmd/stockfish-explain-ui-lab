@@ -8804,8 +8804,8 @@ async function main() {
 
     // ─── Top-bar actions ─────────────────────────────────────────
     btnClose.addEventListener('click', closeTab);
-    btnExport.addEventListener('click', () => {
-      const url = api.exportUrl(buildServerQuery());
+    btnExport.addEventListener('click', async () => {
+      const url = await api.exportUrl(buildServerQuery());
       const a = document.createElement('a');
       a.href = url;
       document.body.appendChild(a);
@@ -9756,7 +9756,7 @@ async function main() {
     const q = {};
     if (dlFrom?.value) q.from = dlFrom.value;
     if (dlTo?.value)   q.to   = dlTo.value;
-    const url = api.exportUrl(q);
+    const url = await api.exportUrl(q);
     // Use a hidden <a download> so the browser streams it and the
     // session cookie goes along (fetch + blob would work too but this
     // preserves the filename from Content-Disposition).

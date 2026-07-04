@@ -9,7 +9,7 @@
 // Wired as a group in server.js: wireGames(app).
 
 import { query } from './db.js';
-import { requireAuthOrGuest } from './auth.js';
+import { requireAuthOrGuest, mintGuestExportToken, verifyGuestExportToken } from './auth.js';
 
 // Allowed sort keys → SQL ORDER BY expressions. Whitelisted so no
 // arbitrary strings from query params ever reach Postgres.
@@ -209,9 +209,41 @@ export function wireGames(app) {
     }
   });
 
+  // GET /api/games/export-token — mint a short-lived signed token so a
+  // guest can download via a browser navigation without putting the raw
+  // guest id in the URL (audit S3). Logged-in users get token:null and
+  // rely on their session cookie riding along on the download.
+  app.get('/api/games/export-token', requireAuthOrGuest, (req, res) => {
+    if (req.user) return res.json({ token: null });        // cookie suffices
+    return res.json({ token: mintGuestExportToken(req.guest.id) });
+  });
+
   // GET /api/games/export.pgn  — download games as a single PGN file.
   // Honours the full filter set (same as /api/games).
-  app.get('/api/games/export.pgn', requireAuthOrGuest, async (req, res) => {
+  //
+  // Auth (audit S3): session cookie for users; a signed ?token= for
+  // guests (NOT a raw guest id in the URL). We resolve the owner here
+  // instead of via requireAuthOrGuest so the token path is accepted.
+  app.get('/api/games/export.pgn', async (req, res) => {
+    // Resolve owner: prefer the session (requireAuthOrGuest-style), then
+    // a valid export token. We inline a tiny resolver because the query
+    // string can no longer carry a guest id.
+    try {
+      const tokenGid = verifyGuestExportToken(req.query.token);
+      if (tokenGid) {
+        req.guest = { id: tokenGid };
+      } else {
+        // Fall through to session-cookie auth for logged-in users.
+        return requireAuthOrGuest(req, res, () => doExport(req, res));
+      }
+    } catch (err) {
+      console.error('[games] export auth failed', err);
+      return res.status(500).json({ error: 'export failed' });
+    }
+    return doExport(req, res);
+  });
+
+  async function doExport(req, res) {
     try {
       const { params, where } = buildFilters(req);
       const { rows } = await query(
@@ -234,5 +266,5 @@ export function wireGames(app) {
       console.error('[games] export failed', err);
       res.status(500).json({ error: 'export failed' });
     }
-  });
+  }
 }

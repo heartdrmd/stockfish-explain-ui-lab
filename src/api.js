@@ -91,14 +91,21 @@ export const api = {
   },
   getGame:    (id)      => req('GET',    `/api/games/${+id}`),
   deleteGame: (id)      => req('DELETE', `/api/games/${+id}`),
-  // Returns the export URL so the caller can set window.location or
-  // create an <a download> — lets the browser stream the file directly.
-  // Guest ID goes via the guest_id query param here because the
-  // download flow can't attach custom headers the way fetch() does.
-  exportUrl:  (q = {})  => {
-    const merged = { ...q };
-    try { merged.guest_id = getGuestId(); } catch {}
-    const qs = new URLSearchParams(Object.entries(merged).filter(([,v]) => v != null && v !== ''));
+  // Returns the export URL (async) so the caller can create an <a
+  // download> and let the browser stream the file directly.
+  //
+  // Audit S3: we no longer put the raw guest id in the query string
+  // (it would leak into logs / history / Referer, and the id is the
+  // guest's sole access token). Instead we fetch a short-lived signed
+  // token via the X-Guest-Id header (safe — it's a fetch) and pass THAT
+  // in the URL. Logged-in users get token:null and rely on the session
+  // cookie riding along on the download navigation.
+  exportUrl: async (q = {}) => {
+    const qs = new URLSearchParams(Object.entries(q).filter(([,v]) => v != null && v !== ''));
+    try {
+      const r = await req('GET', '/api/games/export-token');
+      if (r && r.token) qs.set('token', r.token);
+    } catch {}
     return '/api/games/export.pgn' + (qs.toString() ? '?' + qs : '');
   },
 
