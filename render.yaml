@@ -22,6 +22,13 @@ services:
     envVars:
       - key: ANTHROPIC_API_KEY
         sync: false
+      # Secret gate-password prefixes (see server.js header). sync:false
+      # means "set manually in the Render dashboard, never in this file."
+      # The daily password is <prefix> + tomorrow's 2-digit CT day.
+      - key: SITE_PW_PREFIX
+        sync: false
+      - key: PREMIUM_PW_PREFIX
+        sync: false
       - key: NODE_ENV
         value: production
       # DATABASE_URL is auto-populated by Render when the web service

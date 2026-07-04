@@ -5,8 +5,11 @@
 **Local working dir:** `/Users/nadalmaker/stockfish-web/`
 **Public URL:** `https://stockfish-explain.onrender.com`
 **Gate passwords** (rotating daily, Central Time):
-- Site: `9069` + tomorrow's 2-digit day
-- Premium: `Dooha` + tomorrow's 2-digit day
+- Site:    `<SITE_PW_PREFIX>` + tomorrow's 2-digit day
+- Premium: `<PREMIUM_PW_PREFIX>` + tomorrow's 2-digit day
+- The prefixes are SECRETS set via Render env vars (`SITE_PW_PREFIX` /
+  `PREMIUM_PW_PREFIX`), not stored in this repo. The server prints the
+  current passwords to its boot logs (visible in the Render dashboard).
 
 ---
 

@@ -8,8 +8,12 @@
 //   daily passwords so only invited friends can use the AI features.
 //
 // Password scheme (rotates daily, Central Time "tomorrow"):
-//   SITE:    '9069'  + tomorrow's 2-digit day  (e.g. 906918 if today is 17 CT)
-//   PREMIUM: 'Dooha' + tomorrow's 2-digit day  (e.g. Dooha18)
+//   SITE:    <SITE_PW_PREFIX>    + tomorrow's 2-digit day
+//   PREMIUM: <PREMIUM_PW_PREFIX> + tomorrow's 2-digit day
+//   The PREFIXES are SECRETS supplied via env vars (SITE_PW_PREFIX /
+//   PREMIUM_PW_PREFIX) and are NOT in source. Only invited friends know
+//   them. This repo is public, so a hard-coded prefix would let anyone
+//   compute the daily password and burn the API key. Set them in Render.
 //
 // Two HTTP endpoints:
 //   POST /api/gate    { password }        -> sets httpOnly cookie with tier
@@ -33,8 +37,20 @@ const API_KEY    = process.env.ANTHROPIC_API_KEY || '';
 const TZ         = 'America/Chicago';            // Central US — user's choice
 const COOKIE_TTL = 1000 * 60 * 60 * 12;          // 12h — forces re-auth daily
 
+// Password prefixes are SECRETS from env. Fallbacks exist ONLY so local
+// dev (localhost, no env) keeps working; in that mode we warn loudly. In
+// production these MUST be set in Render, otherwise the public repo would
+// reveal the daily password formula (see file header + REVIEW audit S1).
+const SITE_PW_PREFIX    = process.env.SITE_PW_PREFIX    || '';
+const PREMIUM_PW_PREFIX = process.env.PREMIUM_PW_PREFIX || '';
+const PW_PREFIXES_SET   = !!(SITE_PW_PREFIX && PREMIUM_PW_PREFIX);
+
 if (!API_KEY) {
   console.warn('⚠  ANTHROPIC_API_KEY is not set — AI endpoints will return 503');
+}
+if (!PW_PREFIXES_SET) {
+  console.warn('⚠  SITE_PW_PREFIX / PREMIUM_PW_PREFIX not set — using INSECURE dev fallbacks. ' +
+               'Set both in Render before exposing this server, or the gate is bypassable.');
 }
 
 // ───────────────────────────────────────────────────────────────────────
@@ -58,8 +74,18 @@ function tomorrowDayCT() {
   return String(tomorrow.getUTCDate()).padStart(2, '0');
 }
 
-function expectedSitePassword()    { return '9069'  + tomorrowDayCT(); }
-function expectedPremiumPassword() { return 'Dooha' + tomorrowDayCT(); }
+// Dev fallbacks used ONLY when env prefixes are unset (localhost). These
+// are intentionally NOT the historical production prefixes — the old ones
+// leaked in git history, so they're rotated here too.
+const DEV_SITE_PREFIX    = 'devsite';
+const DEV_PREMIUM_PREFIX = 'devprem';
+
+function expectedSitePassword() {
+  return (SITE_PW_PREFIX || DEV_SITE_PREFIX) + tomorrowDayCT();
+}
+function expectedPremiumPassword() {
+  return (PREMIUM_PW_PREFIX || DEV_PREMIUM_PREFIX) + tomorrowDayCT();
+}
 
 // Constant-time string compare to avoid leaking length via timing.
 function safeEqual(a, b) {
