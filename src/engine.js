@@ -339,7 +339,17 @@ export class Engine extends EventTarget {
       this._send('__sfw_load_small ' + spec.externalNnue.small);
       this._send('__sfw_load_big '   + spec.externalNnue.big);
       // BLOCKING wait for the BIG net ack. requiresBigNetForPractice.
-      await this._waitForInfoString('LSF_NNUE_LOADED index=0', 120_000);
+      // E2: also watch for LSF_NNUE_FAIL index=0 so a failed big-net
+      // fetch rejects immediately (→ terminate + fallback) instead of
+      // hanging the full 120 s and then failing to classify the error.
+      try {
+        await this._waitForInfoString('LSF_NNUE_LOADED index=0', 120_000, 'LSF_NNUE_FAIL index=0');
+      } catch (err) {
+        // Tear the worker down before surfacing — otherwise a zombie
+        // worker (with its pthread pool) leaks on this failure path.
+        try { this.terminate(); } catch {}
+        throw new Error(`Engine '${flavor}' boot failed: ${err.message}`);
+      }
       this.activeNet = 'big';
     }
 
@@ -556,7 +566,7 @@ export class Engine extends EventTarget {
    * then fire too late if we used it. Default 120s covers a slow
    * mobile network downloading the 100 MB big NNUE.
    */
-  _waitForInfoString(prefix, timeoutMs = 120_000) {
+  _waitForInfoString(prefix, timeoutMs = 120_000, failPrefix = null) {
     // Capture the worker reference at promise-creation time. If main.js's
     // boot timeout fires earlier than ours and calls terminate(), this.worker
     // becomes null. The setTimeout below would then call null.removeEventListener
@@ -575,6 +585,15 @@ export class Engine extends EventTarget {
             line === 'info string ' + prefix) {
           cleanup();
           resolve(line);
+          return;
+        }
+        // E2: fail fast if the shim reports the fetch failed, instead of
+        // blocking the full timeout then rejecting with a message that
+        // main.js's catch can't classify. Rejecting here lets boot()
+        // terminate + surface the right fallback.
+        if (failPrefix && line.startsWith('info string ' + failPrefix)) {
+          cleanup();
+          reject(new Error(`NNUE load failed: ${line.replace('info string ', '')}`));
         }
       };
       const t = setTimeout(() => {
@@ -807,43 +826,43 @@ export class Engine extends EventTarget {
     //     expires can legitimately take 200-500 ms.
     //   - depth-bounded / infinite: 60 s ceiling unchanged.
     if (this._watchdogId) clearTimeout(this._watchdogId);
-    const budget = opts.movetime
-      ? Math.max(5000, Math.round(opts.movetime * 1.5) + 2000)
-      : (opts.depth ? 60_000 : 60_000);
-    // Capture flag in closure so the post-stop checks know whether
-    // this was a movetime/depth search (tight grace) or infinite/free
-    // analysis (longer grace).
-    const isBounded = !!(opts.movetime || opts.depth);
-    // Movetime/depth searches are "the user is waiting on this move":
-    // grace must be tight (post-GPT review). Infinite/free analysis
-    // can afford a longer wait — the engine is just feeding info.
-    const POST_STOP_HARD_MS = isBounded ? 1500 : 5000;
-    this._watchdogId = setTimeout(() => {
-      if (!this._bestmoveAwaited) return;
-      const responsive = (this._infoReceived || 0) > 0;
-      console.warn('[engine] bestmove watchdog fired — forcing stop', {
-        responsive, infoReceived: this._infoReceived || 0,
-        bounded: isBounded, postStopMs: POST_STOP_HARD_MS,
-      });
-      this.stop();
-      // Two-stage post-stop check (cf. _fireStuckSynthetic helper):
-      //   t+1.5s — silent at boot? declare wedged immediately.
-      //   t+POST_STOP_HARD_MS — hard backstop. Responsive engines must
-      //            answer stop within this window. If they haven't,
-      //            worker is wedged — fire synthetic so UI unfreezes
-      //            and main.js routes to recovery.
-      setTimeout(() => {
-        if (!this._bestmoveAwaited) return;
-        if (responsive) {
-          console.warn('[engine] watchdog: responsive engine still owes bestmove after stop — waiting up to ' + (POST_STOP_HARD_MS/1000) + ' s more');
-          return;
-        }
-        this._fireStuckSynthetic('silent');
-      }, 1500);
-      setTimeout(() => {
-        this._fireStuckSynthetic('responsive but stop ignored');
-      }, POST_STOP_HARD_MS);
-    }, budget);
+    // E5: infinite / free-analysis searches must NOT be hard-stopped —
+    // they deepen indefinitely by design (the UI depth counter kept
+    // freezing at exactly 60 s because the watchdog killed them). Wedge
+    // detection for infinite searches is the 30 s stall detector's job.
+    // Only BOUNDED (movetime / depth) searches get the watchdog.
+    if (!opts.infinite) {
+      const budget = opts.movetime
+        ? Math.max(5000, Math.round(opts.movetime * 1.5) + 2000)
+        : 60_000;                          // depth-bounded ceiling
+      const POST_STOP_HARD_MS = 1500;      // tight; the user is waiting on this move
+      // E3: capture THIS search's id (myId) in every timer so a timer
+      // that fires after the search has ended (bestmove arrived, next
+      // search already running) is a no-op — previously these checked
+      // only _bestmoveAwaited, which the SUCCESSOR search re-sets to
+      // true, so the watchdog could declare the next HEALTHY search
+      // wedged and trigger false recovery churn.
+      this._watchdogId = setTimeout(() => {
+        if (this._searchId !== myId || !this._bestmoveAwaited) return;
+        const responsive = (this._infoReceived || 0) > 0;
+        console.warn('[engine] bestmove watchdog fired — forcing stop', {
+          searchId: myId, responsive, infoReceived: this._infoReceived || 0,
+        });
+        this.stop();
+        setTimeout(() => {
+          if (this._searchId !== myId || !this._bestmoveAwaited) return;
+          if (responsive) {
+            console.warn('[engine] watchdog: responsive engine still owes bestmove after stop — waiting a bit more');
+            return;
+          }
+          this._fireStuckSynthetic('silent');
+        }, 1500);
+        setTimeout(() => {
+          if (this._searchId !== myId || !this._bestmoveAwaited) return;
+          this._fireStuckSynthetic('responsive but stop ignored');
+        }, POST_STOP_HARD_MS);
+      }, budget);
+    }
 
     this._send(`position fen ${fen}`);
 
@@ -1021,6 +1040,25 @@ export class Engine extends EventTarget {
       if (this._watchdogId)    { clearTimeout(this._watchdogId);    this._watchdogId = 0; }
       if (this._stallTimer)    { clearTimeout(this._stallTimer);    this._stallTimer = 0; }
       this._applyPending();
+
+      // ── STALE-FLUSH SUPPRESSION (audit E1) ────────────────────────
+      // If start() queued a new request during this search, it also sent
+      // a `stop` to wrap the old one up — so THIS bestmove is the old
+      // search's flush, not a result any caller is waiting for. Do NOT
+      // dispatch it: a caller that did stop()+addEventListener('bestmove',
+      // once)+start(fen) in one tick would otherwise have its one-shot
+      // listener consume the STALE answer (wrong move played at practice
+      // start, probeEngine caching the wrong position, coach deep-search
+      // resolving instantly with old lines). Draining the queued request
+      // starts the NEW search whose bestmove IS the one to dispatch.
+      if (this._pendingRequest) {
+        console.log('[engine] flush bestmove suppressed — draining queued request', line);
+        try { this._drainPendingRequest(); } catch (err) {
+          console.warn('[engine] drainPendingRequest failed', err);
+        }
+        return;
+      }
+
       const m = line.match(/^bestmove\s+(\S+)(?:\s+ponder\s+(\S+))?/);
       const detail = {
         best:     m ? m[1] : null,

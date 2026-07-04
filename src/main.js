@@ -919,7 +919,11 @@ async function main() {
   // if the engine is ready and shows a helpful message otherwise.
   wireAiButtonsEarly();
 
-  async function bootEngine(flavor) {
+  async function bootEngine(flavor, tried = new Set()) {
+    // E8: remember every flavor we've attempted this fallback chain so
+    // the picker below can't ping-pong between two broken flavors
+    // (find(f => f !== flavor) alone would bounce full↔lite forever).
+    tried.add(flavor);
     engineReady = false;
     ui.engineMode.textContent = 'booting…';
     ui.engineMode.classList.remove('threaded');
@@ -1100,10 +1104,11 @@ async function main() {
       console.error('[engine] boot failed', err);
       ui.engineMode.textContent = 'engine failed';
       const msg = String(err.message || err);
-      const isTimeout  = /timed out/i.test(msg);
+      const isTimeout  = /timed out|timeout/i.test(msg);
       // Broad crash regex — better to auto-fallback once unnecessarily
-      // than leave the user stuck on a silent boot failure.
-      const isCrash    = /unreachable|runtime error|not valid wasm|crashed|failed to boot|syntaxerror|importscripts|failed to fetch|importing|module/i.test(msg);
+      // than leave the user stuck on a silent boot failure. Includes the
+      // lichess-full NNUE-fetch failure phrasing (audit E2).
+      const isCrash    = /unreachable|runtime error|not valid wasm|crashed|failed to boot|boot failed|nnue|load failed|syntaxerror|importscripts|failed to fetch|importing|module/i.test(msg);
 
       // Auto-fallback chain: on crash/timeout, walk a priority list
       // of safer flavors until one works. Stops as soon as a flavor
@@ -1115,7 +1120,8 @@ async function main() {
       const fallbackChain = IS_MOBILE
         ? (threadable ? ['lite', 'lite-single'] : ['lite-single'])
         : (threadable ? ['full', 'lite', 'lite-single'] : ['lite-single']);
-      const nextFlavor = fallbackChain.find(f => f !== flavor);
+      // E8: pick the first flavor we haven't already tried this chain.
+      const nextFlavor = fallbackChain.find(f => !tried.has(f));
       if ((isTimeout || isCrash) && nextFlavor) {
         localStorage.removeItem(FLAVOR_STORAGE);
         // Clear the 'engine failed' pill IMMEDIATELY so the user never
@@ -1157,7 +1163,7 @@ async function main() {
         }
         if (typeof window.__wireEngineCaptureListeners === 'function')
           window.__wireEngineCaptureListeners(engine);
-        return bootEngine(nextFlavor);
+        return bootEngine(nextFlavor, tried);
       }
 
       if (isTimeout) {
