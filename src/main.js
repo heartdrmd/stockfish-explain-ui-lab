@@ -1067,6 +1067,24 @@ async function main() {
       engineReady = true;
       currentFlavor = info.flavor;
       ui.selectFlavor.value = info.flavor;
+
+      // E6: re-apply the user's engine settings on EVERY boot (initial,
+      // dropdown, crash-recovery, auto-fallback). A fresh Engine() boots
+      // with defaults (skill 20 / MultiPV 3 / threads = half-cores); the
+      // old code only re-applied on the dropdown path, so a mid-game
+      // crash silently turned the practice opponent up to full strength.
+      // (Practice re-sets skill per engine-turn too, so this is a floor,
+      // not a conflict.)
+      try {
+        if (ui.rangeSkill)   engine.setSkill(+ui.rangeSkill.value);
+        if (ui.rangeMultipv) engine.setMultiPV(+ui.rangeMultipv.value);
+        if (ui.rangeThreads && engine.setThreads) engine.setThreads(+ui.rangeThreads.value);
+        // Literal key (not the HASH_STORAGE const, which is declared later
+        // in main() — referencing it here would TDZ on the initial boot).
+        const savedHash = +(localStorage.getItem('stockfish-explain.hash-mb') || 0);
+        if (savedHash && engine.setHash) engine.setHash(savedHash);
+      } catch (err) { console.warn('[engine] settings re-apply failed', err); }
+
       // Friendly label: variant name + thread count
       const spec = ENGINE_FLAVORS[info.flavor];
       const shortName = (spec?.label || info.flavor).split(/[·—(]/)[0].trim();
@@ -1300,6 +1318,19 @@ async function main() {
   // Expose for the reactive auto-recovery listener (defined earlier).
   window.__switchEngineFlavor = (flavor) => switchEngineFlavor(flavor);
   async function switchEngineFlavor(targetFlavor) {
+    // E7: reentrancy guard. A dropdown change (or a second crash event)
+    // during an in-flight recovery would otherwise run two interleaved
+    // terminate/new-Engine/boot sequences — the `engine` global ends up
+    // whichever assignment lands last, and the loser's fully-booted
+    // worker (up to 8 threads + hash) leaks alive with listeners still
+    // attached. Instead: if a switch is already running, record the
+    // latest requested target and let the active switch pick it up when
+    // it finishes.
+    if (window.__engineRecovering) {
+      window.__pendingFlavorSwitch = targetFlavor;
+      console.log('[engine] switch requested during active recovery — queued', targetFlavor);
+      return;
+    }
     const spec = ENGINE_FLAVORS[targetFlavor];
     const targetIsMT = !!(spec && spec.threaded);
     // Block live `fireAnalysis` from sending searches to the engine
@@ -1348,8 +1379,22 @@ async function main() {
       explainer.wire();
       if (typeof wireEngineCaptureListeners === 'function') wireEngineCaptureListeners(engine);
       await bootEngine(targetFlavor);
+      // E4 note: crash-budget decay is handled by time in the crash
+      // handler (see the engine-crashed listener) — NOT reset here. A
+      // hard reset on every successful boot would let a fast crash-loop
+      // (boots, immediately re-crashes) retry forever and never give up.
     } finally {
       window.__engineRecovering = false;
+      // E7: if another switch was requested while this one ran, honor
+      // the latest target now (latest-wins).
+      const queued = window.__pendingFlavorSwitch;
+      if (queued && queued !== targetFlavor) {
+        window.__pendingFlavorSwitch = null;
+        console.log('[engine] draining queued flavor switch →', queued);
+        switchEngineFlavor(queued);
+      } else {
+        window.__pendingFlavorSwitch = null;
+      }
     }
   }
 
@@ -1608,6 +1653,19 @@ async function main() {
         });
         return;
       }
+      // E4: TIME-DECAY the crash budget. The count must NOT accumulate
+      // for a whole session (three transient crashes hours apart would
+      // otherwise permanently disable recovery, leaving the UI stuck on
+      // "your move queued, will play in a moment…" forever). If the last
+      // crash was more than the decay window ago, this is a fresh
+      // incident — reset the counter. Rapid crashes (a genuine loop)
+      // still accumulate and hit the give-up path.
+      const CRASH_DECAY_MS = 5 * 60_000;
+      const now = Date.now();
+      if (window.__lastEngineCrashAt && (now - window.__lastEngineCrashAt) > CRASH_DECAY_MS) {
+        window.__engineCrashCount = 0;
+      }
+      window.__lastEngineCrashAt = now;
       window.__engineCrashCount = (window.__engineCrashCount || 0) + 1;
       const attempt = window.__engineCrashCount;
       const MAX_RETRIES = 3;
@@ -1637,9 +1695,15 @@ async function main() {
       try { window.__refreshCrashBadge?.(); } catch {}
       if (attempt > MAX_RETRIES) {
         console.error('[engine] crash retry budget exhausted');
+        // E4: mark the engine NOT ready so the UI states agree. Without
+        // this, engineReady stayed true while engine.ready was false, so
+        // the practice path took the durable-queue branch and told the
+        // user "your move is queued, will play in a moment…" forever —
+        // contradicting the give-up message we just set.
+        engineReady = false;
         if (ui.narrationText) {
           ui.narrationText.innerHTML =
-            `❌ Engine (${crashedFlavor}) crashed ${MAX_RETRIES} times this session. ` +
+            `❌ Engine (${crashedFlavor}) crashed ${MAX_RETRIES} times in a row. ` +
             `Refresh the page to start fresh, or pick a different engine flavor from the toolbar dropdown.`;
         }
         return;
