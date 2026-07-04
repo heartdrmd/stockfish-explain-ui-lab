@@ -11883,9 +11883,17 @@ function collectUI() {
 
 function rebuildFenAtPly(chess, ply) {
   const verbose = chess.history({ verbose: true });
-  const n = Math.min(ply, verbose.length);
+  // board.chess is ALWAYS the currently-displayed position (both goToPly
+  // and _navigateTo truncate it to the reviewed ply). So when no specific
+  // EARLIER ply is requested — including the common ply==null case from
+  // arrow-key navigation — the chess's own fen IS the answer. The old
+  // code did Math.min(null, len)=0 and replayed 0 moves from a STANDARD
+  // start, silently returning the startpos (wrong for reviews and for
+  // custom-start games — audit B1/B7), which meant analysis could run on
+  // the opening position while the user was reviewing history.
+  if (ply == null || ply >= verbose.length) return chess.fen();
   const replay = new Chess();
-  for (let i = 0; i < n; i++) {
+  for (let i = 0; i < ply; i++) {
     const m = verbose[i];
     replay.move({ from: m.from, to: m.to, promotion: m.promotion });
   }
