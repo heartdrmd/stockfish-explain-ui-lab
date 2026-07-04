@@ -4082,6 +4082,10 @@ async function main() {
                     }}),
       plies,
     };
+    // A2: assign the local id up front so we can mark it cloud-synced
+    // after the direct upload below (archiveGame would otherwise pick
+    // Date.now() internally and we'd never learn the id).
+    game.id = Date.now();
     const ok = Archive.archiveGame(game);
     // A1: consume the snapshot — it's been archived, so a later archive
     // (e.g. an analysis game after this practice game) must not reuse it.
@@ -4133,7 +4137,20 @@ async function main() {
         blunders_count: blundersCount,
       }).then(res => {
         window.__lastSavedGameId = res.id;
-        console.log('[cloud] game saved to DB', { id: res.id, loggedIn: !!window.__currentUser });
+        // Remember the cloud id for THIS local game so the "Don't save"
+        // button can delete the right cloud row AND so we don't re-upload.
+        window.__lastSavedLocalId = game.id;
+        console.log('[cloud] game saved to DB', { id: res.id, localId: game.id, loggedIn: !!window.__currentUser });
+        // A2: mark this local game as already cloud-synced so the on-load
+        // syncLocalGamesToCloud() doesn't upload it a SECOND time. The
+        // game-end path uploads directly but never recorded the id as
+        // synced → permanent duplicate cloud rows per game.
+        try {
+          const KEY = 'stockfish-explain.archive.cloud-synced-ids';
+          const set = new Set(JSON.parse(localStorage.getItem(KEY) || '[]'));
+          set.add(game.id);
+          localStorage.setItem(KEY, JSON.stringify([...set]));
+        } catch {}
         // Reveal the 'Don't save' button in the post-game panel.
         const dontSaveBtn = document.getElementById('btn-dont-save');
         if (dontSaveBtn) dontSaveBtn.hidden = false;
