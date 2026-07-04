@@ -154,7 +154,18 @@ export class BoardController extends EventTarget {
       // square of a movable piece CENTRE but NOT on that square itself,
       // treat it as a piece-click intent and skip target-first. Covers
       // the "tapped king, finger on adjacent empty square" case.
-      if (this._nearMissOwnPiece(e.clientX, e.clientY, effectiveChess, target)) {
+      //
+      // BUT (audit B6): only when the clicked square is NOT itself a
+      // legal destination. If some piece can legally move there, the
+      // user clearly meant target-first — bailing would make clicks
+      // near your own pieces silently dead (e.g. clicking d4 next to
+      // your e3 pawn did nothing).
+      const targetIsLegalDest = (() => {
+        try { return effectiveChess.moves({ verbose: true }).some(m => m.to === target); }
+        catch { return false; }
+      })();
+      if (!targetIsLegalDest &&
+          this._nearMissOwnPiece(e.clientX, e.clientY, effectiveChess, target)) {
         console.log('[move-input] → bail: near-miss-own-piece (treating as click on nearby piece)', { target });
         this._logInputPath('bail:near-miss-own-piece', target);
         return;

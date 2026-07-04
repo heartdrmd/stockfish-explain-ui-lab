@@ -1559,6 +1559,15 @@ async function main() {
       captureEngineThinkingEval();
       scheduleTimelineRender();
     });
+    // Run any registered re-wire hooks so volatile listeners attached
+    // elsewhere (e.g. the review graph's bestmove refresh) follow engine
+    // swaps too. Without this, after any crash-recovery / flavor switch
+    // those listeners stay on the DEAD Engine instance and go silent
+    // (audit A8). Every swap path calls wireEngineCaptureListeners, so
+    // this is the one choke point that covers them all.
+    for (const hook of (window.__engineRewireHooks || [])) {
+      try { hook(eng); } catch (err) { console.warn('[engine] rewire hook failed', err); }
+    }
     // ── Crash routing (consultation Phase 1, user-policy override) ─
     // engine.js fires `engine-crashed` on a runtime worker.onerror
     // (memory OOB, null function, etc.). User policy: STAY on the
@@ -4134,7 +4143,21 @@ async function main() {
                 // 150ms delay so the user visually registers "opponent
                 // thought about it and moved" rather than a jarring
                 // instant-reply. Tune if it feels too fast/slow.
-                setTimeout(() => board.playEngineMove(uci), 150);
+                //
+                // Token + FEN guard (audit P4): within the 150ms window
+                // the user can undo / New game / resign, or a queued
+                // fireAnalysis can re-land. Capture the search token and
+                // the position now; only play if BOTH still hold and the
+                // game isn't finished — else the forced move would be
+                // applied to the wrong game (or silently no-op → hang).
+                const forcedToken = ++practiceSearchToken;
+                const forcedFen   = chessNow.fen();
+                setTimeout(() => {
+                  if (practiceSearchToken !== forcedToken) return;
+                  if (document.body.classList.contains('practice-finished')) return;
+                  if (!board.isAtLive() || board.fen() !== forcedFen) return;
+                  board.playEngineMove(uci);
+                }, 150);
                 return;
               }
               // ─── Opening variation mode: in-window engine turn ────
@@ -9049,6 +9072,11 @@ async function main() {
     // bestmove fires at the end of each search — by then the eval
     // cache has the final cp/mate for the analysed FEN. Refresh the
     // curve so the newest point lands in the right place.
+    // Register as a re-wire hook (audit A8) so it re-attaches to the new
+    // Engine after any crash-recovery / flavor swap, then attach to the
+    // current instance for the initial wiring.
+    const rewireGraphListener = (eng) => eng.addEventListener('bestmove', requestUpdate);
+    (window.__engineRewireHooks = window.__engineRewireHooks || []).push(rewireGraphListener);
     engine.addEventListener('bestmove', requestUpdate);
 
     // Secondary toggle wired to the nav row inside the move list
