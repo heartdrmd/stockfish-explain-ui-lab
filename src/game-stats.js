@@ -10,51 +10,19 @@
 // not call the engine. Safe to run synchronously inside the render
 // loop of the My Games tab or the live analysis panel.
 
-import { cpToWinChance } from './eval-graph.js';
+// Shared eval math (audit A5) — one sigmoid, thresholds, accuracy
+// formula, and mate/null policy for the whole app.
+import { moverWinDrop, classifySeverity, moveAccuracy } from './evals.js';
 
-const T = {
-  inaccuracy: 0.06,
-  mistake:    0.12,
-  blunder:    0.20,
-};
-
-// Signed win-chance from the given side's perspective, clamped to [-1,+1].
-function winFor(side, cp, mate) {
-  const w = cpToWinChance(cp, mate);
-  return side === 'white' ? w : -w;
-}
-
-// Classify a single move by the drop in its mover's win-chance.
-// `before` = eval BEFORE the move (from the mover's POV it should be
-// high); `after` = eval AFTER the move (lower if it was a bad move).
-function classify(side, before, after) {
-  const wb = winFor(side, before.cpWhite, before.mate);
-  const wa = winFor(side, after.cpWhite,  after.mate);
-  const drop = wb - wa;
-  if (drop >= T.blunder)    return { kind: 'blunder',    drop };
-  if (drop >= T.mistake)    return { kind: 'mistake',    drop };
-  if (drop >= T.inaccuracy) return { kind: 'inaccuracy', drop };
-  return { kind: 'ok', drop };
-}
-
-// Accuracy% for a single move — Lichess formula. Input is the drop in
-// win-chance (already clamped ≥ 0 for bad moves, 0 for good ones).
-// Output is a percent in [0, 100].
-function moveAccuracy(drop) {
-  if (drop <= 0) return 100;
-  // Lichess: accuracy = 103.1668 * exp(-0.04354 * (win%before - win%after))
-  //                     - 3.1669 + random 1%  (skip the jitter)
-  // where win% is on a 0..100 scale.
-  //
-  // AUDIT A4: our win-chance (povChances) is on a [-1,+1] scale, so the
-  // full range is 2.0 units = 100 percentage points → win% = 50*(w+1),
-  // and (win%before - win%after) = 50 * drop, NOT 100 * drop. The old
-  // `drop * 100` double-counted every move's loss, systematically
-  // deflating accuracy.
-  const delta100 = drop * 50;
-  const v = 103.1668 * Math.exp(-0.04354 * delta100) - 3.1669;
-  if (!Number.isFinite(v)) return 0;
-  return Math.max(0, Math.min(100, v));
+// Which colour moved to reach `after`? From the FEN's side-to-move
+// (the opponent of the mover), so this is correct even for games that
+// started from a custom position (audit A12 — parity i%2 assumed
+// white-first and swapped the sides for Black-to-move start FENs).
+// Falls back to ply-index parity if the FEN is missing.
+function moverColor(after, plyIndex) {
+  const stm = (after && after.fen && after.fen.split(' ')[1]) || null;
+  if (stm) return stm === 'b' ? 'white' : 'black';
+  return plyIndex % 2 === 0 ? 'white' : 'black';
 }
 
 // Plies shape assumed: [{ cpWhite, mate, san }, ...]
@@ -79,57 +47,45 @@ export function computeGameStats(plies) {
   if (!Array.isArray(plies) || plies.length < 2) {
     return { white: finalise(white), black: finalise(black), byKind };
   }
-  // ACPL helpers — convert ply eval into mover's-POV centipawns,
-  // mapping mate scores to ±10000 cp. The cap below clamps the per-
-  // move loss to 1000 cp so a single forced-mate position doesn't
-  // distort the average (chess-engine industry standard cap; matches
-  // Chess.com, SCID, and lichess's PGN importer logic). Pure cp
-  // arithmetic — no win-chance proxy.
+  // ACPL cap: clamp per-move loss to 1000 cp so a single blow-up in a
+  // lost position doesn't dominate the average (industry-standard cap —
+  // Chess.com, SCID, lichess's PGN importer).
   const ACPL_CAP_CP = 1000;
-  const cpForMover = (mover, p) => {
-    const sign = mover === 'white' ? 1 : -1;
-    if (p.mate != null) return Math.sign(p.mate) * sign > 0 ? +10000 : -10000;
-    return (p.cpWhite ?? 0) * sign;
-  };
   for (let i = 0; i < plies.length; i++) {
-    // Move at ply i was played by the side whose turn it was BEFORE
-    // that ply. With ply index starting at 0 representing the position
-    // after move 1 (white's move): i=0 → white, i=1 → black, etc.
-    const mover = i % 2 === 0 ? 'white' : 'black';
     const before = i === 0
-      ? { cpWhite: 20, mate: null }        // startpos ≈ +0.2 for white
+      ? { cpWhite: 20, mate: null, fen: null }   // startpos ≈ +0.2 for white
       : plies[i - 1];
     const after = plies[i];
-    // AUDIT A3 + A11: skip plies we can't score cleanly, so they don't
-    // distort accuracy / ACPL / mistake counts:
-    //   • null eval (unanalysed) — treating it as 0.00 created phantom
-    //     blunders (a real +5 followed by an unevaluated ply looked like
-    //     a huge drop).
-    //   • mate:0 (terminal checkmate) — the winning move, which the
-    //     white-POV sign convention can't represent (Math.sign(0)=0), so
-    //     it was charged as a ~full-cap loss and classified a blunder
-    //     FOR THE WINNER.
-    const hasEval = (p) => p && (p.cpWhite != null || p.mate != null);
-    if (!hasEval(before) || !hasEval(after)) continue;
-    if (before.mate === 0 || after.mate === 0) continue;
-    const cls = classify(mover, before, after);
-    const acc = moveAccuracy(Math.max(0, cls.drop));
-    // True ACPL: drop in centipawns from mover's POV between
-    // pre-move and post-move evals (post-move is converted from
-    // opponent-STM POV to mover POV via a sign flip on cpWhite).
-    // Capped at 1000 cp / move so blow-ups in lost positions don't
-    // dominate the average. Industry-standard formula.
-    const cpBefore = cpForMover(mover, before);
-    const cpAfter  = cpForMover(mover, after);
-    const cpl = Math.max(0, Math.min(ACPL_CAP_CP, cpBefore - cpAfter));
+    const mover = moverColor(after, i);
+    // Shared classifier (audit A5) — same sigmoid/thresholds as the pills,
+    // Mistake Bank, and PGN. moverWinDrop returns null for unevaluated
+    // plies and for terminal mate:0, so those are skipped (A3 + A11 — a
+    // null eval no longer reads as a phantom blunder, and the checkmating
+    // move is no longer charged as a blunder for the winner).
+    const drop = moverWinDrop(before, after);
+    if (drop == null) continue;
+    const kind = classifySeverity(drop);        // null | inaccuracy | mistake | blunder
+    const acc  = moveAccuracy(drop);
+    // True ACPL: cp loss from the mover's POV, capped at 1000/move so
+    // blow-ups in lost positions don't dominate. Skip mate positions
+    // (can't sign them cleanly here — moverWinDrop already excluded
+    // mate:0; a non-zero mate is a decisive eval with no meaningful cp
+    // loss to average).
+    if (before.mate == null && after.mate == null) {
+      const sign = mover === 'white' ? 1 : -1;
+      const cpBefore = (before.cpWhite ?? 0) * sign;
+      const cpAfter  = (after.cpWhite  ?? 0) * sign;
+      const cpl = Math.max(0, Math.min(ACPL_CAP_CP, cpBefore - cpAfter));
+      const b = mover === 'white' ? white : black;
+      b._sumLoss += cpl;
+    }
     const bucket = mover === 'white' ? white : black;
     bucket.moves++;
-    bucket._sumLoss += cpl;
-    bucket._sumAcc  += acc;
+    bucket._sumAcc += (acc == null ? 100 : acc);
     const plyNum = i + 1;
-    if      (cls.kind === 'blunder')    { bucket.blunders++;     byKind.blunder[mover].push(plyNum); }
-    else if (cls.kind === 'mistake')    { bucket.mistakes++;     byKind.mistake[mover].push(plyNum); }
-    else if (cls.kind === 'inaccuracy') { bucket.inaccuracies++; byKind.inaccuracy[mover].push(plyNum); }
+    if      (kind === 'blunder')    { bucket.blunders++;     byKind.blunder[mover].push(plyNum); }
+    else if (kind === 'mistake')    { bucket.mistakes++;     byKind.mistake[mover].push(plyNum); }
+    else if (kind === 'inaccuracy') { bucket.inaccuracies++; byKind.inaccuracy[mover].push(plyNum); }
   }
   return { white: finalise(white), black: finalise(black), byKind };
 }

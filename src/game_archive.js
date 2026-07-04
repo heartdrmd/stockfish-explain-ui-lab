@@ -37,6 +37,8 @@
 // — we scan plies[] for eval-swings that exceed the classification
 // thresholds and project them as virtual mistake entries.
 
+import { moverWinDrop, classifySeverity } from './evals.js';
+
 const GAMES_KEY   = 'stockfish-explain.archive.games';
 const MAX_GAMES   = 300;
 const MAX_BYTES   = 4_500_000;  // leave headroom under the 5 MB browser quota
@@ -131,20 +133,23 @@ export function deriveMistakes() {
       const p = plies[i];
       const prev = i === 0 ? null : plies[i - 1];
       const fenBefore = prev ? prev.fen : g.startingFen;
-      // POV of the side that JUST moved. Engine stores cpWhite. If white
-      // moved and cp went +100 → +20, white "gave up 80". If black
-      // moved and cp went -100 → -20, black gave up 80 from black's POV.
-      // Figure out who moved by checking what colour is to move in fenBefore.
       const stmBefore = (fenBefore.split(' ')[1] || 'w') === 'w' ? 1 : -1;
-      // cp in side-to-move's POV = stmBefore * cpWhite
-      const cpBefore = prev && prev.cpWhite != null ? stmBefore * prev.cpWhite : null;
-      // Side who moved is the opposite of stm AFTER — but we want cp in
-      // THEIR pov after their move; cpWhite after the move * their sign.
-      // Simpler: if stmBefore was white, the mover was white; their POV
-      // cp after move = cpWhite. For black mover, POV = -cpWhite.
-      const cpAfter = p.cpWhite != null ? stmBefore * p.cpWhite : null;
-      const severity = classifySwing(cpBefore, cpAfter);
+      // Shared win-chance classifier (audit A5): the Mistake Bank now
+      // uses the SAME sigmoid + thresholds as the accuracy pills / My
+      // Games (was raw-cp 200/100/50, which disagreed with everything
+      // and ignored mate entirely — so a blunder INTO a forced mate
+      // never entered the bank). moverWinDrop reads the fen to attribute
+      // the move and handles mate correctly.
+      const before = prev
+        ? { cpWhite: prev.cpWhite, mate: prev.mate, fen: fenBefore }
+        : { cpWhite: 20, mate: null, fen: fenBefore };
+      const after  = { cpWhite: p.cpWhite, mate: p.mate, fen: p.fen };
+      const drop = moverWinDrop(before, after);
+      const severity = classifySeverity(drop);
       if (!severity) continue;
+      // Keep cp fields for display/back-compat (mover POV).
+      const cpBefore = (before.cpWhite != null) ? stmBefore * before.cpWhite : null;
+      const cpAfter  = (p.cpWhite != null) ? stmBefore * p.cpWhite : null;
       mistakes.push({
         gameId: g.id,
         ply: p.ply,
@@ -153,6 +158,7 @@ export function deriveMistakes() {
         fenAfter: p.fen,
         cpBefore,
         cpAfter,
+        winDrop: drop,
         swing: (cpBefore ?? 0) - (cpAfter ?? 0),
         severity,
         userColor: g.userColor,
@@ -356,19 +362,15 @@ export function annotatePgn(rawPgn, plies, options = {}) {
   const ann = new Map();
   for (let i = 1; i < plies.length; i++) {
     const prev = plies[i - 1], cur = plies[i];
-    if (cur.cpWhite == null || prev.cpWhite == null) continue;
-    // POV of the side that just moved = opposite of side-to-move AFTER.
-    const stmAfter = cur.fen.split(' ')[1] || 'w';
-    const moverSign = stmAfter === 'w' ? -1 : 1;
-    const cpBeforeMover = moverSign * prev.cpWhite;
-    const cpAfterMover  = moverSign * cur.cpWhite;
-    const drop = cpBeforeMover - cpAfterMover;
-    let sev = null, nag = null;
-    if      (drop >= 200) { sev = 'blunder';    nag = '$4'; }
-    else if (drop >= 100) { sev = 'mistake';    nag = '$2'; }
-    else if (drop >=  50) { sev = 'inaccuracy'; nag = '$6'; }
-    else continue;
+    // Shared win-chance classifier (audit A5) — same as pills / My Games
+    // / Mistake Bank. Was raw-cp 200/100/50, which disagreed with the
+    // rest of the app (a 150cp drop at +8 was a "mistake" in the PGN but
+    // invisible everywhere else).
+    const sev = classifySeverity(moverWinDrop(prev, cur));
+    if (!sev) continue;
+    const nag = sev === 'blunder' ? '$4' : sev === 'mistake' ? '$2' : '$6';
     if (({ inaccuracy: 1, mistake: 2, blunder: 3 }[sev]) < minRank) continue;
+    if (prev.cpWhite == null || cur.cpWhite == null) continue;   // need cp for the comment
     const cpBeforeWhite = (prev.cpWhite / 100).toFixed(2);
     const cpAfterWhite  = (cur.cpWhite  / 100).toFixed(2);
     ann.set(i, {

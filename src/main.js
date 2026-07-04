@@ -22,6 +22,7 @@ import { renderOpeningBlock, renderOpeningForAI, detectOpening } from './opening
 import { LICHESS_OPENINGS } from './openings_lichess.js';
 import { OPENING_ALIASES } from './openings_aliases.js';
 import * as EcoLookup from './eco-lookup.js';
+import { classifyQuality, classifySeverity, moverWinDrop, winChanceWhite } from './evals.js';
 
 // ─── Module-scoped alias cache ─────────────────────────────────────
 // WeakMap persists across every renderTree() call so alias lookups
@@ -2580,17 +2581,10 @@ async function main() {
     return plies;
   }
   function classifySeverityForPly(prev, cur) {
-    if (!prev || cur.cpWhite == null || prev.cpWhite == null) return null;
-    // Match classifyAccuracy: lichess-style win-chances delta instead
-    // of raw cp. Keeps timeline/archive labels consistent with pills.
-    const cpWin = (cp) => 2 / (1 + Math.exp(-0.004 * cp)) - 1;
-    const stmAfter = cur.fen.split(' ')[1] || 'w';
-    const moverSign = stmAfter === 'w' ? -1 : 1;
-    const drop = moverSign * cpWin(prev.cpWhite) - moverSign * cpWin(cur.cpWhite);
-    if (drop >= 0.20) return 'blunder';
-    if (drop >= 0.12) return 'mistake';
-    if (drop >= 0.06) return 'inaccuracy';
-    return null;
+    // Shared classifier (audit A5) — keeps timeline/archive labels
+    // consistent with the pills and My Games. Returns
+    // null|'inaccuracy'|'mistake'|'blunder'.
+    return classifySeverity(moverWinDrop(prev, cur));
   }
   // Convert cp (White POV) to a normalised "win-probability" value in
   // (-1..+1). Uses tanh(cp/450) which is Lichess-like: small cp deltas
@@ -2856,30 +2850,14 @@ async function main() {
   //   best     — drop ≤ 0 (SF agrees or improved)  (green)
   // More compact and actionable than the king-safety SVG — matches
   // Lichess's move-classification vocabulary.
+  // Thin wrapper over the shared classifier (audit A5). Previously this
+  // used its own sigmoid exp(-0.004·cp) — DIFFERENT from the one My Games
+  // / the eval graph used (exp(-0.00368208·cp)) — so the accuracy pills
+  // disagreed with the My Games stats for the same game. Now both go
+  // through src/evals.js. classifyQuality returns the same buckets this
+  // used to ('unknown'|'best'|'good'|'ok'|'inaccuracy'|'mistake'|'blunder').
   function classifyAccuracy(prev, cur) {
-    if (!prev || prev.cpWhite == null || cur.cpWhite == null) return 'unknown';
-    // Lichess-matched classification: winning-chances delta, not raw cp.
-    // cpWin(cp) = 2/(1+exp(-0.004*cp)) - 1 maps eval to (-1, +1) win%
-    // range. Thresholds are lichess's nodeFinder defaults:
-    //   drop ≥ 0.06 → inaccuracy (6% win-% loss)
-    //   drop ≥ 0.12 → mistake    (12% win-% loss)
-    //   drop ≥ 0.20 → blunder    (20% win-% loss)
-    // Practical effect: a 100 cp drop at equality = ~20% win-%, so
-    // blunder. A 100 cp drop at +8 = ~2% win-%, so NOT flagged. Matches
-    // the acceptance criteria our Learn-from-mistakes retro mode uses.
-    const cpWin = (cp) => 2 / (1 + Math.exp(-0.004 * cp)) - 1;
-    const stmAfter = cur.fen.split(' ')[1] || 'w';
-    // Mover just moved; POV is opposite of stmAfter.
-    const moverSign = stmAfter === 'w' ? -1 : 1;
-    const winBefore = moverSign * cpWin(prev.cpWhite);
-    const winAfter  = moverSign * cpWin(cur.cpWhite);
-    const drop = winBefore - winAfter;                 // positive if move got worse
-    if (drop >= 0.20) return 'blunder';
-    if (drop >= 0.12) return 'mistake';
-    if (drop >= 0.06) return 'inaccuracy';
-    if (drop >= 0.02) return 'ok';
-    if (drop >= 0)    return 'good';
-    return 'best';
+    return classifyQuality(prev, cur);
   }
   function renderAccuracyStrip() {
     const root = document.getElementById('accuracy-strip');
@@ -3011,10 +2989,8 @@ async function main() {
   //   key:   pre-mistake FEN
   //   value: { uci, san, cpWhite, evalFmt, depth }
   const _verifierBest = new Map();
-  const _cpToWinChance = (cp) => {
-    if (cp == null) return 0;
-    return 2 / (1 + Math.exp(-0.004 * cp)) - 1;
-  };
+  // Shared sigmoid (audit A5); coalesce null→0 for this helper's callers.
+  const _cpToWinChance = (cp) => winChanceWhite(cp, null) ?? 0;
   const _povWin = (color, cpWhite) => {
     const w = _cpToWinChance(cpWhite);
     return color === 'w' ? w : -w;
