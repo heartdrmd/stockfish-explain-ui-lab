@@ -4420,6 +4420,11 @@ async function main() {
                 }
                 document.body.classList.remove('practice-thinking');
                 if (ev.detail.best && ev.detail.best !== '(none)') {
+                  // Real move in hand — the turn is handled, so drop the
+                  // durable-recovery FEN (a synthetic stuck bestmove has
+                  // best=null and skips this block, leaving the FEN set so
+                  // recovery can replay the turn).
+                  window.__pendingEngineTurnFen = null;
                   // Opening-variation path takes precedence over the
                   // style picker. Style bias only applies AFTER the
                   // variation window is exhausted.
@@ -4528,7 +4533,13 @@ async function main() {
               };
               // Durable-turn queue not-ready check now runs ABOVE the
               // variation setup (audit P3) — by here the engine is ready.
-              window.__pendingEngineTurnFen = null;     // dispatching now
+              // Keep the durable FEN SET for the whole search (not cleared
+              // here): if the search wedges and gets force-recovered
+              // (stop-honor watchdog → synthetic → reboot), the engine.ready
+              // replay uses this to re-fire the turn instead of losing it
+              // (2026-07-04 permanent-hang fix). It's cleared in onBest
+              // only when a real move is actually played.
+              window.__pendingEngineTurnFen = fen;
               engine.addEventListener('bestmove', onBest);
               engine.start(fen, thinkLimits);
             } else {

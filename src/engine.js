@@ -381,7 +381,12 @@ export class Engine extends EventTarget {
         this.worker.addEventListener('message', onMsg);
       });
       this._send('position startpos');
-      this._send('go depth 1');
+      // Use a short TIMED search, not `go depth 1`. Depth-1 evaluates
+      // almost nothing, so it fails to warm the thread pool, the NNUE
+      // accumulators, and the hash first-touch — which is exactly the
+      // cold state that makes the FIRST real search (and its `stop`)
+      // slow/unresponsive. A 400 ms real search warms all of that.
+      this._send('go movetime 400');
       // Bound the wait so a flaky engine doesn't block boot forever.
       await Promise.race([
         prewarmDone,
@@ -421,6 +426,7 @@ export class Engine extends EventTarget {
     if (this._watchdogId)    { clearTimeout(this._watchdogId);    this._watchdogId = 0; }
     if (this._healthCheckId) { clearTimeout(this._healthCheckId); this._healthCheckId = 0; }
     if (this._stallTimer)    { clearTimeout(this._stallTimer);    this._stallTimer = 0; }
+    this._clearStopHonor();
     this._bestmoveAwaited = false;
     // Now that stop() doesn't clear searching itself, terminate() must
     // — otherwise an Engine that's been terminate()'d still reports
@@ -670,6 +676,7 @@ export class Engine extends EventTarget {
     if (this._stallTimer)    { clearTimeout(this._stallTimer);    this._stallTimer = 0; }
     if (this._healthCheckId) { clearTimeout(this._healthCheckId); this._healthCheckId = 0; }
     if (this._watchdogId)    { clearTimeout(this._watchdogId);    this._watchdogId = 0; }
+    this._clearStopHonor();
     this.dispatchEvent(new CustomEvent('bestmove', {
       detail: { best: null, ponder: null, topMoves: [], history: this.history, stuck: true }
     }));
@@ -879,6 +886,11 @@ export class Engine extends EventTarget {
     this._send(bits.join(' '));
   }
 
+  _clearStopHonor() {
+    if (this._stopHonorId)  { clearTimeout(this._stopHonorId);  this._stopHonorId  = 0; }
+    if (this._stopHonorId2) { clearTimeout(this._stopHonorId2); this._stopHonorId2 = 0; }
+  }
+
   stop() {
     if (!this.worker) return;
     if (this.searching) {
@@ -891,6 +903,32 @@ export class Engine extends EventTarget {
         infoDispatchedSoFar: this._infoDispatched,
       });
       this.stopRequested = true;
+      // ── STOP-HONOR WATCHDOG (fix for 2026-07-04 permanent hang) ────
+      // An infinite / free-analysis search that IGNORES `stop` (e.g. a
+      // cold-engine go→stop race on the first search after boot) would
+      // otherwise hang forever: start() has queued the next request in
+      // _pendingRequest and is waiting for THIS search's bestmove, which
+      // never comes — so the practice move never runs. Infinite searches
+      // have no time budget (E5, so they can deepen freely), so nothing
+      // else catches this. Here: if bestmove doesn't arrive within the
+      // grace window, re-send stop once (covers a lost/raced stop); if
+      // it's STILL not honored, force a synthetic bestmove so the queue
+      // drains and recovery runs.
+      if (!this._stopHonorId) {
+        const myId = this._searchId;
+        this._stopHonorId = setTimeout(() => {
+          this._stopHonorId = 0;
+          if (this._searchId !== myId || !this._bestmoveAwaited) return;
+          console.warn('[engine] stop not honored within grace — re-sending stop', { searchId: myId });
+          try { this._send('stop'); } catch {}
+          this._stopHonorId2 = setTimeout(() => {
+            this._stopHonorId2 = 0;
+            if (this._searchId !== myId || !this._bestmoveAwaited) return;
+            console.error('[engine] stop STILL not honored — forcing synthetic bestmove', { searchId: myId });
+            this._fireStuckSynthetic('stop not honored');
+          }, 2500);
+        }, 3000);
+      }
     }
     this._send('stop');
     // Per GPT review 2026-05-04: do NOT flip searching=false here.
@@ -1039,6 +1077,7 @@ export class Engine extends EventTarget {
       if (this._healthCheckId) { clearTimeout(this._healthCheckId); this._healthCheckId = 0; }
       if (this._watchdogId)    { clearTimeout(this._watchdogId);    this._watchdogId = 0; }
       if (this._stallTimer)    { clearTimeout(this._stallTimer);    this._stallTimer = 0; }
+      this._clearStopHonor();
       this._applyPending();
 
       // ── STALE-FLUSH SUPPRESSION (audit E1) ────────────────────────
