@@ -8586,12 +8586,25 @@ async function main() {
         q.offset = state.page * state.pageSize;
         const res = await api.listGames(q);
         const cloud = applyClientResultFilter(res.games || []);
-        const local = applyClientResultFilter(loadLocalGamesNormalized());
-        // Merge + sort by played_at desc. Cloud games first on ties.
-        const merged = [...cloud, ...local].sort((a, b) =>
-          new Date(b.played_at).getTime() - new Date(a.played_at).getTime());
-        state.total = (res.total || 0) + local.length;
+        const localAll = applyClientResultFilter(loadLocalGamesNormalized());
+        // AUDIT A9: merge the local archive ONCE, on the first page only.
+        // Every "Load more" (append:true) used to re-merge ALL local
+        // games again → the same local game appeared once per page.
+        // Subsequent pages append only the freshly-fetched cloud page.
+        const merged = append
+          ? cloud
+          : [...cloud, ...localAll].sort((a, b) =>
+              new Date(b.played_at).getTime() - new Date(a.played_at).getTime());
+        state.total = (res.total || 0) + localAll.length;
         state.games = append ? state.games.concat(merged) : merged;
+        // Safety dedupe by row id (guards any cross-page overlap).
+        const seenIds = new Set();
+        state.games = state.games.filter(g => {
+          const k = String(g.id ?? '');
+          if (k && seenIds.has(k)) return false;
+          if (k) seenIds.add(k);
+          return true;
+        });
         renderList();
         // Guest hint: remind them signing in makes games portable.
         if (!window.__currentUser && state.games.length && !append) {
