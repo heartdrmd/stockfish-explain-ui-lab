@@ -675,7 +675,17 @@ export class BoardController extends EventTarget {
         const cls = document.body.classList;
         const isPostGame = cls.contains('practice-finished') ||
                            cls.contains('analysis-archived');
-        if (isPostGame && this.tree && this.tree.currentPath != null) {
+        // AUDIT L1: do NOT replace the mainline while learn-from-mistakes
+        // is active. Learn mode navigates to the pre-mistake ply via
+        // goToPly (viewPly set) and lets the user try a move — but that
+        // guess is a SCRATCH move, not an edit of the game. The old code
+        // dropped cur.children here, deleting the played mistake move AND
+        // every later ply of the archived game, which then made
+        // _findMistakePlies fire a premature "Session complete" and Save
+        // PGN export a truncated game. When learn is active the guess is
+        // kept as a harmless sibling variation instead.
+        const isLearnActive = cls.contains('learn-active');
+        if (isPostGame && !isLearnActive && this.tree && this.tree.currentPath != null) {
           const cur = this.tree.nodeAtPath(this.tree.currentPath);
           if (cur && cur.children && cur.children.length) {
             console.log('[move] post-game mainline-replace: dropping continuation children', {
