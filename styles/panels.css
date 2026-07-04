@@ -1029,11 +1029,22 @@ details.dissect-details[open] summary {
   position: sticky;
   bottom: 0;
   background: var(--c-bg);
-  margin: 12px -24px -24px;     /* extend edge-to-edge of the card */
+  /* NOTE: the bottom margin is 0 (was -24px). A negative BOTTOM margin on
+     the last child shrinks the scroll container's scrollHeight, so the
+     last settings rows could never scroll far enough to clear this
+     floating footer — the buttons "sat over" the bottom of the settings
+     (user report 2026-07-04). Kept the -24px LEFT/RIGHT so it still
+     spans edge-to-edge. */
+  margin: 12px -24px 0;
   padding: 12px 24px;
   border-top: 1px solid var(--c-border, rgba(255,255,255,0.1));
   box-shadow: 0 -6px 14px -4px rgba(0,0,0,0.55);
   z-index: 5;
+}
+/* Give the scrollable practice card real bottom room so the LAST setting
+   can always scroll above the sticky footer instead of hiding under it. */
+#practice-modal .modal-card {
+  padding-bottom: 64px;
 }
 .tourn-standings {
   background: var(--c-bg-low);
