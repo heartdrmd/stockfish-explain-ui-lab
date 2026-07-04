@@ -22,6 +22,9 @@ function ownerOf(req) {
 }
 
 export function wireLibrary(app) {
+  // Write limiter shared from server.js (audit S4). No-op if unwired.
+  const writeLimiter = app.locals?.limiters?.writeLimiter || ((req, res, next) => next());
+
   // ── Favourites ────────────────────────────────────────────────
 
   // GET /api/favourites — list everything the caller has starred.
@@ -46,7 +49,7 @@ export function wireLibrary(app) {
   // PUT /api/favourites — add or update a starred opening.
   // Body: { opening_key, side }
   // Idempotent: subsequent PUTs update the side without dupe rows.
-  app.put('/api/favourites', requireAuthOrGuest, async (req, res) => {
+  app.put('/api/favourites', writeLimiter, requireAuthOrGuest, async (req, res) => {
     try {
       const b = req.body || {};
       const key  = String(b.opening_key || '').trim();
@@ -114,7 +117,7 @@ export function wireLibrary(app) {
   // POST /api/custom-openings  — create or update.
   // Body: { group_name, opening_name, moves_san, starting_fen?, side? }
   // Idempotent on (owner, group_name, opening_name) — re-saving updates.
-  app.post('/api/custom-openings', requireAuthOrGuest, async (req, res) => {
+  app.post('/api/custom-openings', writeLimiter, requireAuthOrGuest, async (req, res) => {
     try {
       const b = req.body || {};
       const groupName   = String(b.group_name || '').trim();
@@ -161,7 +164,7 @@ export function wireLibrary(app) {
   //   body: { log_text: <full LOG_BUFFER content> }
   // Returns: { id, size_bytes }
   // Cap at ~2 MB per upload (typical session log is < 200 KB).
-  app.post('/api/diagnostic-logs', requireAuthOrGuest, async (req, res) => {
+  app.post('/api/diagnostic-logs', writeLimiter, requireAuthOrGuest, async (req, res) => {
     try {
       const text = String(req.body?.log_text || '');
       if (!text) return res.status(400).json({ error: 'log_text required' });
@@ -190,23 +193,30 @@ export function wireLibrary(app) {
   // Idempotent batch insert. Client batches every 5 minutes from
   // localStorage; entries already inserted (matched by user/guest
   // owner + timestamp + flavor) are silently no-op'd.
-  app.post('/api/engine-crashes', requireAuthOrGuest, async (req, res) => {
+  app.post('/api/engine-crashes', writeLimiter, requireAuthOrGuest, async (req, res) => {
     try {
-      const arr = Array.isArray(req.body?.crashes) ? req.body.crashes : [];
+      let arr = Array.isArray(req.body?.crashes) ? req.body.crashes : [];
       if (!arr.length) return res.json({ inserted: 0 });
+      // Cap array length (audit S4): bound the per-request N+1 work so a
+      // hostile client can't drive thousands of round-trips in one POST.
+      if (arr.length > 200) arr = arr.slice(0, 200);
       const userId  = req.user  ? req.user.id  : null;
       const guestId = req.guest ? req.guest.id : null;
       const ua = String(req.get('User-Agent') || '').slice(0, 300);
       let inserted = 0;
       for (const c of arr) {
         if (!c || typeof c.when !== 'string') continue;
-        // De-dupe on (owner, crashed_at, flavor) — same crash from
-        // multiple flush passes shouldn't double-count.
+        // De-dupe on (owner, crashed_at, flavor). BUGFIX (audit S5):
+        // the owner disjunction MUST be parenthesized. Previously the
+        // AND bound tighter than OR, so for a logged-in user the first
+        // disjunct was `user_id = $1` with no time/flavor constraint —
+        // any prior crash row made every later crash look like a dupe,
+        // and authenticated telemetry silently stopped after row 1.
         const dupCheck = await query(
           `SELECT 1 FROM engine_crashes
-            WHERE ($1::int IS NOT NULL AND user_id = $1)
-               OR ($2::text IS NOT NULL AND guest_id = $2)
-            AND crashed_at = $3 AND flavor = $4
+            WHERE (($1::int IS NOT NULL AND user_id = $1)
+                OR ($2::text IS NOT NULL AND guest_id = $2))
+              AND crashed_at = $3 AND flavor = $4
             LIMIT 1`,
           [userId, guestId, c.when, c.flavor || null],
         );

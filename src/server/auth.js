@@ -111,7 +111,12 @@ export function requireAuthOrGuest(req, res, next) {
 }
 
 export function wireAuth(app) {
-  app.post('/api/auth/signup', async (req, res) => {
+  // Brute-force / DoS limiter shared from server.js (audit S4). No-op
+  // passthrough if it isn't wired (e.g. a test harness), so these routes
+  // never depend on it existing.
+  const authLimiter = app.locals?.limiters?.authLimiter || ((req, res, next) => next());
+
+  app.post('/api/auth/signup', authLimiter, async (req, res) => {
     try {
       const username = (req.body?.username || '').trim();
       const password = req.body?.password || '';
@@ -135,7 +140,7 @@ export function wireAuth(app) {
     }
   });
 
-  app.post('/api/auth/login', async (req, res) => {
+  app.post('/api/auth/login', authLimiter, async (req, res) => {
     try {
       const username = (req.body?.username || '').trim();
       const password = req.body?.password || '';

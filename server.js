@@ -24,6 +24,7 @@
 import express from 'express';
 import cookieParser from 'cookie-parser';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { runMigrations, dbEnabled } from './src/server/db.js';
 import { wireAuth } from './src/server/auth.js';
@@ -87,13 +88,15 @@ function expectedPremiumPassword() {
   return (PREMIUM_PW_PREFIX || DEV_PREMIUM_PREFIX) + tomorrowDayCT();
 }
 
-// Constant-time string compare to avoid leaking length via timing.
+// Constant-time compare that does NOT leak length (audit S6). Hash both
+// sides to fixed-width SHA-256 digests first, then timingSafeEqual — so
+// neither the length nor the matching-prefix length is observable via
+// timing or early return.
 function safeEqual(a, b) {
   if (typeof a !== 'string' || typeof b !== 'string') return false;
-  if (a.length !== b.length) return false;
-  let diff = 0;
-  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  return diff === 0;
+  const ha = crypto.createHash('sha256').update(a).digest();
+  const hb = crypto.createHash('sha256').update(b).digest();
+  return crypto.timingSafeEqual(ha, hb);
 }
 
 // Tier helper: a request's tier is the highest cookie it holds.
@@ -121,6 +124,43 @@ const app = express();
 app.set('trust proxy', 1);
 app.use(cookieParser());
 app.use(express.json({ limit: '256kb' }));
+
+// ───────────────────────────────────────────────────────────────────────
+//   Rate limiting (audit S4) — hand-rolled, in-memory.
+//   Render runs a single web instance, so a per-process Map is sufficient
+//   (no Redis needed). Fixed-window per key; sweeps expired buckets lazily.
+// ───────────────────────────────────────────────────────────────────────
+function rateLimit({ windowMs, max, keyFn, message }) {
+  const hits = new Map();   // key -> { count, resetAt }
+  return (req, res, next) => {
+    const now = Date.now();
+    const key = (keyFn ? keyFn(req) : req.ip) || 'unknown';
+    let b = hits.get(key);
+    if (!b || b.resetAt <= now) {
+      b = { count: 0, resetAt: now + windowMs };
+      hits.set(key, b);
+    }
+    b.count++;
+    // Opportunistic cleanup so the Map can't grow unbounded under churn.
+    if (hits.size > 5000) {
+      for (const [k, v] of hits) if (v.resetAt <= now) hits.delete(k);
+    }
+    if (b.count > max) {
+      const retryS = Math.ceil((b.resetAt - now) / 1000);
+      res.setHeader('Retry-After', String(retryS));
+      return res.status(429).json({ error: message || 'Too many requests. Slow down.', retryAfter: retryS });
+    }
+    next();
+  };
+}
+// Brute-force-sensitive (gate + auth): tight per-IP window.
+const authLimiter  = rateLimit({ windowMs: 15 * 60_000, max: 30,  message: 'Too many attempts. Wait a few minutes.' });
+// Cost-sensitive AI proxy: per-IP hourly cap.
+const aiLimiter    = rateLimit({ windowMs: 60 * 60_000, max: 120, message: 'AI request limit reached for this hour.' });
+// General write endpoints: generous, just a runaway/DoS backstop.
+const writeLimiter = rateLimit({ windowMs: 15 * 60_000, max: 600, message: 'Too many writes. Slow down.' });
+// Export so the DB-backed route modules can reuse the same limiters.
+app.locals.limiters = { authLimiter, aiLimiter, writeLimiter };
 
 // Cross-origin isolation (needed for SharedArrayBuffer → multi-threaded
 // Stockfish). WASM files also get CORP so they can load cross-origin.
@@ -160,7 +200,7 @@ app.use((req, res, next) => {
 // Accepts a password, validates against today's site + premium passwords,
 // sets cookies. No rate limiting yet — it's a friend group; if abuse shows
 // up, add express-rate-limit.
-app.post('/api/gate', (req, res) => {
+app.post('/api/gate', authLimiter, (req, res) => {
   const pw  = String(req.body?.password || '');
   const day = tomorrowDayCT();
 
@@ -202,7 +242,7 @@ app.post('/api/logout', (req, res) => {
 // ───── /api/ai ─────
 // Proxy to Anthropic. Body should match Anthropic's /v1/messages shape:
 //   { model, max_tokens, system, messages }
-app.post('/api/ai', async (req, res) => {
+app.post('/api/ai', aiLimiter, async (req, res) => {
   const tier = readTier(req);
   if (tier === 'none') {
     return res.status(401).json({ error: 'Site locked. Enter the site password first.' });

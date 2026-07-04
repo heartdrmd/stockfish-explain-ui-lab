@@ -57,11 +57,14 @@ function buildFilters(req) {
 }
 
 export function wireGames(app) {
+  // Write limiter shared from server.js (audit S4). No-op if unwired.
+  const writeLimiter = app.locals?.limiters?.writeLimiter || ((req, res, next) => next());
+
   // POST /api/games
   // Body: { pgn, result, opening_name, opening_eco, white_name, black_name,
   //         user_color, mode, plies, mistakes_count, blunders_count }
   // Response: { id, played_at }
-  app.post('/api/games', requireAuthOrGuest, async (req, res) => {
+  app.post('/api/games', writeLimiter, requireAuthOrGuest, async (req, res) => {
     try {
       const b = req.body || {};
       if (!b.pgn || typeof b.pgn !== 'string') {
@@ -190,7 +193,7 @@ export function wireGames(app) {
   });
 
   // DELETE /api/games/:id — "don't save this game" or user purge.
-  app.delete('/api/games/:id', requireAuthOrGuest, async (req, res) => {
+  app.delete('/api/games/:id', writeLimiter, requireAuthOrGuest, async (req, res) => {
     try {
       const id = +req.params.id;
       if (!Number.isFinite(id)) return res.status(400).json({ error: 'bad id' });
