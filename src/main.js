@@ -806,7 +806,9 @@ async function main() {
   // WANT avrukh can still pick it from the toolbar — this only affects
   // the initial default, and a user's manual pick persists in
   // localStorage so they never get nagged back to lite.
-  const IS_MOBILE = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  const IS_IOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+  const IS_MOBILE = IS_IOS || /Mobi|Android/i.test(navigator.userAgent);
+  const MOBILE_SAFE_HASH_MB = IS_IOS ? 32 : 64;
 
   // Default to the last-used engine flavor (persisted) if it still exists
   // in the dropdown AND is valid in this environment. Otherwise fall back
@@ -815,6 +817,16 @@ async function main() {
   const FLAVOR_STORAGE = 'stockfish-explain.engine-flavor';
   let savedFlavor = localStorage.getItem(FLAVOR_STORAGE);
   const flavorOptions = [...ui.selectFlavor.querySelectorAll('option')].map(o => o.value);
+  // iOS Safari's WebContent process is killed by the large/pthread builds
+  // once the first search allocates its working memory. Force a persisted
+  // desktop-strength choice back to the safe 7 MB single-thread build on
+  // every iPhone/iPad boot. The inline preloader in index.html mirrors this
+  // guard so the unsafe files are not even fetched before main() starts.
+  if (IS_IOS && savedFlavor !== 'lite-single') {
+    console.log('[engine] migrating iOS flavor to lite-single', { was: savedFlavor || '(none)' });
+    try { localStorage.setItem(FLAVOR_STORAGE, 'lite-single'); } catch {}
+    savedFlavor = 'lite-single';
+  }
   // Avrukh-flavoured builds (custom NNUE / SEE-patched) have been the
   // source of silent-engine wedges (user saw the engine hang mid-move
   // on avrukh with the Stock Full NNUE in parallel being rock-solid).
@@ -864,6 +876,7 @@ async function main() {
   // Deliberately NEVER picks any custom/patched build (avrukh, kaufman,
   // classical, alphazero, avrukhplus). Those are opt-in only.
   function pickDefaultFlavor() {
+    if (IS_IOS) return 'lite-single';
     if (isPagesHost) return 'lite';
     if (threadable)  return IS_MOBILE ? 'lite' : 'lichess-full';
     return 'lite-single';
@@ -881,8 +894,22 @@ async function main() {
       currentFlavor = urlFlavor;
     }
   } catch {}
+  if (IS_IOS && currentFlavor !== 'lite-single') currentFlavor = 'lite-single';
 
   ui.selectFlavor.value = currentFlavor;
+
+  // Keep memory-heavy engines out of the iOS picker. They remain available
+  // on desktop, while iPhone/iPad offers only 7 MB single-thread variants.
+  if (IS_IOS) {
+    ui.selectFlavor.querySelectorAll('option').forEach(o => {
+      const spec = ENGINE_FLAVORS[o.value];
+      if (!spec) return;
+      if (spec.threaded || String(spec.size || '').includes('108') || o.value === 'lichess-full') {
+        o.disabled = true;
+      }
+    });
+    ui.flavorNote.textContent = 'iPhone/iPad safety mode: 7 MB single-thread engines only.';
+  }
 
   // Disable multi-thread flavors if the page isn't cross-origin-isolated
   if (!threadable) {
@@ -1082,7 +1109,11 @@ async function main() {
         if (ui.rangeThreads && engine.setThreads) engine.setThreads(+ui.rangeThreads.value);
         // Literal key (not the HASH_STORAGE const, which is declared later
         // in main() — referencing it here would TDZ on the initial boot).
-        const savedHash = +(localStorage.getItem('stockfish-explain.hash-mb') || 0);
+        let savedHash = +(localStorage.getItem('stockfish-explain.hash-mb') || 0);
+        if (IS_MOBILE && (!savedHash || savedHash > MOBILE_SAFE_HASH_MB)) {
+          savedHash = MOBILE_SAFE_HASH_MB;
+          localStorage.setItem('stockfish-explain.hash-mb', String(savedHash));
+        }
         if (savedHash && engine.setHash) engine.setHash(savedHash);
       } catch (err) { console.warn('[engine] settings re-apply failed', err); }
 
@@ -1405,13 +1436,18 @@ async function main() {
   // available cores rounded up, capped at N-1 AND at 32 (Stockfish
   // WASM thread-pool ceiling; beyond that the worker crashes without
   // a useful error).
-  const maxThreads = Math.max(1, navigator.hardwareConcurrency || 4);
+  const detectedThreads = Math.max(1, navigator.hardwareConcurrency || 4);
+  const maxThreads = IS_IOS ? 1 : (IS_MOBILE ? Math.min(2, detectedThreads) : detectedThreads);
   const WASM_THREAD_CAP = 32;
   ui.rangeThreads.max = String(Math.min(maxThreads, WASM_THREAD_CAP));
-  const defaultThreads = Math.max(1, Math.min(maxThreads - 1, Math.ceil(maxThreads * 0.75), WASM_THREAD_CAP));
+  const defaultThreads = IS_MOBILE
+    ? 1
+    : Math.max(1, Math.min(maxThreads - 1, Math.ceil(maxThreads * 0.75), WASM_THREAD_CAP));
   ui.rangeThreads.value = String(defaultThreads);
   ui.threadsVal.textContent = ui.rangeThreads.value;
-  ui.threadsHw.textContent = `(${maxThreads} cores detected · default: ${defaultThreads})`;
+  ui.threadsHw.textContent = IS_MOBILE
+    ? `(${detectedThreads} cores detected · phone-safe default: ${defaultThreads})`
+    : `(${maxThreads} cores detected · default: ${defaultThreads})`;
   // Sync engine to UI default so the two always agree, even if engine
   // was loaded with a different initial thread count before UI init.
   try { engine.setThreads(defaultThreads); } catch (_) { /* engine may still be booting */ }
@@ -1452,12 +1488,12 @@ async function main() {
   // Treat it as a FLOOR, not a ceiling: if the browser reports 8 GB, the
   // real machine probably has 8+ GB. If undefined, assume a modern
   // machine (16 GB) rather than being overly conservative.
-  const reportedRamGB = navigator.deviceMemory || 16;
+  const reportedRamGB = navigator.deviceMemory || (IS_MOBILE ? 1 : 16);
   // WASM heap ceiling: Stockfish WASM multi-thread is built with 4 GB
   // maximum memory; the hash table, search stack, and NNUE weights all
   // share that budget. 3 GB hash leaves ~1 GB for the rest — that's the
   // real cap regardless of how much system RAM you have.
-  const WASM_HASH_CEILING = 3072;
+  const WASM_HASH_CEILING = IS_MOBILE ? MOBILE_SAFE_HASH_MB : 3072;
   const ALL_HASH_SIZES = [32, 64, 128, 256, 512, 1024, 2048, 3072];
   // Offer sizes up to min(WASM ceiling, 2/3 of the FLOOR reported).
   // If reported >= 8 we just offer everything up to the ceiling since the
@@ -1488,9 +1524,12 @@ async function main() {
 
     const initial = (savedHash && validSizes.includes(savedHash))
       ? savedHash
-      : (validSizes.includes(512) ? 512 : validSizes[0]);  // 512 MB as default
+      : (IS_MOBILE ? MOBILE_SAFE_HASH_MB : (validSizes.includes(512) ? 512 : validSizes[0]));
     hashSel.value = String(initial);
     engine.setHash(initial);
+    if (IS_MOBILE) {
+      try { localStorage.setItem(HASH_STORAGE, String(initial)); } catch {}
+    }
     hashHw.textContent = navigator.deviceMemory
       ? `(browser reports ≥${reportedRamGB} GB RAM · WASM cap ${WASM_HASH_CEILING} MB)`
       : `(RAM unknown · WASM cap ${WASM_HASH_CEILING} MB)`;

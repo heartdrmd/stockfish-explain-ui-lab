@@ -32,6 +32,11 @@
     (function preloadEngine() {
       try {
         var flavor = localStorage.getItem('stockfish-explain.engine-flavor') || 'lite';
+        // iPhone/iPad Safari has a much tighter WebContent memory ceiling.
+        // Never preload a persisted 108 MB or pthread build there: the
+        // download + WASM heap can kill the page before main.js gets a chance
+        // to migrate the preference to the safe single-thread engine.
+        if (/iPhone|iPad|iPod/i.test(navigator.userAgent)) flavor = 'lite-single';
         // If a previously-saved flavor crashed boot, bootEngine will
         // reset it to the default on next load; we still preload what
         // it would actually try first.

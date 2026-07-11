@@ -162,6 +162,9 @@ export const ENGINE_FLAVORS = {
 export class Engine extends EventTarget {
   constructor() {
     super();
+    const ua = typeof navigator !== 'undefined' ? navigator.userAgent : '';
+    const isIOS = /iPhone|iPad|iPod/i.test(ua);
+    const isMobile = isIOS || /Mobi|Android/i.test(ua);
     this.worker     = null;
     this.ready      = false;
     this.searching  = false;
@@ -170,7 +173,12 @@ export class Engine extends EventTarget {
     this.multipv    = 3;
     this.skill      = 20;
     this.threads    = 1;
-    this.hashMB     = 256;      // transposition-table size, MB
+    // Safari does not expose navigator.deviceMemory, so the previous UI
+    // assumed 16 GB and eventually raised this to 512 MB. The table is
+    // allocated on the first real search — exactly when iOS killed the page
+    // after the user's first move. Start safely before boot; main.js applies
+    // the same device cap to persisted/user-facing settings.
+    this.hashMB     = isIOS ? 32 : (isMobile ? 64 : 256);
 
     // Capture the UCI banner (`id name …`) so callers can prove which engine is loaded.
     this.uciId      = null;
@@ -214,7 +222,10 @@ export class Engine extends EventTarget {
     // practice, 12 max.) The slider can still be cranked manually
     // for pure analysis on a stable machine.
     const hw = navigator.hardwareConcurrency || 4;
-    const WASM_THREAD_CAP = 8;
+    const ua = navigator.userAgent || '';
+    const isIOS = /iPhone|iPad|iPod/i.test(ua);
+    const isMobile = isIOS || /Mobi|Android/i.test(ua);
+    const WASM_THREAD_CAP = isIOS ? 1 : (isMobile ? 2 : 8);
     this.threads = spec.threaded
       ? Math.max(1, Math.min(Math.floor(hw / 2), WASM_THREAD_CAP))
       : 1;
