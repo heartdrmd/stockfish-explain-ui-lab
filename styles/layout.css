@@ -628,6 +628,45 @@ body.nav-collapsed .site-header { min-height: 40px; padding: 6px 14px; }
   body.mobile-mode #practice-actions .practice-over > .muted {
     margin: 2px 0 6px !important;
   }
+
+  /* ── Mobile post-game analysis workspace ────────────────────────
+     During the game, tools is a collapsed fixed anti-cheat drawer. Once
+     practice-finished is present, engine output is legal and useful: make
+     tools a normal, expanded page section directly beneath the sticky board.
+     This exposes Engine/Threat, score/PV, notation, timelines and coach tabs
+     while keeping the board visible above as the user scrolls. */
+  body.mobile-mode.mobile-postgame-analysis .tools {
+    order: 1;
+    position: relative;
+    left: auto;
+    right: auto;
+    bottom: auto;
+    width: 100%;
+    max-height: none;
+    overflow: visible;
+    z-index: 30;
+    border: 1px solid var(--c-border);
+    border-radius: 10px;
+    box-shadow: none;
+  }
+  body.mobile-mode.mobile-postgame-analysis #practice-actions:not([hidden]) {
+    order: 2;
+    position: relative;
+    top: auto;
+    bottom: auto;
+  }
+  body.mobile-mode.mobile-postgame-analysis .tools::before {
+    content: "▲ LIVE POST-GAME ANALYSIS · Threats, variations & history · tap to collapse";
+    color: var(--c-accent);
+  }
+  body.mobile-mode.mobile-postgame-analysis.mobile-drawer-collapsed .tools {
+    max-height: 40px;
+    overflow: hidden;
+  }
+  body.mobile-mode.mobile-postgame-analysis.mobile-drawer-collapsed .tools::before {
+    content: "▼ Tap to reopen live post-game analysis";
+    color: var(--c-accent);
+  }
 }
 
 /* Compact portrait phones need room for the post-game buttons as well as
@@ -669,5 +708,31 @@ body.nav-collapsed .site-header { min-height: 40px; padding: 6px 14px; }
     width: 100%;
     max-height: calc(100vh - 102px - env(safe-area-inset-bottom, 0px));
     align-self: start;
+  }
+
+  /* After the game, mirror the useful desktop relationship without using
+     the desktop grid: board + game actions on the left, scrollable live
+     analysis on the right. */
+  body.mobile-mode.mobile-postgame-analysis .uniboard {
+    grid-template-areas:
+      "mobile-board mobile-analysis"
+      "mobile-actions mobile-analysis";
+  }
+  body.mobile-mode.mobile-postgame-analysis .tools {
+    grid-area: mobile-analysis;
+    position: sticky;
+    top: calc(46px + env(safe-area-inset-top, 0px));
+    width: 100%;
+    max-height: calc(100vh - 52px - env(safe-area-inset-bottom, 0px));
+    overflow-y: auto;
+    align-self: start;
+  }
+  body.mobile-mode.mobile-postgame-analysis #practice-actions:not([hidden]) {
+    grid-area: mobile-actions;
+    position: relative;
+    top: auto;
+    width: 100%;
+    max-height: 180px;
+    overflow-y: auto;
   }
 }

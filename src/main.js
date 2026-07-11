@@ -7628,6 +7628,29 @@ async function main() {
   (() => {
     const MOBILE_MAX = 640;
     let mobileLayoutInitialised = false;
+    let mobilePostgameActive = false;
+    const syncMobilePostgame = () => {
+      const shouldEnter =
+        document.body.classList.contains('mobile-mode') &&
+        document.body.classList.contains('practice-finished');
+      const entering = shouldEnter && !mobilePostgameActive;
+      const leaving  = !shouldEnter && mobilePostgameActive;
+
+      document.body.classList.toggle('mobile-postgame-analysis', shouldEnter);
+      if (entering) {
+        // Post-game is analysis, not the anti-cheat playing view. Open the
+        // tools workspace immediately so engine score/PV, Threat, move list,
+        // timelines and coach tabs are visible without another tap.
+        document.body.classList.remove('mobile-drawer-collapsed');
+        const tools = document.querySelector('.tools');
+        if (tools) tools.scrollTop = 0;
+      } else if (leaving && document.body.classList.contains('mobile-mode')) {
+        // A replay/new practice game returns to the compact playing view.
+        document.body.classList.add('mobile-drawer-collapsed');
+      }
+      mobilePostgameActive = shouldEnter;
+    };
+    window.__syncMobilePostgameAnalysis = syncMobilePostgame;
     const applyMobile = () => {
       // Width alone misses iPhone landscape (e.g. 844×390), which was
       // falling into the desktop 3-column grid and scrambling the gauge,
@@ -7656,6 +7679,7 @@ async function main() {
       } else {
         document.body.classList.remove('mobile-drawer-collapsed');
       }
+      syncMobilePostgame();
     };
     applyMobile();
     window.addEventListener('resize', applyMobile);
@@ -7675,6 +7699,13 @@ async function main() {
           e.preventDefault();
         }
       }
+    });
+    // Natural mate, resignation, accepted draw and restored finished drafts
+    // all toggle practice-finished through different paths. Observe the one
+    // authoritative body class so every path enters the same mobile view.
+    new MutationObserver(syncMobilePostgame).observe(document.body, {
+      attributes: true,
+      attributeFilter: ['class'],
     });
     // Initial collapse is handled inside applyMobile so real iPhones stay
     // mobile in both portrait and landscape.

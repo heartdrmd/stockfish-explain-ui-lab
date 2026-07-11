@@ -3308,6 +3308,15 @@ body.practice-mode.practice-thinking .ceval::after {
   color: #ff6d00;
   animation: thinkingPulse 0.9s ease-in-out infinite;
 }
+/* Game-over switches practice into unrestricted infinite analysis. The old
+   generic practice badge still said "engine idle" even while the engine was
+   visibly deepening, which was especially confusing in the new mobile
+   post-game workspace. */
+body.practice-mode.practice-finished .ceval::after {
+  content: '∞ Live analysis';
+  color: var(--c-secondary, #52c41a);
+  animation: none;
+}
 @keyframes thinkingPulse {
   0%, 100% { opacity: 1; }
   50%      { opacity: 0.5; }
