@@ -361,30 +361,36 @@
       </div>
     </aside>
 
-    <section class="board-area">
-      <div id="board" class="cg-wrap"></div>
-      <div id="promotion-overlay" class="promotion-overlay" hidden></div>
-      <div id="board-resize" class="board-resize" title="Drag to resize board"></div>
-      <div class="board-nav" role="group" aria-label="Navigate history">
-        <button id="board-nav-start" class="nav-btn" title="First (Home)">⏮</button>
-        <button id="board-nav-prev"  class="nav-btn" title="Previous (← / wheel up)">◀</button>
-        <button id="board-nav-next"  class="nav-btn" title="Next (→ / wheel down)">▶</button>
-        <button id="board-nav-end"   class="nav-btn" title="Live (End)">⏭</button>
-        <button id="board-nav-flip"  class="nav-btn" title="Flip board (F)">⇅</button>
-        <span id="board-nav-ply" class="nav-ply muted">—</span>
-      </div>
-      <!-- Docking slot for the review-mode eval graph card. The live
-           graph lives at the bottom of <body> by default (floating
-           compact) and gets relocated here when the user clicks a
-           game from My Games, so the timeline sits embedded directly
-           beneath the board instead of floating in the viewport. -->
-      <div id="board-below-slot" class="board-below-slot"></div>
-    </section>
+    <!-- Desktop treats this wrapper as `display: contents`, preserving the
+         established grid exactly. Mobile turns it into one sticky board +
+         evaluation-gauge unit so the gauge cannot disappear or drift away
+         from the board in portrait/landscape. -->
+    <div class="board-eval-wrap">
+      <section class="board-area">
+        <div id="board" class="cg-wrap"></div>
+        <div id="promotion-overlay" class="promotion-overlay" hidden></div>
+        <div id="board-resize" class="board-resize" title="Drag to resize board"></div>
+        <div class="board-nav" role="group" aria-label="Navigate history">
+          <button id="board-nav-start" class="nav-btn" title="First (Home)">⏮</button>
+          <button id="board-nav-prev"  class="nav-btn" title="Previous (← / wheel up)">◀</button>
+          <button id="board-nav-next"  class="nav-btn" title="Next (→ / wheel down)">▶</button>
+          <button id="board-nav-end"   class="nav-btn" title="Live (End)">⏭</button>
+          <button id="board-nav-flip"  class="nav-btn" title="Flip board (F)">⇅</button>
+          <span id="board-nav-ply" class="nav-ply muted">—</span>
+        </div>
+        <!-- Docking slot for the review-mode eval graph card. The live
+             graph lives at the bottom of <body> by default (floating
+             compact) and gets relocated here when the user clicks a
+             game from My Games, so the timeline sits embedded directly
+             beneath the board instead of floating in the viewport. -->
+        <div id="board-below-slot" class="board-below-slot"></div>
+      </section>
 
-    <section class="eval-gauge" id="eval-gauge" aria-label="Evaluation (white's view)">
-      <div class="gauge-black" id="gauge-black" style="height:50%"></div>
-      <div class="gauge-tick zero"></div>
-    </section>
+      <section class="eval-gauge" id="eval-gauge" aria-label="Evaluation (white's view)">
+        <div class="gauge-black" id="gauge-black" style="height:50%"></div>
+        <div class="gauge-tick zero"></div>
+      </section>
+    </div>
 
     <section class="tools">
       <!-- Engine power + threat — kept at top so the ON/OFF toggle is

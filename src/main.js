@@ -7588,10 +7588,35 @@ async function main() {
   // collapsed on first load to maximise board real estate.
   (() => {
     const MOBILE_MAX = 640;
+    let mobileLayoutInitialised = false;
     const applyMobile = () => {
-      const isMobile = window.innerWidth <= MOBILE_MAX;
+      // Width alone misses iPhone landscape (e.g. 844×390), which was
+      // falling into the desktop 3-column grid and scrambling the gauge,
+      // board and practice controls. User-agent catches real phones; the
+      // short-landscape shape also makes responsive desktop testing honest.
+      const shortPhoneLandscape =
+        window.innerWidth > window.innerHeight &&
+        window.innerHeight <= 500 &&
+        window.innerWidth <= 1024;
+      const coarsePhone =
+        window.matchMedia?.('(pointer: coarse)').matches &&
+        Math.min(window.innerWidth, window.innerHeight) <= MOBILE_MAX;
+      const isMobile = IS_MOBILE ||
+        window.innerWidth <= MOBILE_MAX ||
+        shortPhoneLandscape ||
+        coarsePhone;
       document.body.classList.toggle('mobile-mode', isMobile);
-      if (!isMobile) document.body.classList.remove('mobile-drawer-collapsed');
+      if (isMobile) {
+        // Start phones in the compact header + collapsed coach drawer.
+        // The purple Toolbar button and drawer peek remain available, and
+        // this runs only once so an explicit user expansion is respected.
+        if (!mobileLayoutInitialised) {
+          document.body.classList.add('nav-collapsed', 'mobile-drawer-collapsed');
+          mobileLayoutInitialised = true;
+        }
+      } else {
+        document.body.classList.remove('mobile-drawer-collapsed');
+      }
     };
     applyMobile();
     window.addEventListener('resize', applyMobile);
@@ -7612,11 +7637,8 @@ async function main() {
         }
       }
     });
-    // Collapse by default on first mobile load so the board gets the
-    // full height.
-    if (window.innerWidth <= MOBILE_MAX) {
-      document.body.classList.add('mobile-drawer-collapsed');
-    }
+    // Initial collapse is handled inside applyMobile so real iPhones stay
+    // mobile in both portrait and landscape.
   })();
 
   // ────────── Animated GIF / WebM export (#28) ──────────
