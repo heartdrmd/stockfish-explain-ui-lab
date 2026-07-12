@@ -3058,6 +3058,13 @@ body.learn-preparing #board.board-interaction-locked cg-board {
   box-shadow: 0 -8px 20px rgba(0,0,0,0.6);
   cursor: pointer;       /* tap anywhere dismisses */
 }
+/* Author-level `display:flex` above can outrank the browser's built-in
+   `[hidden]` rule on mobile Safari. Make the JS `bar.hidden = true`
+   contract explicit, and never permit a setup preview over a live game. */
+.mobile-preview-bar[hidden],
+body.practice-mode .mobile-preview-bar {
+  display: none !important;
+}
 .mobile-preview-board {
   flex-shrink: 0;
 }
