@@ -8,4 +8,5 @@ test('mobile opening preview obeys hidden state without blocking setup previews'
   assert.match(css, /\.mobile-preview-bar\[hidden\][\s\S]*?display:\s*none\s*!important/);
   assert.doesNotMatch(css, /body\.practice-mode\s+\.mobile-preview-bar/);
   assert.match(js, /classList\.contains\('practice-mode'\)\) hideBar\(\)/);
+  assert.match(js, /visualViewport[\s\S]*?--mobile-preview-viewport-bottom/);
 });

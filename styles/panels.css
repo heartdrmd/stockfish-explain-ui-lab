@@ -3045,17 +3045,49 @@ body.learn-preparing #board.board-interaction-locked cg-board {
    consume/wrap within the remaining row width. */
 body.mobile-mode .practice-opening-tree {
   overflow-x: hidden;
+  overscroll-behavior-y: contain;
   overscroll-behavior-x: none;
   touch-action: pan-y;
+  -webkit-overflow-scrolling: touch;
 }
-body.mobile-mode .practice-opening-tree summary,
-body.mobile-mode .practice-opening-tree .tree-leaf {
+body.mobile-mode .practice-opening-tree summary {
   box-sizing: border-box;
   min-width: 0;
   max-width: 100%;
-}
-body.mobile-mode .practice-opening-tree summary {
   overflow: hidden;
+}
+/* Controls get a compact first row; the identity of the opening gets the
+   entire second row. This avoids reducing every Lichess result to the same
+   unhelpful “Sicilian Defense…” prefix. */
+body.mobile-mode .practice-opening-tree .tree-leaf {
+  display: grid;
+  grid-template-columns: auto auto auto auto minmax(0, 1fr) auto auto;
+  grid-template-areas:
+    "fav queue play preview eco badge delete"
+    "name name name name name name name";
+  align-items: center;
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
+  row-gap: 4px;
+}
+body.mobile-mode .practice-opening-tree .tree-leaf-fav { grid-area: fav; }
+body.mobile-mode .practice-opening-tree .tree-leaf-queue { grid-area: queue; }
+body.mobile-mode .practice-opening-tree .tree-leaf-side,
+body.mobile-mode .practice-opening-tree .tree-leaf-play { grid-area: play; }
+body.mobile-mode .practice-opening-tree .tree-leaf-preview { grid-area: preview; }
+body.mobile-mode .practice-opening-tree .tree-leaf-name { grid-area: name; }
+body.mobile-mode .practice-opening-tree .tree-leaf-eco {
+  grid-area: eco;
+  justify-self: end;
+}
+body.mobile-mode .practice-opening-tree .tree-lichess-badge { grid-area: badge; }
+body.mobile-mode .practice-opening-tree .tree-leaf-del { grid-area: delete; }
+body.mobile-mode .practice-opening-tree .tree-leaf-preview {
+  justify-self: center;
+  align-self: center;
+  margin-left: 2px;
+  margin-right: 2px;
 }
 body.mobile-mode .practice-opening-tree .tree-leaf-name {
   min-width: 0;
@@ -3075,6 +3107,34 @@ body.mobile-mode .practice-opening-tree .tree-leaf-eco,
 body.mobile-mode .practice-opening-tree .tree-lichess-badge,
 body.mobile-mode .practice-opening-tree .tree-leaf-del {
   flex-shrink: 0;
+}
+
+/* Keep the P preview clear of iPhone browser chrome and away from the
+   lower-left edge. It remains fixed for easy comparison while scrolling,
+   but reads as a centred card with safe-area breathing room. */
+body.mobile-mode .mobile-preview-bar {
+  left: 8px;
+  right: 8px;
+  bottom: calc(10px + env(safe-area-inset-bottom, 0px) + var(--mobile-preview-viewport-bottom, 0px));
+  width: auto;
+  max-width: calc(100vw - 16px);
+  box-sizing: border-box;
+  border: 1px solid rgba(255,255,255,0.16);
+  border-top: 2px solid var(--c-primary, #3692e7);
+  border-radius: 10px;
+  overflow: hidden;
+}
+body.mobile-mode .mobile-preview-name {
+  white-space: normal;
+  padding-right: 38px;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+body.mobile-mode .mobile-preview-close {
+  top: 0;
+  right: 0;
 }
 
 /* Mobile preview bar — fixed at bottom of viewport. Shown when the
