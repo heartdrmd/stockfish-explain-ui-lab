@@ -73,6 +73,9 @@ export function wireGames(app) {
       // Sanity cap: ~100 KB per game — eval-per-ply JSON is the bulky
       // part; even a 100-move game with full plies stays under 30 KB.
       if (b.pgn.length > 100_000) return res.status(413).json({ error: 'pgn too large' });
+      const clientGameId = typeof b.client_game_id === 'string' &&
+        /^[A-Za-z0-9_-]{8,128}$/.test(b.client_game_id)
+        ? b.client_game_id : null;
 
       const userId  = req.user  ? req.user.id  : null;
       const guestId = req.guest ? req.guest.id : null;
@@ -81,8 +84,9 @@ export function wireGames(app) {
         INSERT INTO games(
           user_id, guest_id, pgn, result, opening_name, opening_eco,
           white_name, black_name, user_color, mode, plies,
-          mistakes_count, blunders_count
-        ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+          mistakes_count, blunders_count, client_game_id
+        ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+        ON CONFLICT DO NOTHING
         RETURNING id, played_at
       `, [
         userId,
@@ -98,11 +102,63 @@ export function wireGames(app) {
         b.plies ? JSON.stringify(b.plies) : null,
         Number.isFinite(+b.mistakes_count) ? +b.mistakes_count : 0,
         Number.isFinite(+b.blunders_count) ? +b.blunders_count : 0,
+        clientGameId,
       ]);
-      res.json({ id: rows[0].id, played_at: rows[0].played_at });
+      if (rows.length) {
+        return res.json({ id: rows[0].id, played_at: rows[0].played_at, created: true });
+      }
+      // A duplicate client_game_id means another tab already won the
+      // race. Return that owned row as a successful idempotent save.
+      if (clientGameId) {
+        const { ownerCol, ownerVal } = ownerOf(req);
+        const existing = await query(
+          `SELECT id, played_at FROM games
+            WHERE ${ownerCol} = $1 AND client_game_id = $2`,
+          [ownerVal, clientGameId],
+        );
+        if (existing.rows.length) {
+          return res.json({ id: existing.rows[0].id, played_at: existing.rows[0].played_at, created: false });
+        }
+      }
+      throw new Error('insert conflict without owned client id');
     } catch (err) {
       console.error('[games] insert failed', err);
       res.status(500).json({ error: 'insert failed' });
+    }
+  });
+
+  // PATCH /api/games/:id/plies — persist a completed local reanalysis so
+  // another device can open Learn immediately without sweeping the game
+  // again. Ownership is checked exactly like get/delete.
+  app.patch('/api/games/:id/plies', writeLimiter, requireAuthOrGuest, async (req, res) => {
+    try {
+      const id = +req.params.id;
+      if (!Number.isFinite(id)) return res.status(400).json({ error: 'bad id' });
+      const b = req.body || {};
+      if (!Array.isArray(b.plies)) return res.status(400).json({ error: 'plies array required' });
+      if (b.plies.length > 1000) return res.status(413).json({ error: 'too many plies' });
+      const encoded = JSON.stringify(b.plies);
+      if (encoded.length > 200_000) return res.status(413).json({ error: 'plies too large' });
+      const { ownerCol, ownerVal } = ownerOf(req);
+      const result = await query(
+        `UPDATE games
+            SET plies = $1::jsonb,
+                mistakes_count = $2,
+                blunders_count = $3
+          WHERE id = $4 AND ${ownerCol} = $5`,
+        [
+          encoded,
+          Number.isFinite(+b.mistakes_count) ? Math.max(0, +b.mistakes_count) : 0,
+          Number.isFinite(+b.blunders_count) ? Math.max(0, +b.blunders_count) : 0,
+          id,
+          ownerVal,
+        ],
+      );
+      if (!result.rowCount) return res.status(404).json({ error: 'not found' });
+      res.json({ updated: true, id });
+    } catch (err) {
+      console.error('[games] update plies failed', err);
+      res.status(500).json({ error: 'update failed' });
     }
   });
 

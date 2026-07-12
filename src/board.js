@@ -11,8 +11,11 @@ export class BoardController extends EventTarget {
     this.rootEl    = rootEl;
     this.overlayEl = overlayEl;
 
-    // ** Truth: `chess` holds the latest *live* position.
-    // `viewPly` is which ply the user is looking at; null = live/end.
+    // `chess` always holds the position currently DISPLAYED. `livePath`
+    // is the durable tree path that represents the active end position;
+    // `viewPly` is null only while currentPath === livePath. Keeping the
+    // path explicitly avoids the old circular `viewPly >= history.length`
+    // test, which incorrectly called every variation "live".
     this.chess = new Chess();
     this.startingFen = this.chess.fen();
     this.viewPly = null;
@@ -24,6 +27,7 @@ export class BoardController extends EventTarget {
     // mainline. `tree.currentPath` is the path of the currently-viewed
     // node. Mainline = children[0] at every level.
     this.tree = new GameTree(this.startingFen);
+    this.livePath = '';
   }
 
   init() {
@@ -309,8 +313,8 @@ export class BoardController extends EventTarget {
 
   // ──────── navigation ────────
 
-  isAtLive()   { return this.viewPly === null || this.viewPly >= this.chess.history().length; }
-  totalPlies() { return this.chess.history().length; }
+  isAtLive()   { return !!this.tree && this.tree.currentPath === this.livePath; }
+  totalPlies() { return this.tree?.nodesAlong?.(this.livePath || '').length || 0; }
 
   /** Sync tree.currentPath to match the first `n` plies of chess.history
    *  along the tree's mainline. Called during navigation. */
@@ -330,6 +334,13 @@ export class BoardController extends EventTarget {
 
   goToPly(n /* int or null for live */) {
     this._clearTargetFirst();   // audit B5 — see _navigateTo
+    // `null` means the durable live path, which may be a variation after
+    // post-game exploration. The previous implementation always walked
+    // children[0] and could strand the user on the original mainline.
+    if (n == null) {
+      this._navigateTo(this.livePath || '');
+      return;
+    }
     // Rebuild from the TREE mainline, not chess.history. If the user
     // had made a non-mainline exploratory move earlier, chess.history
     // contains that branch instead of the original game's moves — so
@@ -371,7 +382,8 @@ export class BoardController extends EventTarget {
     }
     this.chess = replay;
     this.tree.currentPath = path;
-    if (n == null || n >= total) {
+    const atLivePath = path === this.livePath;
+    if (atLivePath) {
       this.viewPly = null;
       this._historicalChess = null;
     } else {
@@ -381,7 +393,7 @@ export class BoardController extends EventTarget {
       ? [pathNodes[pathNodes.length - 1].uci.slice(0, 2), pathNodes[pathNodes.length - 1].uci.slice(2, 4)]
       : null;
     this._renderPosition(replay.fen(), lastMove);
-    if (n == null || n >= total) {
+    if (atLivePath) {
       this._allowUserToMoveIfTheirTurn();
     } else {
       // Let user play from this historical mainline ply — legal moves
@@ -417,8 +429,9 @@ export class BoardController extends EventTarget {
     }
     this.chess = replay;
     this.tree.currentPath = newPath;
-    this.viewPly = null;
-    this._historicalChess = null;
+    const atLivePath = newPath === this.livePath;
+    this.viewPly = atLivePath ? null : nodes.length;
+    this._historicalChess = atLivePath ? null : replay;
     const lastMove = nodes.length
       ? [nodes[nodes.length-1].uci.slice(0,2), nodes[nodes.length-1].uci.slice(2,4)]
       : undefined;
@@ -430,7 +443,9 @@ export class BoardController extends EventTarget {
       check: replay.inCheck() ? turn : false,
       movable: { color: this.playerColor || 'both', dests: toDests(replay) },
     });
-    this.dispatchEvent(new CustomEvent('nav', { detail: { path: newPath, live: true } }));
+    this.dispatchEvent(new CustomEvent('nav', {
+      detail: { path: newPath, ply: this.viewPly, live: atLivePath },
+    }));
   }
   forward()   {
     const node = this.tree.nodeAtPath(this.tree.currentPath);
@@ -442,16 +457,7 @@ export class BoardController extends EventTarget {
     this._navigateTo(this.tree.parentPath(this.tree.currentPath) || '');
   }
   toStart()   { this._navigateTo(''); }
-  toEnd()     {
-    let path = this.tree.currentPath;
-    let node = this.tree.nodeAtPath(path);
-    while (node && node.children.length) {
-      const c = node.children[0];
-      path += c.id;
-      node = c;
-    }
-    this._navigateTo(path);
-  }
+  toEnd()     { this._navigateTo(this.livePath || ''); }
 
   _renderPosition(fen, lastMove) {
     const parts = fen.split(' ');
@@ -758,7 +764,14 @@ export class BoardController extends EventTarget {
       { uci, san: move.san, fen: this.chess.fen() },
       this.tree.currentPath,
     );
-    if (addRes) this.tree.currentPath = addRes.path;
+    if (addRes) {
+      this.tree.currentPath = addRes.path;
+      // Learn guesses are scratch branches and must never redefine the
+      // user's active analysis line. Every ordinary played move does.
+      const isLearnGuess = document.body?.classList?.contains('learn-active');
+      if (!isLearnGuess) this.livePath = addRes.path;
+    }
+    this.viewPly = this.isAtLive() ? null : this.tree.nodesAlong(this.tree.currentPath).length;
     console.log('[move] tree updated', {
       uci, created: addRes?.created, path: this.tree.currentPath,
       newFen: this.chess.fen(),
@@ -817,7 +830,11 @@ export class BoardController extends EventTarget {
       { uci: fullUci, san: move.san, fen: this.chess.fen() },
       this.tree.currentPath,
     );
-    if (addRes) this.tree.currentPath = addRes.path;
+    if (addRes) {
+      this.tree.currentPath = addRes.path;
+      this.livePath = addRes.path;
+    }
+    this.viewPly = null;
     this._syncToChessground([from, to]);
     this.dispatchEvent(new CustomEvent('move', { detail: { move, fen: this.chess.fen(), byEngine: true } }));
   }
@@ -840,6 +857,7 @@ export class BoardController extends EventTarget {
     this.startingFen = this.chess.fen();   // back to standard start
     this.viewPly = null;
     this.tree = new GameTree(this.startingFen);
+    this.livePath = '';
     this.cg.set({
       fen: this.chess.fen(),
       turnColor: 'white',
@@ -862,6 +880,7 @@ export class BoardController extends EventTarget {
     if (this.tree.currentPath) {
       this.tree.currentPath = this.tree.parentPath(this.tree.currentPath) || '';
     }
+    this.livePath = this.tree.currentPath;
     // AUDIT T1: practice takeback = REPLACE, not branch. When prune is
     // set (an active-practice takeback), delete the retracted node so
     // the move the user plays next becomes the tree MAINLINE (children[0])
@@ -911,6 +930,8 @@ export class BoardController extends EventTarget {
         if (addRes) this.tree.currentPath = addRes.path;
       }
       const last = uciList[uciList.length - 1];
+      this.livePath = this.tree.currentPath;
+      this.viewPly = null;
       this._syncToChessground([last.slice(0,2), last.slice(2,4)]);
       this.dispatchEvent(new CustomEvent('move', { detail: { fen: this.fen(), bulk: true } }));
       return true;
@@ -936,6 +957,8 @@ export class BoardController extends EventTarget {
       if (addRes) this.tree.currentPath = addRes.path;
     }
     const last = uciList[uciList.length - 1];
+    this.livePath = this.tree.currentPath;
+    this.viewPly = null;
     this._syncToChessground([last.slice(0,2), last.slice(2,4)]);
     this.dispatchEvent(new CustomEvent('move', { detail: { fen: this.fen(), bulk: true } }));
     return true;

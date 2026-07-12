@@ -2374,11 +2374,16 @@ async function main() {
       const cpWhite = live.scoreKind === 'cp' ? stm * live.score : null;
       const mate    = live.scoreKind === 'mate' ? stm * live.score : null;
       const existing = fenEvalCache.get(fen);
+      const rootTopMoves = Array.from(engine.topMoves?.values?.() || []);
+      const bestUci = rootTopMoves.find(m => m?.pv?.[0])?.pv?.[0] || existing?.bestUci || null;
       // Only overwrite if this event is from a deeper (or equal) depth.
       // Protects the cache from being clobbered by a shallow probe
       // immediately after a deep analysis.
-      if (existing && existing.depth != null && live.depth < existing.depth) return;
-      fenEvalCache.set(fen, { cpWhite, mate, depth: live.depth });
+      if (existing && existing.depth != null && live.depth < existing.depth) {
+        if (!existing.bestUci && bestUci) fenEvalCache.set(fen, { ...existing, bestUci });
+        return;
+      }
+      fenEvalCache.set(fen, { cpWhite, mate, depth: live.depth, bestUci });
       // Bonus: also hydrate cache with evals for the RESULTING positions
       // of each MultiPV candidate move. Stockfish's per-candidate score
       // IS the eval after that move is played (from root STM's POV). This
@@ -2387,7 +2392,7 @@ async function main() {
       // practice mode without a retrospective sweep. Directly addresses
       // user report: 'why are accuracy pills blank during practice'.
       try {
-        const topMoves = Array.from(engine.topMoves?.values?.() || []);
+        const topMoves = rootTopMoves;
         if (topMoves.length > 0) {
           for (const mv of topMoves) {
             if (!mv.pv || !mv.pv.length) continue;
@@ -2954,7 +2959,8 @@ async function main() {
       // skip it if the user explicitly closed the panel earlier this
       // session (userDismissed). They get plain navigation instead;
       // clicking the 🎓 button re-arms auto-enter.
-      const shouldAutoEnter = isOverClass && gameOver && !_learn.userDismissed;
+      const shouldAutoEnter = isOverClass && gameOver && !_learn.userDismissed &&
+        _findMistakePlies().includes(ply);
       if (shouldAutoEnter && typeof window.__enterLearnMode === 'function') {
         window.__enterLearnMode(ply);
       } else if (board.goToPly) {
@@ -2977,7 +2983,7 @@ async function main() {
   // game ends. Jumps the board to the PRE-mistake position, asks the
   // user to find a better move. Acceptance uses winning-chances delta
   // (lichess-inspired) so any move keeping win-% within 4 pts wins.
-  //   cpWinningChances(cp) = 2 / (1 + exp(-0.004*cp)) - 1   ∈ (-1, +1)
+  //   cpWinningChances(cp) uses the shared Lichess multiplier in evals.js
   //   pov(color, cp) = cp mapped then signed to color
   //   accept if pov(played) - pov(bestBefore) > -0.04
   const _learn = {
@@ -2988,6 +2994,10 @@ async function main() {
     playedUci: null,
     bestBeforeCpWhite: 0,
     panel: null,
+    preparing: false,
+    openingUcis: new Set(),
+    ignoredPlies: new Set(),
+    reviewColor: null,
     // Plies the user has already worked through. Matches lila's
     // solvedPlies[] in retroCtrl.ts — lets skip/solution advance past
     // a mistake permanently for this session instead of re-visiting
@@ -3020,11 +3030,9 @@ async function main() {
   board.addEventListener('move', _clearLearnArrowIfStale);
   board.addEventListener('nav',  _clearLearnArrowIfStale);
 
-  // Per-FEN cache of the verifier's best-move discovery. Populated
-  // by verifyMistakesAtMaxStrength as it iterates each pre-mistake
-  // FEN. Consulted by _showSolution to render the green arrow + SAN
-  // instantly with no live probe — turns "Show solution" from a 1.5-s
-  // wait into a single frame.
+  // Per-FEN cache of the one-pass sweep's best move. Consulted by
+  // _showSolution to render the green arrow + SAN instantly with no
+  // second verification search.
   //   key:   pre-mistake FEN
   //   value: { uci, san, cpWhite, evalFmt, depth }
   const _verifierBest = new Map();
@@ -3040,6 +3048,20 @@ async function main() {
     // looking at the position. Falls back to top-right of viewport
     // on narrow mobile where the board takes the full width.
     try {
+      const mobileHost = document.getElementById('learn-panel-host');
+      if (document.body.classList.contains('mobile-mode')) {
+        // The viewport can switch modes while this panel is open (phone
+        // rotation, iPad split view, desktop resize). Keep its DOM home in
+        // sync so the responsive CSS can make it part of the normal mobile
+        // flow instead of leaving a fixed overlay behind.
+        if (mobileHost && p.parentElement !== mobileHost) {
+          mobileHost.hidden = false;
+          mobileHost.appendChild(p);
+        }
+        return;
+      }
+      if (p.parentElement !== document.body) document.body.appendChild(p);
+      if (mobileHost) mobileHost.hidden = true;
       const boardEl = document.getElementById('board');
       if (!boardEl) return;
       const r = boardEl.getBoundingClientRect();
@@ -3061,6 +3083,7 @@ async function main() {
     } catch {}
   }
   function _ensureLearnPanel() {
+    document.body.classList.add('learn-panel-open');
     if (_learn.panel && document.body.contains(_learn.panel)) {
       _positionLearnPanel(_learn.panel);
       return _learn.panel;
@@ -3068,9 +3091,22 @@ async function main() {
     const p = document.createElement('div');
     p.id = 'learn-panel';
     p.style.cssText = 'position:fixed;z-index:9999;background:#1a1a1a;border:1px solid #2a2a2a;box-shadow:0 10px 32px rgba(0,0,0,0.8);color:#eee;font-size:15px;';
-    document.body.appendChild(p);
+    const mobileHost = document.body.classList.contains('mobile-mode')
+      ? document.getElementById('learn-panel-host') : null;
+    if (mobileHost) {
+      mobileHost.hidden = false;
+      mobileHost.appendChild(p);
+    } else {
+      document.body.appendChild(p);
+    }
     _learn.panel = p;
     _positionLearnPanel(p);
+    if (document.body.classList.contains('mobile-mode')) {
+      // The post-game action card that launches Learn sits later in the
+      // document than the analysis tools. Bring the newly docked lesson
+      // into view without hiding the sticky board above it.
+      setTimeout(() => p.scrollIntoView({ block: 'end' }), 0);
+    }
     // Reposition on window resize / scroll so it stays glued to board.
     if (!_learn._resizeBound) {
       _learn._resizeBound = true;
@@ -3080,14 +3116,24 @@ async function main() {
     return p;
   }
   function _closeLearnPanel() {
+    if (_learn.preparing) {
+      try { window.__stopRetrospectiveSweep?.(); } catch {}
+    }
     _learn.active = false;
     _learn.userDismissed = true;   // suppresses pill-click auto-enter
     document.body.classList.remove('learn-active', 'learn-phase-find');
+    document.body.classList.remove('learn-panel-open');
     if (_learn.panel) { _learn.panel.remove(); _learn.panel = null; }
+    const host = document.getElementById('learn-panel-host');
+    if (host) host.hidden = true;
     // Wipe any best-move arrow we drew — close = nothing should
     // linger on the board.
     try { if (board.drawArrows) board.drawArrows([]); } catch {}
     _learn.arrowFen = null;
+    _learn.openingUcis = new Set();
+    _learn.preparing = false;
+    window.__learnOwnsEngine = false;
+    try { fireAnalysis(); } catch {}
   }
   function _countMistakeTotal() {
     return _findMistakePlies().length;
@@ -3128,7 +3174,7 @@ async function main() {
       inner = `
         <p class="retro-prompt">Find a better move for <strong>${color}</strong></p>
         <p class="retro-played">You played <strong>${_learn.playedSan || '?'}</strong>.<br>
-           <span style="opacity:0.6;font-size:11px;">Any reasonable move within ~8 % win-probability of the best is accepted — you don't need to find the engine's exact pick.</span></p>
+           <span style="opacity:0.6;font-size:11px;">Any reasonable move within ~4 win-probability points of the best is accepted — you don't need the engine's exact pick.</span></p>
         <div class="retro-choices">
           <button class="retro-btn" id="learn-solution">View solution</button>
           <button class="retro-btn" id="learn-skip">Skip</button>
@@ -3150,7 +3196,7 @@ async function main() {
     } else if (state === 'fail') {
       const diffPct = _learn.lastDiffPct;
       const diffLine = (diffPct != null && Number.isFinite(diffPct))
-        ? `<p class="retro-played" style="opacity:0.6;font-size:11px;">Win-chance dropped ${Math.abs(diffPct)} pts (threshold: 8 pts).</p>`
+        ? `<p class="retro-played" style="opacity:0.6;font-size:11px;">Win-chance dropped ${Math.abs(diffPct)} pts (threshold: 4 pts).</p>`
         : '';
       inner = `
         <div class="retro-icon-line retro-fail">
@@ -3179,18 +3225,28 @@ async function main() {
           <button class="retro-btn" id="learn-close-end">Done</button>
         </div>`;
     } else if (state === 'computing') {
-      // Fallback-probe in flight (verifier didn't pre-cache this fen).
+      // Fallback probe in flight (preparation did not cache this FEN).
       // The "View solution" button is replaced by a disabled spinner so
       // re-clicks are visibly ignored. Skip stays available so the user
       // can move on if they don't want to wait.
       inner = `
         <p class="retro-prompt">⏳ Computing best move…</p>
         <p class="retro-played" style="opacity:0.7;font-size:11px;">
-          The verifier didn't reach this position yet — running a fresh search (≤ 5 s).
+          This position needs one fresh search (≤ 5 s).
         </p>
         <div class="retro-choices">
           <button class="retro-btn" disabled>⏳ Computing…</button>
           <button class="retro-btn" id="learn-skip">Skip</button>
+        </div>`;
+    } else if (state === 'preparing') {
+      inner = `
+        <p class="retro-prompt">Preparing your lesson…</p>
+        <p class="retro-played" id="learn-prep-status" style="opacity:0.75;font-size:12px;">
+          Analysing each position once with Stockfish.
+        </p>
+        <div class="retro-progress"><div id="learn-progress-fill"></div></div>
+        <div class="retro-choices">
+          <button class="retro-btn" id="learn-close-end">Cancel</button>
         </div>`;
     } else if (state === 'compute-fail') {
       inner = `
@@ -3204,6 +3260,14 @@ async function main() {
         <div class="retro-choices">
           <button class="retro-btn" id="learn-solution">Try again</button>
           <button class="retro-btn" id="learn-skip">Skip</button>
+        </div>`;
+    } else if (state === 'prep-fail') {
+      inner = `
+        <div class="retro-icon-line retro-fail"><span class="retro-icon">⚠</span><span>Lesson preparation stopped</span></div>
+        <p class="retro-played">Stockfish could not finish the game scan. You can retry safely.</p>
+        <div class="retro-choices">
+          <button class="retro-btn retro-continue" id="learn-restart-prep">Try again</button>
+          <button class="retro-btn" id="learn-close-end">Close</button>
         </div>`;
     }
     p.innerHTML = titleBar + `<div class="retro-body">${inner}</div>`;
@@ -3227,6 +3291,10 @@ async function main() {
       const all = _findMistakePlies();
       if (all.length) _enterLearnMode(all[0]);
     });
+    p.querySelector('#learn-restart-prep')?.addEventListener('click', () => {
+      _closeLearnPanel();
+      setTimeout(() => btnLearnMistakes?.click(), 0);
+    });
   }
   function _findMistakePlies() {
     const plies = collectTimelinePlies();
@@ -3237,8 +3305,9 @@ async function main() {
     //      mistakes to learn from.
     // In analysis mode (no practiceColor), include every ply's mistake.
     const openingLen = window.__practiceOpeningPlies || 0;
-    const userColor = practiceColor; // null when not in practice
+    const userColor = _learn.reviewColor || practiceColor; // null for two-side analysis
     for (let i = 1; i < plies.length; i++) {
+      if (_learn.ignoredPlies?.has(i)) continue;
       if (userColor && i <= openingLen) continue;           // skip opening
       if (userColor) {
         // Ply `i` is reached by a move played by WHITE if i is odd,
@@ -3250,10 +3319,57 @@ async function main() {
                              (userColor === 'black' && !moverWasWhite);
         if (!moverWasUser) continue;                          // skip opponent moves
       }
-      const q = classifyAccuracy(plies[i - 1], plies[i]);
-      if (q === 'inaccuracy' || q === 'mistake' || q === 'blunder') list.push(i);
+      // Lichess retrospection deliberately uses a larger 0.10 winning-
+      // chance swing than its ordinary inaccuracy markers. Training on
+      // every borderline 0.06 inaccuracy made our sessions noisy and
+      // much slower without teaching a meaningful correction.
+      const drop = moverWinDrop(plies[i - 1], plies[i]);
+      if (drop != null && drop > 0.10) list.push(i);
     }
     return list;
+  }
+
+  function _mainlineNodeAtPly(ply) {
+    try { return board.tree?.mainlineNodes?.()[ply - 1] || null; }
+    catch { return null; }
+  }
+
+  function _hydrateLearnSolutions(candidates) {
+    const plies = collectTimelinePlies();
+    for (const ply of candidates) {
+      const prev = plies[ply - 1];
+      const cached = prev?.fen ? fenEvalCache.get(prev.fen) : null;
+      const uci = cached?.bestUci;
+      if (!prev || !uci) continue;
+      let san = uci;
+      try {
+        const c = new Chess(prev.fen);
+        san = c.move({ from: uci.slice(0, 2), to: uci.slice(2, 4), promotion: uci[4] || undefined })?.san || uci;
+      } catch {}
+      const cp = cached.cpWhite;
+      const evalFmt = cached.mate != null
+        ? `#${cached.mate}`
+        : cp == null ? '?' : `${cp >= 0 ? '+' : ''}${(cp / 100).toFixed(2)}`;
+      _verifierBest.set(prev.fen, { uci, san, cpWhite: cp, evalFmt, depth: cached.depth || 0 });
+    }
+  }
+
+  async function _excludeMasterOpeningMoves(candidates) {
+    // Match Lichess retrospection: an early move played in more than one
+    // master game is an opening choice, not a training mistake, even if
+    // a short local search momentarily dislikes it.
+    const plies = collectTimelinePlies();
+    for (const ply of candidates) {
+      if (ply > 20) continue;
+      const prev = plies[ply - 1];
+      const fault = _mainlineNodeAtPly(ply);
+      if (!prev?.fen || !fault?.uci) continue;
+      try {
+        const data = await OpeningExplorer.queryOpeningExplorer(prev.fen, { moves: 12 });
+        const isBook = data?.moves?.some(m => m.uci === fault.uci && m.total > 1);
+        if (isBook) _learn.ignoredPlies.add(ply);
+      } catch {}
+    }
   }
   function _goNextMistake() {
     // Mark the current ply solved so skip-or-view advances past it,
@@ -3280,8 +3396,8 @@ async function main() {
     if (!prev || !cur) return;
     if (board.goToPly) board.goToPly(_learn.targetPly - 1);
     // ── CACHE-FIRST SOLUTION ──────────────────────────────────────
-    // The verify pass already searched this FEN at MultiPV=20 + 5 s
-    // and stored the engine's top move via _verifierBest. If we
+      // The preparation sweep already searched this FEN at single-PV
+      // and stored the engine's top move via _verifierBest. If we
     // have that, render the panel + draw the arrow immediately —
     // no probe, no spinner, no wait.
     const cachedBest = _verifierBest.get(prev.fen);
@@ -3301,7 +3417,7 @@ async function main() {
           _learn.arrowFen = prev.fen;
         }
       } catch {}
-      console.log('[learn-mode] solution served from verifier cache (no probe)', cachedBest);
+      console.log('[learn-mode] solution served from preparation cache (no probe)', cachedBest);
       _renderLearnPanel('view');
       return;
     }
@@ -3331,8 +3447,8 @@ async function main() {
     const probeFen = prev.fen;
     const probeId = (_learn._probeSeq = (_learn._probeSeq || 0) + 1);
     const savedMultiPV = engine.multipv;
-    // P6: the fallback probe must run at FULL strength — this path fires
-    // exactly when the verifier didn't pre-cache this FEN, and the engine
+      // The fallback probe must run at FULL strength — this path fires
+      // exactly when preparation didn't pre-cache this FEN, and the engine
     // skill is currently the PRACTICE skill (practice-start overwrote the
     // toolbar slider). Without this a skill-3 "best move" could be shown
     // as the solution. Restore in finish().
@@ -3424,19 +3540,23 @@ async function main() {
     const prev = plies[targetPly - 1];
     if (!prev || !cur) return;
     _learn.active = true;
+    window.__learnOwnsEngine = true;
     // Body class lets CSS hide PV / score / engine arrows so the user
     // can't peek the answer before they've tried.
     document.body.classList.add('learn-active');
     _learn.targetPly = targetPly;
     _learn.prevFen = prev.fen;
     _learn.playedSan = cur.san;
+    _learn.playedUci = _mainlineNodeAtPly(targetPly)?.uci || null;
     _learn.bestBeforeCpWhite = prev.cpWhite ?? 0;
+    _learn.openingUcis = new Set();
     // Clear any solution-revealed state from the previous mistake so
     // the "user already saw solution" shortcut in onMove doesn't
     // wrongly trigger on a different position's bestUci.
     _learn.bestUci = null;
     _learn.bestSan = null;
     _learn.bestEvalFmt = null;
+    _learn.solutionUci = _verifierBest.get(prev.fen)?.uci || null;
     const stm = prev.fen.split(' ')[1];
     _learn.solverColor = stm === 'w' ? 'w' : 'b';
     // Clear any arrow from a previous mistake (the 'View solution'
@@ -3459,6 +3579,14 @@ async function main() {
       try { board.flipBoard(); } catch {}
     }
     _renderLearnPanel('find');
+    if (targetPly <= 20) {
+      OpeningExplorer.queryOpeningExplorer(prev.fen, { moves: 12 }).then(data => {
+        if (!_learn.active || _learn.targetPly !== targetPly) return;
+        _learn.openingUcis = new Set(
+          (data?.moves || []).filter(m => m.total > 1).map(m => m.uci),
+        );
+      }).catch(() => {});
+    }
     requestAnimationFrame(() => {
       requestAnimationFrame(() => window.scrollTo(savedScrollX, savedScrollY));
     });
@@ -3476,6 +3604,13 @@ async function main() {
         ? mv.from + mv.to + (mv.promotion || '')
         : null;
       const postFen = board.fen();
+      const trialPath = board.tree?.currentPath || '';
+      const discardFailedTrial = () => {
+        try {
+          if (trialPath && !board.tree.isMainlinePath(trialPath)) board.tree.deleteAt(trialPath);
+          board.goToPly(_learn.targetPly - 1);
+        } catch {}
+      };
       // ── ALREADY-SAW-SOLUTION SHORTCUT ─────────────────────────
       // If the user clicked Show Solution earlier this attempt and
       // is now playing the move they were shown, we already KNOW
@@ -3483,21 +3618,32 @@ async function main() {
       // This was the user's specific complaint: "if i say show
       // solution and play it..it shouldn't try to evaluate it..
       // it already did."
-      const knownBestUci = (_learn.bestUci || '').toLowerCase();
+      const knownBestUci = (_learn.bestUci || _learn.solutionUci || '').toLowerCase();
       if (userUci && knownBestUci && userUci.toLowerCase() === knownBestUci) {
         console.log('[learn-mode] user played the already-shown solution — instant win, no probe');
         _learn.lastDiffPct = 0;
         _renderLearnPanel('win');
         return;
       }
+      // Faithful Lichess fast paths: a master opening move or a move
+      // delivering mate succeeds immediately; replaying the original
+      // mistake fails immediately. None of these need another search.
+      if ((userUci && _learn.openingUcis.has(userUci)) || mv?.san?.endsWith('#')) {
+        _learn.lastDiffPct = 0;
+        _renderLearnPanel('win');
+        return;
+      }
+      if (userUci && _learn.playedUci && userUci === _learn.playedUci) {
+        _learn.lastDiffPct = null;
+        discardFailedTrial();
+        _renderLearnPanel('fail');
+        return;
+      }
       // ── CACHE-FIRST GRADING ───────────────────────────────────
-      // verifyMistakesAtMaxStrength runs MultiPV=20 at each pre-
-      // mistake FEN, so fenEvalCache already holds an eval for
-      // up to 20 post-move FENs. With ~30-40 legal moves typical,
-      // most reasonable user guesses ARE in those top 20 → instant
-      // grading from cache, no probe needed.
+      // Ordinary analysis may already have cached this resulting FEN.
+      // When it has a sufficiently deep score, grade instantly.
       const cached = fenEvalCache.get(postFen);
-      // Require depth ≥ 14 from the verifier pass to use the cache —
+      // Require depth ≥ 14 from the preparation/analysis pass —
       // a stale shallow eval would re-introduce depth-mismatch fails.
       if (cached && cached.cpWhite != null && (cached.depth || 0) >= 14) {
         const before = _povWin(_learn.solverColor, _learn.bestBeforeCpWhite);
@@ -3507,8 +3653,8 @@ async function main() {
         console.log('[learn-mode] graded from cache (no probe)', {
           postFen: postFen.slice(0, 30) + '…', cachedCp: cached.cpWhite, depth: cached.depth, diff,
         });
-        if (diff > -0.08) _renderLearnPanel('win');
-        else _renderLearnPanel('fail');
+        if (diff > -0.04) _renderLearnPanel('win');
+        else { discardFailedTrial(); _renderLearnPanel('fail'); }
         return;
       }
       // ── CACHE MISS → searchmoves probe ─────────────────────────
@@ -3521,15 +3667,18 @@ async function main() {
       // to plain post-FEN probe if the move can't be expressed (no
       // UCI from the move event — should never happen in practice).
       const savedMultiPV = engine.multipv;
+      const savedSkill = engine.skill;
       engine.setMultiPV(1);
+      try { engine.setSkill(20); } catch {}
       const onBest = (ev2) => {
         engine.removeEventListener('bestmove', onBest);
         try { engine.setMultiPV(savedMultiPV); } catch {}
+        try { engine.setSkill(savedSkill); } catch {}
         if (!_learn.active) {
           console.log('[learn-mode] onMove bestmove arrived after close — skipping render');
           return;
         }
-        const hist = engine.history || [];
+        const hist = ev2.detail?.history || engine.history || [];
         const last = hist[hist.length - 1];
         const cp = last?.score ?? 0;
         let cpAfterWhite;
@@ -3558,14 +3707,14 @@ async function main() {
         const after  = _povWin(_learn.solverColor, cpAfterWhite);
         const diff = after - before;
         _learn.lastDiffPct = Math.round(diff * 100);
-        if (diff > -0.08) _renderLearnPanel('win');
-        else _renderLearnPanel('fail');
+        if (diff > -0.04) _renderLearnPanel('win');
+        else { discardFailedTrial(); _renderLearnPanel('fail'); }
       };
       engine.addEventListener('bestmove', onBest);
       if (userUci) {
-        engine.start(_learn.prevFen, { movetime: 2000, searchmoves: [userUci] });
+        engine.start(_learn.prevFen, { movetime: 3000, searchmoves: [userUci] });
       } else {
-        engine.start(postFen, { movetime: 2000 });
+        engine.start(postFen, { movetime: 3000 });
       }
     };
     board.addEventListener('move', onMove);
@@ -3580,51 +3729,65 @@ async function main() {
   const learnCountBadge = document.getElementById('learn-btn-count');
   if (btnLearnMistakes) {
     btnLearnMistakes.addEventListener('click', async () => {
-      // Explicit click = user opting in again, so re-arm pill-click
-      // auto-enter that _closeLearnPanel suppressed earlier.
+      if (_learn.preparing) return;
       _learn.userDismissed = false;
-      // Verify before walking: re-probe each candidate mistake at
-      // max strength + 5 s to filter false positives. This runs
-      // automatically at the end of a finished practice game but
-      // NOT for games loaded from the archive — so if the user
-      // clicks Learn on an archived game, we run it on-demand.
-      // Skips if already verified or no candidates.
-      // ── First: retrospective sweep if the eval cache is sparse.
-      // The auto-sweep at game-end was removed (it was hijacking
-      // the engine the moment the user wanted to analyze freely).
-      // Now we run sweep + verify on-demand right here, the moment
-      // the user actually opts in to learning. Result: free analysis
-      // works seamlessly post-game, and Learn does its prep when
-      // clicked — same final outcome, better UX.
-      const sweepKey = board.startingFen + '|' + (board.chess.history().join(',') || '');
-      if (window.__mistakesSweptForFen !== sweepKey) {
-        try {
-          if (ui.narrationText) {
-            ui.narrationText.innerHTML = '🔍 Scanning each move for mistakes…';
-          }
-          await retrospectiveSweep({ minDepth: 12 });
+      if (document.body.classList.contains('mobile-mode')) {
+        document.body.classList.remove('mobile-drawer-collapsed');
+        document.body.classList.add('mobile-postgame-analysis');
+      }
+      _learn.solvedPlies = new Set();
+      _learn.ignoredPlies = new Set();
+      _learn.active = true;
+      _learn.preparing = true;
+      window.__learnOwnsEngine = true;
+      document.body.classList.add('learn-active');
+      _renderLearnPanel('preparing');
+      updateLearnButton();
+      const mainlineKey = board.tree?.mainlineNodes?.().map(n => n.uci).join(',') || '';
+      const sweepKey = board.startingFen + '|' + mainlineKey;
+      try {
+        if (ui.narrationText) ui.narrationText.innerHTML = '🔍 Preparing a focused Lichess-style mistake lesson…';
+        if (window.__mistakesSweptForFen !== sweepKey) {
+          const finished = await retrospectiveSweep({
+            minDepth: 14,
+            requireBestMove: true,
+            onProgress: (done, total) => {
+              const status = document.getElementById('learn-prep-status');
+              if (status) status.textContent = `Analysing position ${done} of ${total}…`;
+              const fill = document.getElementById('learn-progress-fill');
+              if (fill) fill.style.width = `${Math.round((done / Math.max(1, total)) * 100)}%`;
+            },
+          });
+          if (!finished || !_learn.active) return;
           window.__mistakesSweptForFen = sweepKey;
-        } catch (err) { console.warn('[learn] sweep failed', err); }
-      }
-      const candidates = _findMistakePlies();
-      if (candidates.length === 0) {
-        if (ui.narrationText) {
-          ui.narrationText.innerHTML = '🎉 No mistakes found in this game — clean play!';
         }
-        return;
-      }
-      if (!window.__mistakesVerifiedForFen ||
-          window.__mistakesVerifiedForFen !== sweepKey) {
-        try {
-          await verifyMistakesAtMaxStrength();
-          window.__mistakesVerifiedForFen = sweepKey;
-        } catch (err) {
-          console.warn('[learn] verify failed, proceeding anyway', err);
+        let candidates = _findMistakePlies();
+        await _excludeMasterOpeningMoves(candidates);
+        if (!_learn.active) return;
+        candidates = _findMistakePlies();
+        _hydrateLearnSolutions(candidates);
+        await persistReanalysisForLoadedGame();
+        if (!candidates.length) {
+          if (ui.narrationText) ui.narrationText.innerHTML = '🎉 No meaningful mistakes found in this game — clean play!';
+          _learn.active = false;
+          window.__learnOwnsEngine = false;
+          document.body.classList.remove('learn-active', 'learn-phase-find');
+          _renderLearnPanel('end');
+          try { fireAnalysis(); } catch {}
+          return;
         }
+        _enterLearnMode(candidates[0]);
+      } catch (err) {
+        console.warn('[learn] preparation failed', err);
+        _learn.active = false;
+        window.__learnOwnsEngine = false;
+        document.body.classList.remove('learn-active', 'learn-phase-find');
+        _renderLearnPanel('prep-fail');
+        try { fireAnalysis(); } catch {}
+      } finally {
+        _learn.preparing = false;
+        updateLearnButton();
       }
-      const verified = _findMistakePlies();
-      if (verified.length === 0) return;
-      _enterLearnMode(verified[0]);
     });
   }
   const updateLearnButton = () => {
@@ -3634,19 +3797,27 @@ async function main() {
     // the user knows NOT to click until stockfish has double-
     // checked each candidate mistake at max strength. When done,
     // the button flips back to the normal blue state.
-    if (window.__mistakesVerifying) {
+    if (_learn.preparing) {
       btnLearnMistakes.disabled = true;
       btnLearnMistakes.classList.add('verifying');
       learnCountBadge.textContent = '…';
-      btnLearnMistakes.title = 'Verifying mistakes at full strength — please wait';
+      btnLearnMistakes.title = 'Preparing the lesson — please wait';
       return;
     }
     btnLearnMistakes.classList.remove('verifying');
     const count = _findMistakePlies().length;
     if (count === 0) {
-      btnLearnMistakes.disabled = true;
-      learnCountBadge.textContent = '';
-      btnLearnMistakes.title = 'No mistakes found in this game — clean play!';
+      // A sparse archive has no classifications YET; disabling the only
+      // button capable of running the sweep made Learn unreachable.
+      const canScan = (board.tree?.mainlineNodes?.().length || 0) > 0 &&
+        (document.body.classList.contains('practice-finished') ||
+         document.body.classList.contains('analysis-archived') ||
+         !document.body.classList.contains('practice-mode'));
+      btnLearnMistakes.disabled = !canScan;
+      learnCountBadge.textContent = canScan ? 'scan' : '';
+      btnLearnMistakes.title = canScan
+        ? 'Scan this game once, then walk through its meaningful mistakes'
+        : 'No completed game to review yet';
     } else {
       btnLearnMistakes.disabled = false;
       learnCountBadge.textContent = count;
@@ -3657,9 +3828,11 @@ async function main() {
   // game-end, live moves, navigation).
   board.addEventListener('move', updateLearnButton);
   board.addEventListener('new-game', () => {
-    // Reset the verified-fingerprint so a freshly-started game will
-    // re-verify its mistakes on Learn-click.
-    try { window.__mistakesVerifiedForFen = null; } catch {}
+    _learn.ignoredPlies = new Set();
+    _learn.reviewColor = null;
+    window.__loadedCloudGameId = null;
+    window.__loadedLocalGameId = null;
+    try { window.__mistakesSweptForFen = null; } catch {}
     updateLearnButton();
   });
   board.addEventListener('nav', updateLearnButton);
@@ -3822,131 +3995,16 @@ async function main() {
   // Expose a stop hook so the 'Stop analysis' button in the reanalyze
   // UI can bail out mid-sweep if the user decides it's taking too long.
   window.__stopRetrospectiveSweep = () => { sweepAbort = true; try { engine.stop(); } catch {} };
-  // Double-check each candidate mistake at MAX stockfish strength +
-  // 5 s per position. Practice games use skill 8-14 which can misjudge
-  // positions — a move the sweep classified as a blunder might be fine
-  // when re-probed at skill 20 / depth 20+. Replaces the eval-cache
-  // entry for the candidate's FEN (and its predecessor) so
-  // _findMistakePlies reclassifies naturally on the next call.
-  async function verifyMistakesAtMaxStrength(onProgress) {
-    // Idempotency + concurrency guard. The user-clicked Learn flow
-    // and the auto-fired post-game flow can both call this; running
-    // them in parallel had each iteration's engine.start stomp on
-    // the other's, leaving probes silent (infoReceived=0) and the
-    // cache empty. Now: if a verify pass is already in flight, just
-    // wait for it; if a retrospective sweep is running, wait for
-    // that too — both share the same engine, can't overlap.
-    // If a sweep is in flight, signal it to abort AND force-stop the
-    // engine. The previous "passive wait" approach hung forever when
-    // sweep got stuck inside a probeEngine call whose bestmove was
-    // suppressed as stale (pendingGos > 0). engine.stop() shakes the
-    // engine into emitting a real bestmove which lets the dangling
-    // probe resolve, then sweepAbort lets the sweep loop exit cleanly.
-    if (sweepRunning) {
-      console.log('[verify] sweep in progress — aborting + nudging engine');
-      sweepAbort = true;
-      try { engine.stop(); } catch {}
-    }
-    // Bounded wait — give sweep up to 3 s to exit gracefully.
-    // After that, push through anyway; verify's own probes will queue
-    // and the suppressed-bestmove logic in engine.js will sort the
-    // overlap out (each probe sets _pendingGos+1, decrements on
-    // bestmove arrival).
-    const waitDeadline = Date.now() + 3000;
-    while ((window.__mistakesVerifying || sweepRunning) && Date.now() < waitDeadline) {
-      console.log('[verify] another pass in progress — waiting', {
-        verifying: !!window.__mistakesVerifying,
-        sweeping:  sweepRunning,
-      });
-      await new Promise(r => setTimeout(r, 200));
-    }
-    if (sweepRunning || window.__mistakesVerifying) {
-      console.warn('[verify] proceeding despite stale lock', {
-        verifying: !!window.__mistakesVerifying,
-        sweeping:  sweepRunning,
-      });
-    }
-    const candidates = _findMistakePlies();
-    if (!candidates.length) return 0;
-    const plies = collectTimelinePlies();
-    const fens = new Set();
-    for (const p of candidates) {
-      if (plies[p - 1]) fens.add(plies[p - 1].fen);
-      if (plies[p])     fens.add(plies[p].fen);
-    }
-    const total = fens.size;
-    let done = 0;
-    const savedSkill = engine.skill;
-    const savedMultiPV = engine.multipv;
-    const wasMuted = window.__engineMuted === true;
-    window.__engineMuted = true;
-    window.__mistakesVerifying = true;
-    document.body.classList.add('mistakes-verifying');
-    // Force the Learn button to repaint in its grayed 'verifying'
-    // state NOW — without this call the flag is set but the button
-    // only refreshes on board move/nav/new-game events which don't
-    // fire during verification.
-    try { if (typeof updateLearnButton === 'function') updateLearnButton(); } catch {}
-    try { engine.stop(); } catch {}
-    engine.setSkill(20);
-    // MultiPV during verify returns top-N candidate moves at each
-    // pre-mistake position. The thinking listener auto-populates
-    // fenEvalCache with the post-move FEN + cp eval for EACH
-    // candidate, so user guesses graded from cache (no probe).
-    // Verify probe params (trimmed per user feedback "never more
-    // than 5 seconds"): 3-s probes at MultiPV=12 — depth 16-18 in
-    // 3s, top-12 covers ~all reasonable user guesses. Total wait
-    // for a typical 3-mistake game = ~9s. Was 5s × MultiPV=20.
-    engine.setMultiPV(12);
-    try {
-      for (const fen of fens) {
-        try {
-          // 3 s, skill 20, multipv 12.
-          const result = await AICoach.probeEngine(engine, fen, 0, 12, 3000);
-          const top = result?.lines?.[0];
-          if (top && top.uci) {
-            const stm = fen.split(' ')[1];
-            // result.lines score is from STM POV — convert to white POV
-            const cpStm = top.scoreKind === 'mate'
-              ? (top.score > 0 ? 10000 : -10000)
-              : top.score;
-            const cpWhite = stm === 'w' ? cpStm : -cpStm;
-            const evalFmt = top.scoreKind === 'mate'
-              ? `#${top.score}`
-              : `${cpStm >= 0 ? '+' : ''}${(cpStm/100).toFixed(2)}`;
-            _verifierBest.set(fen, {
-              uci: top.uci,
-              san: top.san || top.uci,
-              cpWhite,
-              evalFmt,
-              depth: result.depth || 0,
-            });
-          }
-        } catch (err) {
-          console.warn('[verify] probe failed', fen, err);
-        }
-        done++;
-        if (onProgress) onProgress(done, total);
-      }
-    } finally {
-      engine.setSkill(savedSkill);
-      engine.setMultiPV(savedMultiPV);
-      window.__engineMuted = wasMuted;
-      window.__mistakesVerifying = false;
-      document.body.classList.remove('mistakes-verifying');
-      try { if (typeof updateLearnButton === 'function') updateLearnButton(); } catch {}
-    }
-    return _findMistakePlies().length;
-  }
-
-  async function retrospectiveSweep({ minDepth = 12, movetimeMs = 0, onProgress } = {}) {
+  async function retrospectiveSweep({ minDepth = 12, movetimeMs = 0, requireBestMove = false, onProgress } = {}) {
     if (sweepRunning) return false;
     sweepRunning = true;
     sweepAbort = false;
     // Snapshot the live engine state + mute flag so we can restore.
     const wasMuted = window.__engineMuted === true;
+    const savedSweepSkill = engine.skill;
     window.__engineMuted = true;          // silence UI during sweep
     try { engine.stop(); } catch {}
+    try { engine.setSkill(20); } catch {}
     try {
       const history = board.chess.history({ verbose: true });
       if (!history.length) return false;
@@ -3969,7 +4027,8 @@ async function main() {
         // When user picks movetime-based analysis we re-probe regardless
         // of cached depth (user is asking for a fresher look). For depth
         // mode, respect cached deeper analyses.
-        if (!movetimeMs && existing && existing.depth != null && existing.depth >= minDepth) {
+        if (!movetimeMs && existing && existing.depth != null && existing.depth >= minDepth &&
+            (!requireBestMove || existing.bestUci)) {
           done++;
           if (onProgress) onProgress(done, targets.length);
           continue;
@@ -3998,9 +4057,64 @@ async function main() {
       sweepRunning = false;
       sweepAbort = false;
       window.__engineMuted = wasMuted;
+      try { engine.setSkill(savedSweepSkill); } catch {}
       // Resume live analysis (user is looking at the current position).
-      try { fireAnalysis(); } catch {}
+      if (!window.__learnOwnsEngine) {
+        try { fireAnalysis(); } catch {}
+      }
     }
+  }
+
+  function collectPersistableMainlinePlies() {
+    const out = [];
+    let cur = board.tree?.root;
+    while (cur?.children?.length) {
+      const n = cur.children[0];
+      if (!n?.fen) break;
+      const ev = fenEvalCache.get(n.fen) || {};
+      out.push({
+        ply: out.length + 1,
+        san: n.san,
+        fen: n.fen,
+        cpWhite: ev.cpWhite ?? null,
+        mate: ev.mate ?? null,
+        depth: ev.depth ?? null,
+      });
+      cur = n;
+    }
+    return out;
+  }
+
+  function countPersistedMistakes(plies) {
+    let mistakes = 0, blunders = 0;
+    for (let i = 1; i < plies.length; i++) {
+      const q = classifyAccuracy(plies[i - 1], plies[i]);
+      if (q === 'blunder') blunders++;
+      else if (q === 'mistake' || q === 'inaccuracy') mistakes++;
+    }
+    return { mistakes_count: mistakes, blunders_count: blunders };
+  }
+
+  async function persistReanalysisForLoadedGame() {
+    const plies = collectPersistableMainlinePlies();
+    if (!plies.length) return false;
+    const localId = window.__loadedLocalGameId;
+    if (Number.isFinite(+localId)) {
+      try { Archive.updateGamePlies(+localId, plies); } catch {}
+    }
+    const cloudId = window.__loadedCloudGameId ||
+      (Number.isFinite(+localId) && +window.__lastSavedLocalId === +localId
+        ? window.__lastSavedGameId : null);
+    if (Number.isFinite(+cloudId)) {
+      try {
+        await api.updateGamePlies(+cloudId, plies, countPersistedMistakes(plies));
+        console.log('[reanalyze] persisted refreshed plies', { cloudId: +cloudId, plies: plies.length });
+      } catch (err) {
+        console.warn('[reanalyze] cloud persistence failed', err);
+        return false;
+      }
+    }
+    return true;
   }
 
   // ─── Archive a completed game ─────────────────────────────────────
@@ -4084,6 +4198,10 @@ async function main() {
     const userInfo = curUser && (curUser.username || curUser.name)
       ? { name: curUser.username || curUser.name, id: curUser.id || 'user' }
       : { name: 'Guest', id: 'guest' };
+    const clientGameId = (() => {
+      try { return 'g_' + crypto.randomUUID().replace(/-/g, ''); }
+      catch { return `g_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 14)}`; }
+    })();
     const game = {
       id:          Date.now(),
       date:        today,
@@ -4093,6 +4211,7 @@ async function main() {
       userColor,
       userName:    userInfo.name,
       userDeviceId: userInfo.id,
+      clientGameId,
       opponent:    mode === 'practice'
                       ? `Stockfish (skill ${ui.rangeSkill?.value || '?'})`
                       : 'n/a',
@@ -4110,6 +4229,8 @@ async function main() {
     // Date.now() internally and we'd never learn the id).
     game.id = Date.now();
     const ok = Archive.archiveGame(game);
+    window.__loadedLocalGameId = game.id;
+    window.__loadedCloudGameId = null;
     // A1: consume the snapshot — it's been archived, so a later archive
     // (e.g. an analysis game after this practice game) must not reuse it.
     if (snap) board._archiveSnapshot = null;
@@ -4147,6 +4268,7 @@ async function main() {
         mode === 'practice' && practiceColor === 'black'  ? 'Guest' :
         mode === 'practice'                                ? 'Stockfish' : null;
       api.saveGame({
+        client_game_id: clientGameId,
         pgn:            game.pgn,
         result:         game.result,
         opening_name:   opening?.name || null,
@@ -4163,6 +4285,7 @@ async function main() {
         // Remember the cloud id for THIS local game so the "Don't save"
         // button can delete the right cloud row AND so we don't re-upload.
         window.__lastSavedLocalId = game.id;
+        if (+window.__loadedLocalGameId === +game.id) window.__loadedCloudGameId = res.id;
         console.log('[cloud] game saved to DB', { id: res.id, localId: game.id, loggedIn: !!window.__currentUser });
         // A2: mark this local game as already cloud-synced so the on-load
         // syncLocalGamesToCloud() doesn't upload it a SECOND time. The
@@ -4206,6 +4329,12 @@ async function main() {
     // bootEngine's post-await fireAnalysis() races the rest of main().
     if (!mainInitDone) { pendingFireAnalysis = true; return; }
 
+    // Learn owns the single browser engine from preparation through the
+    // last graded move. Navigation and move events still repaint the UI,
+    // but must not start a competing infinite search that can overwrite a
+    // lesson probe or consume its bestmove.
+    if (window.__learnOwnsEngine) return;
+
     // Root-cause guard for practice-start ghost-bestmove: during SAN
     // replay of an opening (and similar bulk move loads), every move
     // event cascades here and fires engine.start(). 4-7 overlapping
@@ -4224,9 +4353,7 @@ async function main() {
     // this guard it could be played onto the NEW position.
     practiceSearchToken++;
 
-    const fen = board.isAtLive()
-      ? board.fen()
-      : rebuildFenAtPly(board.chess, board.viewPly);
+    const fen = board.fen();
 
     // Kick the engine FIRST — the worker starts computing in parallel
     // while the rest of this function does its synchronous UI work.
@@ -7068,7 +7195,7 @@ async function main() {
       // Probe the engine on the current position at a modest depth so
       // we have a concrete eval to judge against. This respects the
       // engine-mute flag for the duration of the probe, same as askAI.
-      const fen = board.isAtLive() ? board.fen() : rebuildFenAtPly(board.chess, board.viewPly);
+      const fen = board.fen();
       const wasEngineMuted = window.__engineMuted === true;
       window.__engineMuted = false;
       engine.stop();
@@ -7304,6 +7431,9 @@ async function main() {
       if (!g) return;
       modal.hidden = true;
       board.newGame();
+      window.__loadedLocalGameId = g.id;
+      _learn.reviewColor = g.userColor || null;
+      window.__practiceOpeningPlies = 0;
       try {
         if (g.startingFen && g.startingFen !== board.startingFen) {
           board.chess.load(g.startingFen);
@@ -7589,10 +7719,16 @@ async function main() {
       // First-load prompt. Non-blocking: default to the ID when user
       // cancels / leaves blank.
       setTimeout(() => {
-        const entered = window.prompt(
-          "What should we call you?\n\n(Used to stamp your saved games and future cloud sync. Leave blank to use your device ID.)",
-          ''
-        );
+        let entered = null;
+        try {
+          entered = window.prompt(
+            "What should we call you?\n\n(Used to stamp your saved games and future cloud sync. Leave blank to use your device ID.)",
+            ''
+          );
+        } catch {
+          // Embedded/test browsers can intentionally disable native JS
+          // dialogs. Identity must never turn that into a fatal app error.
+        }
         const clean = (entered || '').trim().slice(0, 40);
         userName = clean || userId;
         try { localStorage.setItem(NAME_KEY, userName); } catch {}
@@ -7632,7 +7768,9 @@ async function main() {
     const syncMobilePostgame = () => {
       const shouldEnter =
         document.body.classList.contains('mobile-mode') &&
-        document.body.classList.contains('practice-finished');
+        (document.body.classList.contains('practice-finished') ||
+         document.body.classList.contains('learn-active') ||
+         document.body.classList.contains('learn-panel-open'));
       const entering = shouldEnter && !mobilePostgameActive;
       const leaving  = !shouldEnter && mobilePostgameActive;
 
@@ -8465,6 +8603,8 @@ async function main() {
           // populated the cache; without this the numbers never changed
           // so the button visibly "did nothing".
           if (typeof o.onReanalyzed === 'function') { try { o.onReanalyzed(); } catch (e) { console.warn('[reanalyze] repaint failed', e); } }
+          const persisted = await persistReanalysisForLoadedGame();
+          if (statusEl && persisted) statusEl.textContent = ' ✓ saved';
         } catch (err) {
           if (statusEl) statusEl.textContent = ' ✗ failed';
           console.warn('[reanalyze] failed', err);
@@ -8501,6 +8641,15 @@ async function main() {
   // showed.
   function loadCloudGameOntoBoard(game) {
     board.newGame();
+    if (game?._isLocal) {
+      window.__loadedLocalGameId = game._localId;
+      window.__loadedCloudGameId = null;
+    } else {
+      window.__loadedCloudGameId = Number.isFinite(+game?.id) ? +game.id : null;
+      window.__loadedLocalGameId = null;
+    }
+    _learn.reviewColor = game?.user_color || null;
+    window.__practiceOpeningPlies = 0;
     const plies = Array.isArray(game.plies) ? game.plies : [];
     const uciMoves = [];
     const replay = new Chess();
@@ -9970,6 +10119,7 @@ async function main() {
           catch { return false; }
         }).length;
         await api.saveGame({
+          client_game_id: g.clientGameId || `local_${g.id}`,
           pgn:            g.pgn,
           result:         g.result || '*',
           opening_name:   g.opening?.name || null,
@@ -11118,7 +11268,7 @@ async function main() {
 
   function enterThreatMode() {
     if (!engineReady) return;
-    const fen  = board.isAtLive() ? board.fen() : rebuildFenAtPly(board.chess, board.viewPly);
+    const fen  = board.fen();
     const parts = fen.split(' ');
     if (parts.length < 4) return;
     const originalSide = parts[1];               // 'w' or 'b'
@@ -11495,7 +11645,7 @@ async function main() {
     window.__engineMuted = false;
     engine.stop();
     try {
-      const fenStart = board.isAtLive() ? board.fen() : rebuildFenAtPly(board.chess, board.viewPly);
+      const fenStart = board.fen();
       const recent = board.chess.history().slice(-8);
 
       // ─── Multi-cycle loop (LOOKAHEAD mode) ────────────────────────
@@ -11817,7 +11967,7 @@ async function main() {
 
     function renderHeuristic() {
       if (!coachHeuristic) return;  // element removed in unified-panel refactor
-      const fen = board.isAtLive() ? board.fen() : rebuildFenAtPly(board.chess, board.viewPly);
+      const fen = board.fen();
       const engineTop = engine && engine.history && engine.history.length
         ? engine.history[engine.history.length - 1]
         : null;
@@ -11886,7 +12036,7 @@ async function main() {
       const wasLocked = locked, wasPaused = paused;
       engine.stop();
       try {
-        const fen = board.isAtLive() ? board.fen() : rebuildFenAtPly(board.chess, board.viewPly);
+        const fen = board.fen();
         const { lines, depth } = await AICoach.probeEngine(engine, fen, 18, 5);
         if (!lines.length) {
           outputEl.innerHTML = '<p style="color:var(--c-bad)">Stockfish returned no candidates. Try ♻ Restart.</p>';

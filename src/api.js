@@ -84,6 +84,11 @@ export const api = {
 
   // games
   saveGame:   (g)       => req('POST',   '/api/games', g),
+  updateGamePlies: (id, plies, counts = {}) => req('PATCH', `/api/games/${+id}/plies`, {
+    plies,
+    mistakes_count: counts.mistakes_count,
+    blunders_count: counts.blunders_count,
+  }),
   // Full filter surface: from, to, result, color, mode, opening,
   // cleanliness (clean|mistakes|blunders), sort (newest|oldest|
   // most_mistakes|fewest_mistakes|most_moves), limit, offset.

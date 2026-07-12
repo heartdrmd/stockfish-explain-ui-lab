@@ -315,6 +315,22 @@ const migrations = [
         ON diagnostic_logs(guest_id, uploaded_at DESC) WHERE guest_id IS NOT NULL;
     `,
   },
+  {
+    // Idempotent cloud game creation. A browser-generated client id is
+    // stable in the local archive, so two tabs racing to sync the same
+    // game converge on one row instead of creating duplicates.
+    name: '014_game_client_ids',
+    sql: `
+      ALTER TABLE games ADD COLUMN IF NOT EXISTS client_game_id TEXT;
+      CREATE UNIQUE INDEX IF NOT EXISTS uniq_games_owner_client
+        ON games(
+          COALESCE(user_id::text, ''),
+          COALESCE(guest_id, ''),
+          client_game_id
+        )
+        WHERE client_game_id IS NOT NULL;
+    `,
+  },
 ];
 
 export async function runMigrations() {

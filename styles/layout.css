@@ -381,6 +381,7 @@ body.nav-collapsed .site-header { min-height: 40px; padding: 6px 14px; }
    CSS order only — HTML order is preserved so JS queries stay intact. */
 .tools > .engine-power-row { order: 0; }
 .tools > .ceval            { order: 1; }
+.tools > #learn-panel-host { order: 2; }
 .tools > #accuracy-strip   { order: 2; }
 .tools > .move-list-wrap   { order: 3; }
 .tools > .tabbed           { order: 4; }

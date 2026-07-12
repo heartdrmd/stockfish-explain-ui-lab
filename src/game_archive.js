@@ -8,6 +8,7 @@
 // Shape of an archived game:
 //   {
 //     id:        number (Date.now milliseconds)
+//     clientGameId: stable browser-generated id used for idempotent sync
 //     date:      "YYYY-MM-DD"
 //     result:    "1-0" | "0-1" | "1/2-1/2" | "*"
 //     ending:    string (human readable — "You resigned", "Checkmate", etc.)
@@ -113,6 +114,14 @@ export function deleteGame(id) {
 
 export function getGame(id) {
   return loadGames().find(g => g.id === id) || null;
+}
+
+export function updateGamePlies(id, plies) {
+  const all = loadGames();
+  const game = all.find(g => g.id === id);
+  if (!game || !Array.isArray(plies)) return false;
+  game.plies = plies;
+  return saveGames(all);
 }
 
 /**
