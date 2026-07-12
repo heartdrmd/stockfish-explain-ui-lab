@@ -2531,6 +2531,16 @@ body.mobile-mode #learn-panel .retro-btn {
 body.mobile-mode #learn-panel .retro-choices {
   flex-wrap: wrap;
 }
+body.learn-preparing #board.board-interaction-locked {
+  box-shadow: 0 0 0 3px rgba(56, 147, 232, 0.72);
+}
+body.learn-preparing #board.board-interaction-locked cg-board {
+  cursor: wait !important;
+}
+.engine-power.lesson-owned {
+  background: linear-gradient(180deg, #397fc2 0%, #245984 100%);
+  cursor: not-allowed;
+}
 .retro-title {
   display: flex;
   align-items: center;

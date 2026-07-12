@@ -1453,27 +1453,34 @@ async function main() {
   try { engine.setThreads(defaultThreads); } catch (_) { /* engine may still be booting */ }
 
   ui.rangeSkill.addEventListener('input', () => {
+    if (window.__learnOwnsEngine) return;
     ui.skillVal.textContent = ui.rangeSkill.value;
     engine.setSkill(+ui.rangeSkill.value);
   });
   ui.rangeMultipv.addEventListener('input', () => {
+    if (window.__learnOwnsEngine) return;
     ui.multipvVal.textContent = ui.rangeMultipv.value;
     engine.setMultiPV(+ui.rangeMultipv.value);
     fireAnalysis();
   });
   ui.rangeThreads.addEventListener('input', () => {
+    if (window.__learnOwnsEngine) return;
     ui.threadsVal.textContent = ui.rangeThreads.value;
     engine.setThreads(+ui.rangeThreads.value);
     fireAnalysis();
   });
   ui.limitMode.addEventListener('change', () => {
+    if (window.__learnOwnsEngine) return;
     const m = ui.limitMode.value;
     if (m === 'depth')    ui.limitValue.value = 18;
     if (m === 'movetime') ui.limitValue.value = 2000;
     ui.limitValue.disabled = (m === 'infinite');
     fireAnalysis();
   });
-  ui.limitValue.addEventListener('change', () => fireAnalysis());
+  ui.limitValue.addEventListener('change', () => {
+    if (window.__learnOwnsEngine) return;
+    fireAnalysis();
+  });
 
   // (Piece-value-system selector removed — it only influenced the Position
   // tab's imbalance panel and was taking up header/drawer space.
@@ -1582,6 +1589,7 @@ async function main() {
   }
 
   ui.selectFlavor.addEventListener('change', async () => {
+    if (window.__learnOwnsEngine) return;
     const f = ui.selectFlavor.value;
     if (f === currentFlavor) return;
     localStorage.setItem(FLAVOR_STORAGE, f);
@@ -3116,12 +3124,13 @@ async function main() {
     return p;
   }
   function _closeLearnPanel() {
+    _learn.runId = (_learn.runId || 0) + 1; // invalidate every pending async continuation
     if (_learn.preparing) {
       try { window.__stopRetrospectiveSweep?.(); } catch {}
     }
     _learn.active = false;
     _learn.userDismissed = true;   // suppresses pill-click auto-enter
-    document.body.classList.remove('learn-active', 'learn-phase-find');
+    document.body.classList.remove('learn-active', 'learn-phase-find', 'learn-preparing');
     document.body.classList.remove('learn-panel-open');
     if (_learn.panel) { _learn.panel.remove(); _learn.panel = null; }
     const host = document.getElementById('learn-panel-host');
@@ -3133,6 +3142,8 @@ async function main() {
     _learn.openingUcis = new Set();
     _learn.preparing = false;
     window.__learnOwnsEngine = false;
+    try { board.setInteractionLocked?.(false); } catch {}
+    try { window.__setLearnEngineControls?.({ active: false, preparing: false }); } catch {}
     try { fireAnalysis(); } catch {}
   }
   function _countMistakeTotal() {
@@ -3145,6 +3156,10 @@ async function main() {
   }
   function _solvedCount() { return _learn.solvedPlies.size; }
   function _renderLearnPanel(state) {
+    // A delayed engine/database continuation must never resurrect a lesson
+    // the user explicitly cancelled or closed. Starting a new lesson clears
+    // userDismissed before its first render.
+    if (_learn.userDismissed) return;
     const p = _ensureLearnPanel();
     // Phase-specific body class so CSS can hide chessground arrows
     // while the user is in the FIND phase (don't peek the engine's
@@ -3730,6 +3745,9 @@ async function main() {
   if (btnLearnMistakes) {
     btnLearnMistakes.addEventListener('click', async () => {
       if (_learn.preparing) return;
+      const runId = (_learn.runId || 0) + 1;
+      _learn.runId = runId;
+      const runIsCurrent = () => _learn.runId === runId && _learn.active;
       _learn.userDismissed = false;
       if (document.body.classList.contains('mobile-mode')) {
         document.body.classList.remove('mobile-drawer-collapsed');
@@ -3740,33 +3758,47 @@ async function main() {
       _learn.active = true;
       _learn.preparing = true;
       window.__learnOwnsEngine = true;
-      document.body.classList.add('learn-active');
+      document.body.classList.add('learn-active', 'learn-preparing');
+      try { board.setInteractionLocked?.(true); } catch {}
+      const prepTotal = (board.tree?.nodesAlong?.(board.livePath || '')?.length || 0) + 1;
+      try { window.__setLearnEngineControls?.({ active: true, preparing: true, done: 0, total: prepTotal }); } catch {}
       _renderLearnPanel('preparing');
+      const initialPrepStatus = document.getElementById('learn-prep-status');
+      if (initialPrepStatus) initialPrepStatus.textContent = `Analysing position 0 of ${prepTotal}…`;
       updateLearnButton();
       const mainlineKey = board.tree?.mainlineNodes?.().map(n => n.uci).join(',') || '';
       const sweepKey = board.startingFen + '|' + mainlineKey;
       try {
+        // Guarantee at least one clearly visible preparation frame even
+        // when every position is already cached and the sweep completes
+        // synchronously. On a short clean opening, instant completion used
+        // to make the progress UI appear to be missing entirely.
+        await new Promise(resolve => setTimeout(resolve, 350));
+        if (!runIsCurrent()) return;
         if (ui.narrationText) ui.narrationText.innerHTML = '🔍 Preparing a focused Lichess-style mistake lesson…';
         if (window.__mistakesSweptForFen !== sweepKey) {
           const finished = await retrospectiveSweep({
             minDepth: 14,
             requireBestMove: true,
             onProgress: (done, total) => {
+              if (!runIsCurrent()) return;
               const status = document.getElementById('learn-prep-status');
               if (status) status.textContent = `Analysing position ${done} of ${total}…`;
               const fill = document.getElementById('learn-progress-fill');
               if (fill) fill.style.width = `${Math.round((done / Math.max(1, total)) * 100)}%`;
+              try { window.__setLearnEngineControls?.({ active: true, preparing: true, done, total }); } catch {}
             },
           });
-          if (!finished || !_learn.active) return;
+          if (!finished || !runIsCurrent()) return;
           window.__mistakesSweptForFen = sweepKey;
         }
         let candidates = _findMistakePlies();
         await _excludeMasterOpeningMoves(candidates);
-        if (!_learn.active) return;
+        if (!runIsCurrent()) return;
         candidates = _findMistakePlies();
         _hydrateLearnSolutions(candidates);
         await persistReanalysisForLoadedGame();
+        if (!runIsCurrent()) return;
         if (!candidates.length) {
           if (ui.narrationText) ui.narrationText.innerHTML = '🎉 No meaningful mistakes found in this game — clean play!';
           _learn.active = false;
@@ -3785,7 +3817,16 @@ async function main() {
         _renderLearnPanel('prep-fail');
         try { fireAnalysis(); } catch {}
       } finally {
+        if (_learn.runId !== runId) return;
         _learn.preparing = false;
+        document.body.classList.remove('learn-preparing');
+        try { board.setInteractionLocked?.(false); } catch {}
+        try {
+          window.__setLearnEngineControls?.({
+            active: !!_learn.active,
+            preparing: false,
+          });
+        } catch {}
         updateLearnButton();
       }
     });
@@ -3979,11 +4020,11 @@ async function main() {
   // never evaluated before, so every other ply had cpWhite: null.
   let sweepRunning = false;
   let sweepAbort = false;
-  // Auto-abort the background sweep the moment the user does anything
-  // that needs the engine — making a move, navigating history, etc.
-  // Frees the engine for free-analysis; sweep can resume on the next
-  // explicit Learn click (verify-on-demand path).
+  // Auto-abort ordinary background reanalysis when the user needs the
+  // engine. A Learn-owned sweep is different: it snapshots its target
+  // positions first, so history navigation is safe and must not cancel it.
   function _abortSweepIfRunning() {
+    if (window.__learnOwnsEngine) return;
     if (sweepRunning) {
       console.log('[sweep] user interaction — aborting background sweep');
       sweepAbort = true;
@@ -4006,18 +4047,30 @@ async function main() {
     try { engine.stop(); } catch {}
     try { engine.setSkill(20); } catch {}
     try {
-      const history = board.chess.history({ verbose: true });
-      if (!history.length) return false;
-      const replay = new Chess(board.startingFen);
       const targets = [];
       // Starting position + every post-move FEN
       targets.push({ fen: board.startingFen, label: 'start' });
-      for (const mv of history) {
-        const res = replay.move(mv.san, { sloppy: true });
-        if (!res) break;
-        targets.push({ fen: replay.fen(), label: mv.san });
+      // Always sweep the durable live game, not the currently displayed
+      // historical position. This makes ◀/▶ navigation harmless while the
+      // lesson prepares and fixes partial scans when Learn is launched
+      // while the user is already reviewing an earlier ply.
+      const liveNodes = board.tree?.nodesAlong?.(board.livePath || '') || [];
+      if (liveNodes.length) {
+        for (const node of liveNodes) {
+          if (node?.fen) targets.push({ fen: node.fen, label: node.san || node.uci || '' });
+        }
+      } else {
+        const history = board.chess.history({ verbose: true });
+        if (!history.length) return false;
+        const replay = new Chess(board.startingFen);
+        for (const mv of history) {
+          const res = replay.move(mv.san, { sloppy: true });
+          if (!res) break;
+          targets.push({ fen: replay.fen(), label: mv.san });
+        }
       }
       let done = 0;
+      if (onProgress) onProgress(0, targets.length);
       for (const t of targets) {
         if (sweepAbort) {
           if (onProgress) onProgress(done, targets.length, true);
@@ -8413,6 +8466,7 @@ async function main() {
 
   // Restart engine button — force-reboots the current flavor
   document.getElementById('btn-restart').addEventListener('click', async () => {
+    if (window.__learnOwnsEngine) return;
     ui.narrationText.textContent = 'Restarting engine…';
     await switchEngineFlavor(currentFlavor);
     engine.setSkill(+ui.rangeSkill.value);
@@ -11189,6 +11243,60 @@ async function main() {
   // Lock button: hard-disable the engine until user explicitly unlocks.
   // While locked: no engine.start() is ever issued.
   const btnLock = document.getElementById('btn-lock');
+
+  const learnEngineControlIds = [
+    'btn-lock', 'engine-power', 'btn-threat', 'btn-pause', 'btn-restart',
+    'select-flavor', 'range-skill', 'range-multipv', 'range-threads',
+    'limit-mode', 'limit-value', 'select-hash', 'btn-clear-hash',
+    'btn-preload-engines', 'btn-clear-engine-cache',
+  ];
+  const learnPrepMutationIds = [
+    'btn-new', 'btn-undo', 'btn-practice', 'btn-paste-fen', 'btn-editor',
+    'btn-archive-now', 'btn-tournament', 'kbd-move',
+  ];
+  const setTemporaryDisabled = (ids, key, disabled) => {
+    const attr = `data-${key}-was-disabled`;
+    for (const id of ids) {
+      const el = document.getElementById(id);
+      if (!el) continue;
+      if (disabled) {
+        if (!el.hasAttribute(attr)) el.setAttribute(attr, el.disabled ? '1' : '0');
+        el.disabled = true;
+      } else if (el.hasAttribute(attr)) {
+        el.disabled = el.getAttribute(attr) === '1';
+        el.removeAttribute(attr);
+      }
+    }
+  };
+
+  // Learn owns the single Stockfish worker. Engine controls stay locked for
+  // the whole lesson; board-mutating controls are locked only during its
+  // preparation sweep. History navigation and Cancel remain available.
+  window.__setLearnEngineControls = ({ active = false, preparing = false, done = 0, total = 0 } = {}) => {
+    setTemporaryDisabled(learnEngineControlIds, 'learn-engine', active);
+    setTemporaryDisabled(learnPrepMutationIds, 'learn-prep', preparing);
+    const label = powerBtn?.querySelector('.engine-power-label');
+    const sub = powerBtn?.querySelector('.engine-power-sub');
+    if (active) {
+      powerBtn?.classList.remove('off');
+      powerBtn?.classList.add('lesson-owned');
+      if (label) {
+        label.textContent = preparing
+          ? `LESSON SCAN${total ? ` · ${done}/${total}` : ''}`
+          : 'LESSON MODE';
+      }
+      if (sub) sub.textContent = 'Cancel or close the lesson to release engine';
+      if (btnLock) {
+        btnLock.textContent = '🔒 Lesson engine';
+        btnLock.title = 'Learn from Mistakes currently controls Stockfish. Use Cancel in the lesson panel.';
+      }
+    } else {
+      powerBtn?.classList.remove('lesson-owned');
+      updatePowerButton();
+      updateLockButton();
+    }
+  };
+
   function updateLockButton() {
     if (locked) {
       btnLock.textContent = '🔒 Engine locked';
@@ -11203,6 +11311,10 @@ async function main() {
   // Unified lock toggle — used by both the small header button and the big
   // ENGINE power button next to the eval panel. Keeps both in sync.
   function toggleEngineLocked() {
+    if (window.__learnOwnsEngine) {
+      if (ui.narrationText) ui.narrationText.textContent = '🎓 Learn from Mistakes is using Stockfish. Cancel or close the lesson first.';
+      return;
+    }
     locked = !locked;
     localStorage.setItem('stockfish-explain.engine-locked', locked ? '1' : '0');
     updateLockButton();
@@ -11237,6 +11349,14 @@ async function main() {
     if (!powerBtn) return;
     const label = powerBtn.querySelector('.engine-power-label');
     const sub   = powerBtn.querySelector('.engine-power-sub');
+    if (window.__learnOwnsEngine) {
+      powerBtn.classList.remove('off');
+      powerBtn.classList.add('lesson-owned');
+      if (label && !label.textContent.startsWith('LESSON')) label.textContent = 'LESSON MODE';
+      if (sub) sub.textContent = 'Cancel or close the lesson to release engine';
+      return;
+    }
+    powerBtn.classList.remove('lesson-owned');
     if (locked) {
       powerBtn.classList.add('off');
       if (label) label.textContent = 'ENGINE: OFF';
@@ -11267,6 +11387,7 @@ async function main() {
   let threatFlippedFen   = null;
 
   function enterThreatMode() {
+    if (window.__learnOwnsEngine) return;
     if (!engineReady) return;
     const fen  = board.fen();
     const parts = fen.split(' ');
@@ -11405,6 +11526,7 @@ async function main() {
 
   const btnPause = document.getElementById('btn-pause');
   btnPause.addEventListener('click', () => {
+    if (window.__learnOwnsEngine) return;
     paused = !paused;
     if (paused) {
       window.__engineMuted = true;
@@ -11425,6 +11547,7 @@ async function main() {
   ui.kbdMove.addEventListener('keydown', (e) => {
     if (e.key !== 'Enter') return;
     e.preventDefault();
+    if (board.interactionLocked) return;
     const txt = ui.kbdMove.value.trim();
     if (!txt) return;
     try {

@@ -22,6 +22,7 @@ export class BoardController extends EventTarget {
     this.cg = null;
     this.orientation = 'white';
     this.playerColor = 'both';
+    this.interactionLocked = false;
     // Variation tree — mirrors every move played into a branching
     // structure so the user can explore sidelines without losing the
     // mainline. `tree.currentPath` is the path of the currently-viewed
@@ -400,10 +401,7 @@ export class BoardController extends EventTarget {
       // from the rebuilt replay board.
       this._historicalChess = replay;
       this.cg.set({
-        movable: {
-          color: this.playerColor || 'both',
-          dests: toDests(replay),
-        },
+        movable: this._movableConfig(replay),
       });
     }
     this.dispatchEvent(new CustomEvent('nav', { detail: { ply: this.viewPly, live: this.isAtLive() } }));
@@ -441,7 +439,7 @@ export class BoardController extends EventTarget {
       turnColor: turn,
       lastMove,
       check: replay.inCheck() ? turn : false,
-      movable: { color: this.playerColor || 'both', dests: toDests(replay) },
+      movable: this._movableConfig(replay),
     });
     this.dispatchEvent(new CustomEvent('nav', {
       detail: { path: newPath, ply: this.viewPly, live: atLivePath },
@@ -466,9 +464,29 @@ export class BoardController extends EventTarget {
     this.cg.set({ fen, turnColor, lastMove, check });
   }
 
+  _movableConfig(chess = this.chess, color = this.playerColor || 'both') {
+    if (this.interactionLocked) return { color: undefined, dests: new Map() };
+    return { color, dests: toDests(chess) };
+  }
+
+  /** Make the board view-only without disabling history navigation. */
+  setInteractionLocked(locked) {
+    this.interactionLocked = !!locked;
+    this._clearTargetFirst();
+    try { this.cg?.cancelMove?.(); } catch {}
+    try {
+      this.cg?.set({
+        movable: this._movableConfig(this.chess),
+        draggable: { enabled: !this.interactionLocked, showGhost: true },
+        selectable: { enabled: !this.interactionLocked },
+      });
+    } catch {}
+    this.rootEl?.classList?.toggle('board-interaction-locked', this.interactionLocked);
+  }
+
   _allowUserToMoveIfTheirTurn() {
     // Analysis mode: always let the side-to-move act.
-    this.cg.set({ movable: { color: 'both', dests: toDests(this.chess) } });
+    this.cg.set({ movable: this._movableConfig(this.chess, 'both') });
   }
 
   // ──────── user move handling ────────
@@ -593,6 +611,11 @@ export class BoardController extends EventTarget {
   }
 
   async _onUserMove(orig, dest, _meta) {
+    if (this.interactionLocked) {
+      this._clearTargetFirst();
+      this._syncToChessground();
+      return;
+    }
     console.log('[move] _onUserMove called', {
       orig, dest,
       via: _meta?.via || 'unknown',         // 'chessground-after' | 'pending-source' | 'target-first-click' | 'target-drag' | ...
@@ -800,14 +823,12 @@ export class BoardController extends EventTarget {
       turnColor: turn,
       lastMove,
       check: this.chess.inCheck() ? turn : false,
-      movable: {
-        color: this.playerColor || 'both',
-        dests: toDests(this.chess),
-      },
+      movable: this._movableConfig(this.chess),
     });
   }
 
   playEngineMove(uci) {
+    if (this.interactionLocked) return false;
     const from = uci.slice(0, 2);
     const to   = uci.slice(2, 4);
     const promotion = uci.length > 4 ? uci[4] : undefined;
@@ -852,6 +873,7 @@ export class BoardController extends EventTarget {
   }
 
   newGame() {
+    if (this.interactionLocked) return false;
     this._clearTargetFirst();   // audit B5
     this.chess.reset();
     this.startingFen = this.chess.fen();   // back to standard start
@@ -863,13 +885,14 @@ export class BoardController extends EventTarget {
       turnColor: 'white',
       lastMove: undefined,
       check: false,
-      movable: { color: 'both', dests: toDests(this.chess) },
+      movable: this._movableConfig(this.chess, 'both'),
     });
     this.cg.setAutoShapes([]);
     this.dispatchEvent(new CustomEvent('new-game'));
   }
 
   undo({ prune = false } = {}) {
+    if (this.interactionLocked) return false;
     this._clearTargetFirst();   // audit B5
     // Analysis mode: undo one ply at a time.
     const retractedPath = this.tree.currentPath;   // node being undone
@@ -915,6 +938,7 @@ export class BoardController extends EventTarget {
    * of playing 70 moves in sequence.
    */
   playUciMoves(uciList, { animate = true } = {}) {
+    if (this.interactionLocked) return false;
     if (!this.isAtLive()) this.toEnd();
     if (!uciList || !uciList.length) return false;
 
