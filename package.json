@@ -9,6 +9,7 @@
   },
   "scripts": {
     "start": "node server.js",
+    "test": "node --test",
     "serve-python": "python3 scripts/serve.py"
   },
   "dependencies": {

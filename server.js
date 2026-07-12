@@ -31,6 +31,7 @@ import { wireAuth } from './src/server/auth.js';
 import { wireGames } from './src/server/games.js';
 import { wireVariations } from './src/server/variations.js';
 import { wireLibrary } from './src/server/library.js';
+import { wireSync } from './src/server/sync.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT       = Number(process.env.PORT || 8000);
@@ -313,6 +314,7 @@ wireAuth(app);
 wireGames(app);
 wireVariations(app);
 wireLibrary(app);
+wireSync(app);
 
 // ───── source/secret blocklist (audit S2) ─────
 // express.static(__dirname) serves the REPO ROOT, so without this guard

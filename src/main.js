@@ -3020,6 +3020,45 @@ async function main() {
     // while exploring the analysis on their own.
     userDismissed: false,
   };
+  const LEARN_SETTINGS_KEY = 'stockfish-explain.learn-settings';
+  const LEARN_SETTING_VALUES = {
+    scanMs: new Set([200, 400, 750, 1500]),
+    attemptMs: new Set([1000, 3000, 5000]),
+    tolerancePoints: new Set([4, 6, 8]),
+  };
+  function _loadLearnSettings() {
+    let raw = {};
+    try { raw = JSON.parse(localStorage.getItem(LEARN_SETTINGS_KEY) || '{}') || {}; } catch {}
+    const pick = (key, fallback) => {
+      const value = Number(raw[key]);
+      return LEARN_SETTING_VALUES[key].has(value) ? value : fallback;
+    };
+    return {
+      scanMs: pick('scanMs', 400),
+      attemptMs: pick('attemptMs', 3000),
+      tolerancePoints: pick('tolerancePoints', 4),
+    };
+  }
+  let _learnSettings = _loadLearnSettings();
+  function _saveLearnSettings(next) {
+    _learnSettings = { ..._learnSettings, ...next };
+    try { localStorage.setItem(LEARN_SETTINGS_KEY, JSON.stringify(_learnSettings)); } catch {}
+  }
+  const learnScanSelect = document.getElementById('learn-scan-time');
+  const learnAttemptSelect = document.getElementById('learn-attempt-time');
+  const learnToleranceSelect = document.getElementById('learn-tolerance');
+  if (learnScanSelect) {
+    learnScanSelect.value = String(_learnSettings.scanMs);
+    learnScanSelect.addEventListener('change', () => _saveLearnSettings({ scanMs: +learnScanSelect.value }));
+  }
+  if (learnAttemptSelect) {
+    learnAttemptSelect.value = String(_learnSettings.attemptMs);
+    learnAttemptSelect.addEventListener('change', () => _saveLearnSettings({ attemptMs: +learnAttemptSelect.value }));
+  }
+  if (learnToleranceSelect) {
+    learnToleranceSelect.value = String(_learnSettings.tolerancePoints);
+    learnToleranceSelect.addEventListener('change', () => _saveLearnSettings({ tolerancePoints: +learnToleranceSelect.value }));
+  }
   // Auto-clear the learn-mode best-move arrow as soon as the user
   // navigates / moves away from the position it was drawn for. Without
   // this the green arrow stayed glued to the squares it pointed at,
@@ -3045,11 +3084,14 @@ async function main() {
   //   value: { uci, san, cpWhite, evalFmt, depth }
   const _verifierBest = new Map();
   // Shared sigmoid (audit A5); coalesce null→0 for this helper's callers.
-  const _cpToWinChance = (cp) => winChanceWhite(cp, null) ?? 0;
-  const _povWin = (color, cpWhite) => {
-    const w = _cpToWinChance(cpWhite);
+  const _cpToWinChance = (cp, mate = null) => winChanceWhite(cp, mate) ?? 0;
+  const _povWin = (color, cpWhite, mate = null) => {
+    const w = _cpToWinChance(cpWhite, mate);
     return color === 'w' ? w : -w;
   };
+  const _povDiff = (color, afterCp, beforeCp, afterMate = null, beforeMate = null) =>
+    (_povWin(color, afterCp, afterMate) - _povWin(color, beforeCp, beforeMate)) / 2;
+  const _learnComparisonCache = new Map();
   function _positionLearnPanel(p) {
     // Anchor the panel to the top-right corner of the board rather
     // than the viewport. Closer to the action, easier to read while
@@ -3155,6 +3197,62 @@ async function main() {
     return idx < 0 ? 0 : idx + 1;
   }
   function _solvedCount() { return _learn.solvedPlies.size; }
+
+  function _formatLearnEval(cpWhite, mateWhite) {
+    if (mateWhite != null) {
+      const povMate = _learn.solverColor === 'w' ? mateWhite : -mateWhite;
+      return `${povMate >= 0 ? '#' : '#-'}${Math.abs(povMate)}`;
+    }
+    if (cpWhite == null || !Number.isFinite(cpWhite)) return '—';
+    const povCp = _learn.solverColor === 'w' ? cpWhite : -cpWhite;
+    return `${povCp >= 0 ? '+' : ''}${(povCp / 100).toFixed(2)}`;
+  }
+
+  function _formatLearnWin(cpWhite, mateWhite) {
+    if (cpWhite == null && mateWhite == null) return '—';
+    const chance = (_povWin(_learn.solverColor, cpWhite, mateWhite) + 1) * 50;
+    return `${Math.max(0, Math.min(100, chance)).toFixed(1)}%`;
+  }
+
+  function _comparisonDelta(row, best) {
+    if (!row || !best || (row.cpWhite == null && row.mateWhite == null)) return null;
+    return _povDiff(
+      _learn.solverColor,
+      row.cpWhite,
+      best.cpWhite,
+      row.mateWhite,
+      best.mateWhite,
+    ) * 100;
+  }
+
+  function _learnComparisonHtml() {
+    const data = _learn.comparison;
+    if (!data?.top?.length) return '<p class="retro-played">No comparison data returned.</p>';
+    const best = data.top[0];
+    const rowHtml = (label, row, css = '') => {
+      if (!row) return '';
+      const delta = _comparisonDelta(row, best);
+      const deltaText = delta == null ? '—' : Math.abs(delta) < 0.05 ? 'Best' : `${delta.toFixed(1)} pts`;
+      return `<tr class="${css}">
+        <th>${escapeHtml(label)}</th>
+        <td>${escapeHtml(row.san || row.uci || '—')}</td>
+        <td>${_formatLearnEval(row.cpWhite, row.mateWhite)}</td>
+        <td>${_formatLearnWin(row.cpWhite, row.mateWhite)}</td>
+        <td>${deltaText}</td>
+      </tr>`;
+    };
+    const topRows = data.top.map((line, i) => rowHtml(`Engine #${i + 1}`, line, i === 0 ? 'learn-row-best' : '')).join('');
+    return `<div class="learn-comparison-scroll"><table class="learn-comparison">
+      <thead><tr><th>Result</th><th>Move</th><th>Eval</th><th>Win</th><th>vs #1</th></tr></thead>
+      <tbody>
+        ${rowHtml('Original', data.original, 'learn-row-original')}
+        ${rowHtml('Your try', data.attempt, _learn.gradePassed ? 'learn-row-attempt-pass' : 'learn-row-attempt-fail')}
+        ${topRows}
+      </tbody>
+    </table></div>
+    <p class="retro-played" style="opacity:.68;font-size:11px;margin-top:7px;">Eval and winning chance are from your side. “pts” means winning-probability points behind Engine #1.</p>`;
+  }
+
   function _renderLearnPanel(state) {
     // A delayed engine/database continuation must never resurrect a lesson
     // the user explicitly cancelled or closed. Starting a new lesson clears
@@ -3189,7 +3287,7 @@ async function main() {
       inner = `
         <p class="retro-prompt">Find a better move for <strong>${color}</strong></p>
         <p class="retro-played">You played <strong>${_learn.playedSan || '?'}</strong>.<br>
-           <span style="opacity:0.6;font-size:11px;">Any reasonable move within ~4 win-probability points of the best is accepted — you don't need the engine's exact pick.</span></p>
+           <span style="opacity:0.6;font-size:11px;">Any reasonable move within ${_learnSettings.tolerancePoints} win-probability points of the best is accepted — you don't need the engine's exact pick.</span></p>
         <div class="retro-choices">
           <button class="retro-btn" id="learn-solution">View solution</button>
           <button class="retro-btn" id="learn-skip">Skip</button>
@@ -3206,12 +3304,13 @@ async function main() {
         </div>
         <p class="retro-played" style="opacity:0.8;">That keeps you in the game.</p>
         <div class="retro-choices">
+          <button class="retro-btn" id="learn-compare">Compare with top 3</button>
           ${continueBtn}
         </div>`;
     } else if (state === 'fail') {
       const diffPct = _learn.lastDiffPct;
       const diffLine = (diffPct != null && Number.isFinite(diffPct))
-        ? `<p class="retro-played" style="opacity:0.6;font-size:11px;">Win-chance dropped ${Math.abs(diffPct)} pts (threshold: 4 pts).</p>`
+        ? `<p class="retro-played" style="opacity:0.6;font-size:11px;">This try is ${Math.abs(diffPct)} pts behind best (accepted within ${_learnSettings.tolerancePoints} pts).</p>`
         : '';
       inner = `
         <div class="retro-icon-line retro-fail">
@@ -3221,8 +3320,17 @@ async function main() {
         <p class="retro-played" style="opacity:0.8;">Try a different move — or click below to see the best.</p>
         ${diffLine}
         <div class="retro-choices">
-          <button class="retro-btn" id="learn-solution">View solution</button>
+          <button class="retro-btn" id="learn-compare">Show your result + top 3</button>
           <button class="retro-btn" id="learn-retry">Try again</button>
+        </div>`;
+    } else if (state === 'comparing') {
+      inner = `<p class="retro-prompt">⏳ Comparing your move with the top three…</p>
+        <p class="retro-played">Full-strength Stockfish · ${(_learnSettings.attemptMs / 1000).toFixed(_learnSettings.attemptMs % 1000 ? 1 : 0)} s</p>
+        <div class="retro-progress"><div id="learn-progress-fill"></div></div>`;
+    } else if (state === 'comparison') {
+      inner = `${_learnComparisonHtml()}
+        <div class="retro-choices">
+          ${_learn.gradePassed ? continueBtn : '<button class="retro-btn" id="learn-retry">Try again</button><button class="retro-btn retro-continue" id="learn-next">Skip / next ▶</button>'}
         </div>`;
     } else if (state === 'view') {
       inner = `
@@ -3299,6 +3407,7 @@ async function main() {
     p.querySelector('#learn-next')?.addEventListener('click', _goNextMistake);
     p.querySelector('#learn-skip')?.addEventListener('click', _goNextMistake);
     p.querySelector('#learn-solution')?.addEventListener('click', _showSolution);
+    p.querySelector('#learn-compare')?.addEventListener('click', _loadLearnComparison);
     p.querySelector('#learn-retry')?.addEventListener('click', () => _enterLearnMode(_learn.targetPly));
     p.querySelector('#learn-restart')?.addEventListener('click', () => {
       // Reset progress (lila: retroCtrl.reset()) and restart at ply 1.
@@ -3402,6 +3511,99 @@ async function main() {
     }
     _enterLearnMode(next);
   }
+
+  function _lineToLearnRow(line, fen) {
+    if (!line) return null;
+    const whiteToMove = fen.split(' ')[1] === 'w';
+    const signed = whiteToMove ? line.score : -line.score;
+    return {
+      uci: line.uci,
+      san: line.san || line.uci,
+      cpWhite: line.scoreKind === 'mate' ? null : signed,
+      mateWhite: line.scoreKind === 'mate' ? signed : null,
+      pvSan: line.pvSan || '',
+    };
+  }
+
+  async function _loadLearnComparison() {
+    if (!_learn.active || _learn.comparing || !_learn.prevFen) return;
+    _learn.comparing = true;
+    const seq = (_learn.compareSeq = (_learn.compareSeq || 0) + 1);
+    const fallbackState = _learn.gradePassed ? 'win' : 'fail';
+    try { board.setInteractionLocked?.(true); } catch {}
+    _renderLearnPanel('comparing');
+    const cacheKey = `${_learn.prevFen}|${_learnSettings.attemptMs}`;
+    const savedSkill = engine.skill;
+    try {
+      let top = _learnComparisonCache.get(cacheKey);
+      if (!top) {
+        try { engine.setSkill(20); } catch {}
+        const result = await AICoach.probeEngine(engine, _learn.prevFen, 18, 3, _learnSettings.attemptMs);
+        top = (result.lines || []).slice(0, 3).map(line => _lineToLearnRow(line, _learn.prevFen)).filter(Boolean);
+        if (top.length) _learnComparisonCache.set(cacheKey, top);
+      }
+      if (!_learn.active || _learn.userDismissed || _learn.compareSeq !== seq) return;
+      let attempt = {
+        uci: _learn.attemptUci,
+        san: _learn.attemptSan || _learn.attemptUci || '—',
+        cpWhite: _learn.attemptCpWhite ?? null,
+        mateWhite: _learn.attemptMateWhite ?? null,
+      };
+      // Exact engine/book moves may have skipped the searchmoves probe.
+      // If the attempted UCI is one of MultiPV's lines, use that line's
+      // like-for-like score in the comparison table.
+      const matchingTop = top?.find(line => line.uci === _learn.attemptUci);
+      if ((attempt.cpWhite == null && attempt.mateWhite == null) && matchingTop) {
+        attempt = { ...matchingTop, san: _learn.attemptSan || matchingTop.san };
+      }
+      _learn.comparison = {
+        original: {
+          uci: _learn.playedUci,
+          san: _learn.playedSan || _learn.playedUci || '—',
+          cpWhite: _learn.originalCpWhite ?? null,
+          mateWhite: _learn.originalMateWhite ?? null,
+        },
+        attempt,
+        top: top || [],
+      };
+      _renderLearnPanel('comparison');
+    } catch (err) {
+      console.warn('[learn] top-three comparison failed', err);
+      if (_learn.active && !_learn.userDismissed && _learn.compareSeq === seq) {
+        _learn.comparisonError = true;
+        _renderLearnPanel(fallbackState);
+      }
+    } finally {
+      _learn.comparing = false;
+      try { engine.setSkill(savedSkill); } catch {}
+      if (_learn.active && !_learn.userDismissed) {
+        try { board.setInteractionLocked?.(false); } catch {}
+      }
+    }
+  }
+
+  function _completeLearnAttempt(passed) {
+    _learn.gradePassed = !!passed;
+    _renderLearnPanel(passed ? 'win' : 'fail');
+    // A successful lesson is solved, so revealing the comparison no
+    // longer spoils a retry. Failed attempts keep it behind the explicit
+    // “Show your result + top 3” button.
+    if (passed) {
+      // Capture the lesson identity. A fast tap on “Next mistake” must not
+      // let this queued comparison run against the newly-entered position.
+      const targetPly = _learn.targetPly;
+      const attemptUci = _learn.attemptUci;
+      setTimeout(() => {
+        if (_learn.active
+          && _learn.gradePassed
+          && _learn.targetPly === targetPly
+          && _learn.attemptUci === attemptUci) {
+          _loadLearnComparison();
+        }
+      }, 0);
+    }
+  }
+
   function _showSolution() {
     // Jump board forward one ply, showing the played move, then ask
     // engine for top candidate from the pre-mistake position.
@@ -3564,6 +3766,17 @@ async function main() {
     _learn.playedSan = cur.san;
     _learn.playedUci = _mainlineNodeAtPly(targetPly)?.uci || null;
     _learn.bestBeforeCpWhite = prev.cpWhite ?? 0;
+    _learn.bestBeforeMateWhite = prev.mate ?? null;
+    _learn.originalCpWhite = cur.cpWhite ?? null;
+    _learn.originalMateWhite = cur.mate ?? null;
+    _learn.attemptUci = null;
+    _learn.attemptSan = null;
+    _learn.attemptCpWhite = null;
+    _learn.attemptMateWhite = null;
+    _learn.comparison = null;
+    _learn.comparisonError = false;
+    _learn.gradePassed = false;
+    _learn.compareSeq = (_learn.compareSeq || 0) + 1;
     _learn.openingUcis = new Set();
     // Clear any solution-revealed state from the previous mistake so
     // the "user already saw solution" shortcut in onMove doesn't
@@ -3619,6 +3832,12 @@ async function main() {
         ? mv.from + mv.to + (mv.promotion || '')
         : null;
       const postFen = board.fen();
+      _learn.attemptUci = userUci;
+      _learn.attemptSan = mv?.san || userUci || '—';
+      _learn.attemptFen = postFen;
+      const cachedAttempt = fenEvalCache.get(postFen);
+      _learn.attemptCpWhite = cachedAttempt?.cpWhite ?? null;
+      _learn.attemptMateWhite = cachedAttempt?.mate ?? null;
       const trialPath = board.tree?.currentPath || '';
       const discardFailedTrial = () => {
         try {
@@ -3637,7 +3856,9 @@ async function main() {
       if (userUci && knownBestUci && userUci.toLowerCase() === knownBestUci) {
         console.log('[learn-mode] user played the already-shown solution — instant win, no probe');
         _learn.lastDiffPct = 0;
-        _renderLearnPanel('win');
+        _learn.attemptCpWhite = _learn.bestBeforeCpWhite;
+        _learn.attemptMateWhite = _learn.bestBeforeMateWhite;
+        _completeLearnAttempt(true);
         return;
       }
       // Faithful Lichess fast paths: a master opening move or a move
@@ -3645,13 +3866,19 @@ async function main() {
       // mistake fails immediately. None of these need another search.
       if ((userUci && _learn.openingUcis.has(userUci)) || mv?.san?.endsWith('#')) {
         _learn.lastDiffPct = 0;
-        _renderLearnPanel('win');
+        if (mv?.san?.endsWith('#')) {
+          _learn.attemptCpWhite = null;
+          _learn.attemptMateWhite = _learn.solverColor === 'w' ? 1 : -1;
+        }
+        _completeLearnAttempt(true);
         return;
       }
       if (userUci && _learn.playedUci && userUci === _learn.playedUci) {
         _learn.lastDiffPct = null;
+        _learn.attemptCpWhite = _learn.originalCpWhite;
+        _learn.attemptMateWhite = _learn.originalMateWhite;
         discardFailedTrial();
-        _renderLearnPanel('fail');
+        _completeLearnAttempt(false);
         return;
       }
       // ── CACHE-FIRST GRADING ───────────────────────────────────
@@ -3660,16 +3887,22 @@ async function main() {
       const cached = fenEvalCache.get(postFen);
       // Require depth ≥ 14 from the preparation/analysis pass —
       // a stale shallow eval would re-introduce depth-mismatch fails.
-      if (cached && cached.cpWhite != null && (cached.depth || 0) >= 14) {
-        const before = _povWin(_learn.solverColor, _learn.bestBeforeCpWhite);
-        const after  = _povWin(_learn.solverColor, cached.cpWhite);
-        const diff = after - before;
+      if (cached && (cached.cpWhite != null || cached.mate != null) && (cached.depth || 0) >= 14) {
+        const diff = _povDiff(
+          _learn.solverColor,
+          cached.cpWhite,
+          _learn.bestBeforeCpWhite,
+          cached.mate,
+          _learn.bestBeforeMateWhite,
+        );
         _learn.lastDiffPct = Math.round(diff * 100);
+        _learn.attemptCpWhite = cached.cpWhite ?? null;
+        _learn.attemptMateWhite = cached.mate ?? null;
         console.log('[learn-mode] graded from cache (no probe)', {
           postFen: postFen.slice(0, 30) + '…', cachedCp: cached.cpWhite, depth: cached.depth, diff,
         });
-        if (diff > -0.04) _renderLearnPanel('win');
-        else { discardFailedTrial(); _renderLearnPanel('fail'); }
+        if (diff > -(_learnSettings.tolerancePoints / 100)) _completeLearnAttempt(true);
+        else { discardFailedTrial(); _completeLearnAttempt(false); }
         return;
       }
       // ── CACHE MISS → searchmoves probe ─────────────────────────
@@ -3695,18 +3928,22 @@ async function main() {
         }
         const hist = ev2.detail?.history || engine.history || [];
         const last = hist[hist.length - 1];
-        const cp = last?.score ?? 0;
-        let cpAfterWhite;
+        const score = last?.score ?? 0;
+        const isMate = last?.scoreKind === 'mate';
+        let cpAfterWhite = null;
+        let mateAfterWhite = null;
         if (userUci) {
           // searchmoves probe: score is from preFen's STM POV
           // representing the eval AFTER user's move. Convert to
           // white POV via the prev (solver-to-move) FEN.
           const preStm = _learn.prevFen.split(' ')[1];
-          cpAfterWhite = preStm === 'w' ? cp : -cp;
+          const signed = preStm === 'w' ? score : -score;
+          if (isMate) mateAfterWhite = signed; else cpAfterWhite = signed;
         } else {
           // Fallback: post-FEN probe; score is from postFen's STM POV.
           const stmAfter = postFen.split(' ')[1];
-          cpAfterWhite = stmAfter === 'w' ? cp : -cp;
+          const signed = stmAfter === 'w' ? score : -score;
+          if (isMate) mateAfterWhite = signed; else cpAfterWhite = signed;
         }
         // Cache the result so a retry of the SAME move is instant
         // next time. Mirrors how lichess caches local ceval results
@@ -3715,21 +3952,27 @@ async function main() {
           const depth = last?.depth || 0;
           const prev = fenEvalCache.get(postFen);
           if (!prev || (prev.depth || 0) < depth) {
-            fenEvalCache.set(postFen, { cpWhite: cpAfterWhite, mate: null, depth });
+            fenEvalCache.set(postFen, { cpWhite: cpAfterWhite, mate: mateAfterWhite, depth });
           }
         } catch {}
-        const before = _povWin(_learn.solverColor, _learn.bestBeforeCpWhite);
-        const after  = _povWin(_learn.solverColor, cpAfterWhite);
-        const diff = after - before;
+        _learn.attemptCpWhite = cpAfterWhite;
+        _learn.attemptMateWhite = mateAfterWhite;
+        const diff = _povDiff(
+          _learn.solverColor,
+          cpAfterWhite,
+          _learn.bestBeforeCpWhite,
+          mateAfterWhite,
+          _learn.bestBeforeMateWhite,
+        );
         _learn.lastDiffPct = Math.round(diff * 100);
-        if (diff > -0.04) _renderLearnPanel('win');
-        else { discardFailedTrial(); _renderLearnPanel('fail'); }
+        if (diff > -(_learnSettings.tolerancePoints / 100)) _completeLearnAttempt(true);
+        else { discardFailedTrial(); _completeLearnAttempt(false); }
       };
       engine.addEventListener('bestmove', onBest);
       if (userUci) {
-        engine.start(_learn.prevFen, { movetime: 3000, searchmoves: [userUci] });
+        engine.start(_learn.prevFen, { movetime: _learnSettings.attemptMs, searchmoves: [userUci] });
       } else {
-        engine.start(postFen, { movetime: 3000 });
+        engine.start(postFen, { movetime: _learnSettings.attemptMs });
       }
     };
     board.addEventListener('move', onMove);
@@ -3779,6 +4022,7 @@ async function main() {
         if (window.__mistakesSweptForFen !== sweepKey) {
           const finished = await retrospectiveSweep({
             minDepth: 14,
+            movetimeMs: _learnSettings.scanMs,
             requireBestMove: true,
             onProgress: (done, total) => {
               if (!runIsCurrent()) return;
@@ -4036,7 +4280,7 @@ async function main() {
   // Expose a stop hook so the 'Stop analysis' button in the reanalyze
   // UI can bail out mid-sweep if the user decides it's taking too long.
   window.__stopRetrospectiveSweep = () => { sweepAbort = true; try { engine.stop(); } catch {} };
-  async function retrospectiveSweep({ minDepth = 12, movetimeMs = 0, requireBestMove = false, onProgress } = {}) {
+  async function retrospectiveSweep({ minDepth = 12, movetimeMs = 0, requireBestMove = false, force = false, onProgress } = {}) {
     if (sweepRunning) return false;
     sweepRunning = true;
     sweepAbort = false;
@@ -4077,10 +4321,10 @@ async function main() {
           break;
         }
         const existing = fenEvalCache.get(t.fen);
-        // When user picks movetime-based analysis we re-probe regardless
-        // of cached depth (user is asking for a fresher look). For depth
-        // mode, respect cached deeper analyses.
-        if (!movetimeMs && existing && existing.depth != null && existing.depth >= minDepth &&
+        // Learn scans reuse a sufficiently deep cached best move even when
+        // their configured budget is time-based. Explicit Reanalyze passes
+        // set force=true because the user asked for a fresh result.
+        if (!force && existing && existing.depth != null && existing.depth >= minDepth &&
             (!requireBestMove || existing.bestUci)) {
           done++;
           if (onProgress) onProgress(done, targets.length);
@@ -7087,6 +7331,7 @@ async function main() {
     if (document.body.classList.contains('practice-finished')) return;
     document.body.classList.add('practice-finished');
     document.body.classList.remove('practice-thinking');
+    setTimeout(() => { try { window.__showDefaultGraph?.(); } catch {} }, 0);
     // Clear the practice-color backup signal — game's over, free
     // analysis allows moves for both sides.
     try { delete document.body.dataset.practiceColor; } catch {}
@@ -7730,7 +7975,7 @@ async function main() {
     const grade = (g) => {
       const item = queue[idx];
       if (!item) return;
-      const updated = Archive.gradeCard(item.card, g);
+      const updated = Archive.gradeCard({ ...item.card, _mistake: item.mistake }, g);
       Archive.upsertCard(updated);
       idx++;
       if (idx >= queue.length) showEmpty();
@@ -9441,6 +9686,11 @@ async function main() {
 
     const STORAGE_KEY = 'stockfish-explain.live-graph-visible';
     let graph = null;
+    let graphPref = null; // null = use safe default, true/false = explicit user choice
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      graphPref = saved === '1' ? true : saved === '0' ? false : null;
+    } catch {}
 
     function pliesFromBoard() {
       // Walk the mainline from the tree root, enriching each node with
@@ -9538,15 +9788,21 @@ async function main() {
       }
     }
 
-    function show() {
+    function show({ persist = true } = {}) {
       card.hidden = false;
-      try { localStorage.setItem(STORAGE_KEY, '1'); } catch {}
+      if (persist) {
+        graphPref = true;
+        try { localStorage.setItem(STORAGE_KEY, '1'); } catch {}
+      }
       btn.classList.add('live-graph-active');
       update();
     }
-    function hide() {
+    function hide({ persist = true } = {}) {
       card.hidden = true;
-      try { localStorage.setItem(STORAGE_KEY, '0'); } catch {}
+      if (persist) {
+        graphPref = false;
+        try { localStorage.setItem(STORAGE_KEY, '0'); } catch {}
+      }
       btn.classList.remove('live-graph-active');
       if (graph) { graph.destroy(); graph = null; }
     }
@@ -9558,9 +9814,7 @@ async function main() {
       card._reviewGame = null;
       const mtWrap = document.getElementById('live-movetime-wrap');
       if (mtWrap) mtWrap.hidden = true;
-      if (card.parentElement && card.parentElement.id === 'board-below-slot') {
-        document.body.appendChild(card);
-      }
+      if (card.parentElement && card.parentElement.id === 'board-below-slot') document.body.appendChild(card);
       // Return the stats panel back into the card so the compact
       // (non-review) floating layout keeps them all together.
       if (statsWrap.parentElement && statsWrap.parentElement.id === 'notation-below-slot') {
@@ -9568,12 +9822,14 @@ async function main() {
       }
     }
     btn.addEventListener('click', () => {
-      // Header toggle always opens the COMPACT floating card. Review
-      // mode (docked below board) is only activated via the
-      // window.__openReviewMode path from My Games row-click.
+      if (practiceColor && !document.body.classList.contains('practice-finished')) {
+        if (ui.narrationText) ui.narrationText.textContent = '📈 Evaluation graph unlocks when the practice game ends.';
+        return;
+      }
       if (card.hidden) {
         exitReviewMode();
         show();
+        relocateForSidebar();
       } else hide();
     });
     closeBtn?.addEventListener('click', () => {
@@ -9585,6 +9841,7 @@ async function main() {
     // a rapid-fire engine info stream doesn't re-render 50×/second.
     let rafPending = false;
     function requestUpdate() {
+      try { maybeShowDefaultGraph(); } catch {}
       if (rafPending) return;
       rafPending = true;
       requestAnimationFrame(() => { rafPending = false; update(); });
@@ -9622,6 +9879,10 @@ async function main() {
     }
     if (navGraphBtn) {
       navGraphBtn.addEventListener('click', () => {
+        if (practiceColor && !document.body.classList.contains('practice-finished')) {
+          if (ui.narrationText) ui.narrationText.textContent = '📈 Evaluation graph unlocks when the practice game ends.';
+          return;
+        }
         if (card.hidden) {
           show();
           relocateForSidebar();
@@ -9632,16 +9893,25 @@ async function main() {
         navGraphBtn.classList.toggle('active', !card.hidden);
       });
     }
-    // If state is already visible (restored from localStorage), sync
-    // the nav button highlight.
+    // If state is already visible, sync the nav button highlight.
     function syncNavGraphBtn() {
       if (navGraphBtn) navGraphBtn.classList.toggle('active', !card.hidden);
     }
 
-    // Restore prior toggle state.
-    try {
-      if (localStorage.getItem(STORAGE_KEY) === '1') { show(); relocateForSidebar(); }
-    } catch {}
+    function maybeShowDefaultGraph() {
+      if (card.classList.contains('review-mode')) return;
+      const livePractice = !!practiceColor && !document.body.classList.contains('practice-finished');
+      const hasMoves = pliesFromBoard().length >= 2;
+      if (livePractice || !hasMoves || graphPref === false) {
+        if (livePractice && !card.hidden) hide({ persist: false });
+        return;
+      }
+      if (card.hidden) show({ persist: false });
+      relocateForSidebar();
+      syncNavGraphBtn();
+    }
+    window.__showDefaultGraph = maybeShowDefaultGraph;
+    setTimeout(maybeShowDefaultGraph, 0);
     syncNavGraphBtn();
 
     // ═══════════════════════════════════════════════════════════════════
@@ -9713,7 +9983,7 @@ async function main() {
         const moverSign = stmBefore === 'w' ? 1 : -1;
         const wb = _cpToWinChance(before.cpWhite) * moverSign;
         const wa = _cpToWinChance(after.cpWhite)  * moverSign;
-        const drop = wb - wa;
+        const drop = (wb - wa) / 2; // Lichess winningChances.povDiff scale
         let kind, label;
         if      (drop >= 0.20) { kind = 'blunder';    label = '?? Blunder'; }
         else if (drop >= 0.12) { kind = 'mistake';    label = '? Mistake'; }
@@ -9821,6 +10091,7 @@ async function main() {
             const finished = await retrospectiveSweep({
               minDepth: 18,
               movetimeMs,
+              force: true,
               onProgress: (d, t, aborted) => {
                 if (!st) return;
                 if (aborted) st.textContent = ` stopped at ${d}/${t}`;
@@ -9909,11 +10180,15 @@ async function main() {
       try {
         const res = authMode === 'signup' ? await api.signup(u, p) : await api.login(u, p);
         window.__currentUser = res.user;
+        preparePortableAccount(res.user);
         renderAuthUi();
         closeAuth();
         console.log('[auth] signed in as', res.user.username);
         // Upload any local games the user played before signing in.
         try { await syncLocalGamesToCloud(); } catch {}
+        try { await syncLibraryFromServer(); } catch {}
+        try { await syncSrsFromServer(); } catch {}
+        try { await syncPortablePreferences(); } catch {}
       } catch (err) {
         if (authError) authError.textContent = err.message || 'Something went wrong';
       }
@@ -9926,6 +10201,7 @@ async function main() {
       console.warn('[auth] logout request failed (clearing client-side anyway)', err.message || err);
     }
     window.__currentUser = null;
+    clearPortableLocalState();
     renderAuthUi();
     console.log('[auth] logged out', { wasUser, serverOk });
     // Visible confirmation toast at the top of the page so the user
@@ -9955,18 +10231,195 @@ async function main() {
     } catch {}
   });
 
+  const PORTABLE_PREF_KEYS = [
+    'stockfish-explain.arrow-mode',
+    'stockfish-explain.clock-style',
+    'stockfish-explain.panel-hidden',
+    'stockfish-explain.panels-hidden-toggle',
+    'stockfish-explain.practice-queue-set',
+    'stockfish-explain.practice-last-settings',
+    'stockfish-explain.live-graph-visible',
+    'stockfish-explain.coach-on',
+    'stockfish-explain.variation-settings',
+    'stockfish-explain.learn-settings',
+    'stockfish-explain.anthropic-model',
+  ];
+  const PORTABLE_PREF_SET = new Set(PORTABLE_PREF_KEYS);
+  const SRS_STORAGE_KEY = 'stockfish-explain.srs.cards';
+  const ACCOUNT_STATE_OWNER_KEY = 'stockfish-explain.account-state-owner';
+  let applyingCloudState = false;
+
+  function clearPortableLocalState() {
+    applyingCloudState = true;
+    try {
+      for (const key of PORTABLE_PREF_KEYS) localStorage.removeItem(key);
+      localStorage.removeItem(SRS_STORAGE_KEY);
+      localStorage.removeItem(ACCOUNT_STATE_OWNER_KEY);
+    } catch {} finally {
+      applyingCloudState = false;
+    }
+  }
+
+  function preparePortableAccount(user) {
+    if (!user?.id) return;
+    let owner = null;
+    try { owner = localStorage.getItem(ACCOUNT_STATE_OWNER_KEY); } catch {}
+    // Never merge one signed-in account's settings or study history into
+    // another account that later uses the same browser. Ownerless state is
+    // treated as guest state and is intentionally claimed on first login.
+    if (owner && owner !== String(user.id)) clearPortableLocalState();
+    try { localStorage.setItem(ACCOUNT_STATE_OWNER_KEY, String(user.id)); } catch {}
+  }
+
+  function collectPortablePreferences() {
+    const out = {};
+    for (const key of PORTABLE_PREF_KEYS) {
+      try {
+        const value = localStorage.getItem(key);
+        if (value != null) out[key] = value;
+      } catch {}
+    }
+    return out;
+  }
+
+  async function syncPortablePreferences() {
+    if (!window.__currentUser) return false;
+    const remote = (await api.getPreferences()).preferences || {};
+    const local = collectPortablePreferences();
+    const remoteKeys = Object.keys(remote);
+    if (!remoteKeys.length) {
+      if (Object.keys(local).length) await api.patchPreferences(local);
+      return false;
+    }
+    const localOnly = {};
+    for (const [key, value] of Object.entries(local)) {
+      if (!(key in remote)) localOnly[key] = value;
+    }
+    if (Object.keys(localOnly).length) await api.patchPreferences(localOnly);
+    let changed = false;
+    applyingCloudState = true;
+    try {
+      for (const [key, value] of Object.entries(remote)) {
+        if (!PORTABLE_PREF_SET.has(key)) continue;
+        const current = localStorage.getItem(key);
+        if (value == null) {
+          if (current != null) { localStorage.removeItem(key); changed = true; }
+        } else if (current !== value) {
+          localStorage.setItem(key, value);
+          changed = true;
+        }
+      }
+    } finally {
+      applyingCloudState = false;
+    }
+    // Most controls read preferences during initialisation. One guarded
+    // reload applies a newly-downloaded account profile consistently;
+    // subsequent boots see identical local/server values and do not reload.
+    const guard = `stockfish-explain.prefs-applied.${window.__currentUser.id}`;
+    if (changed) {
+      if (sessionStorage.getItem(guard) !== '1') {
+        sessionStorage.setItem(guard, '1');
+        location.reload();
+        return true;
+      }
+    } else sessionStorage.removeItem(guard);
+    return false;
+  }
+
+  async function syncSrsFromServer() {
+    if (!window.__currentUser) return;
+    const remote = (await api.listSrs()).cards || [];
+    const local = Archive.loadSrsCards() || [];
+    const merged = new Map();
+    for (const card of remote) if (card?.key) merged.set(card.key, card);
+    const upload = [];
+    for (const card of local) {
+      if (!card?.key) continue;
+      const cloud = merged.get(card.key);
+      const localWhen = Number(card.updatedAt || card.lastReviewedAt || 0);
+      const cloudWhen = Number(cloud?.updatedAt || cloud?.lastReviewedAt || 0);
+      if (!cloud || localWhen > cloudWhen) {
+        merged.set(card.key, card);
+        upload.push(card);
+      }
+    }
+    applyingCloudState = true;
+    try { Archive.saveSrsCards([...merged.values()]); }
+    finally { applyingCloudState = false; }
+    if (upload.length) await uploadSrsCards(upload);
+  }
+
+  // Keep each request comfortably below Express's 256 KB JSON limit.
+  // A card includes its compact mistake-position snapshot, so count-based
+  // chunking also prevents a mature Mistake Bank from becoming one large
+  // all-or-nothing upload.
+  async function uploadSrsCards(cards) {
+    const queue = Array.isArray(cards) ? cards : [];
+    for (let i = 0; i < queue.length; i += 100) {
+      await api.syncSrs(queue.slice(i, i + 100));
+    }
+  }
+
+  function armPortableStateMirror() {
+    if (window.__portableStateMirrorArmed) return;
+    window.__portableStateMirrorArmed = true;
+    const previousSet = localStorage.setItem.bind(localStorage);
+    const previousRemove = localStorage.removeItem.bind(localStorage);
+    let prefTimer = 0;
+    let srsTimer = 0;
+    const pushPreference = (key, value) => {
+      clearTimeout(prefTimer);
+      prefTimer = setTimeout(() => {
+        if (window.__currentUser && !applyingCloudState) api.patchPreferences({ [key]: value }).catch(() => {});
+      }, 500);
+    };
+    const pushSrs = (value) => {
+      clearTimeout(srsTimer);
+      srsTimer = setTimeout(() => {
+        if (!window.__currentUser || applyingCloudState) return;
+        let cards = [];
+        try { cards = JSON.parse(value || '[]'); } catch {}
+        if (cards.length) uploadSrsCards(cards).catch(() => {});
+        else api.clearSrs().catch(() => {});
+      }, 700);
+    };
+    localStorage.setItem = function(key, value) {
+      const result = previousSet(key, value);
+      if (!applyingCloudState && PORTABLE_PREF_SET.has(key)) pushPreference(key, value);
+      if (!applyingCloudState && key === SRS_STORAGE_KEY) pushSrs(value);
+      return result;
+    };
+    localStorage.removeItem = function(key) {
+      const result = previousRemove(key);
+      if (!applyingCloudState && PORTABLE_PREF_SET.has(key)) pushPreference(key, null);
+      if (!applyingCloudState && key === SRS_STORAGE_KEY) pushSrs('[]');
+      return result;
+    };
+  }
+
   // On page load, check if we have an existing session.
   (async () => {
     const u = await currentUser();
     window.__currentUser = u;
+    if (u) preparePortableAccount(u);
+    else {
+      let owner = null;
+      try { owner = localStorage.getItem(ACCOUNT_STATE_OWNER_KEY); } catch {}
+      if (owner) clearPortableLocalState();
+    }
     renderAuthUi();
-    if (u) syncLocalGamesToCloud();
+    if (u) {
+      try { if (await syncPortablePreferences()) return; } catch (err) { console.warn('[sync] preferences failed', err); }
+      try { await syncSrsFromServer(); } catch (err) { console.warn('[sync] SRS failed', err); }
+      syncLocalGamesToCloud();
+    }
     // Pull favourites + custom openings from server into localStorage
     // so the existing reader code paths see cloud-synced data on every
     // refresh (and on every device). Then arm the mirror that POSTs
     // any future localStorage writes back up to the server.
     try { await syncLibraryFromServer(); } catch (err) { console.warn('[library] initial sync failed', err); }
     armLibraryWriteMirror();
+    armPortableStateMirror();
   })();
 
   // ─── Library sync (favourites + custom openings) ──────────────────
@@ -11249,6 +11702,7 @@ async function main() {
     'select-flavor', 'range-skill', 'range-multipv', 'range-threads',
     'limit-mode', 'limit-value', 'select-hash', 'btn-clear-hash',
     'btn-preload-engines', 'btn-clear-engine-cache',
+    'learn-scan-time', 'learn-attempt-time', 'learn-tolerance',
   ];
   const learnPrepMutationIds = [
     'btn-new', 'btn-undo', 'btn-practice', 'btn-paste-fen', 'btn-editor',

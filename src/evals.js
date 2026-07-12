@@ -17,7 +17,7 @@
 // Lichess winning-chances constant (lila: ui/ceval/src/winningChances.ts).
 export const WIN_MULTIPLIER = -0.00368208;
 
-// Win-chance drop thresholds, mover POV, on the [-1,+1] scale. These are
+// Win-probability drop thresholds, mover POV, on the [-1,+1] scale. These are
 // lichess nodeFinder defaults: a 0.06 (6-point) win-% drop is an
 // inaccuracy, 0.12 a mistake, 0.20 a blunder.
 export const THRESHOLDS = { inaccuracy: 0.06, mistake: 0.12, blunder: 0.20 };
@@ -62,7 +62,10 @@ export function moverWinDrop(before, after) {
   const wa = winChanceWhite(after.cpWhite,  after.mate);
   if (wb == null || wa == null) return null;         // unevaluated / terminal
   const sign = moverOf(after) === 'white' ? 1 : -1;
-  return (sign * wb) - (sign * wa);
+  // Lichess winningChances.povDiff divides the difference of the
+  // [-1,+1] winning-chance values by 2. That maps it to an actual
+  // probability delta: 0.04 = four percentage points, not eight.
+  return ((sign * wb) - (sign * wa)) / 2;
 }
 
 // Severity of a single move, or null if not bad enough / unscorable.
@@ -90,12 +93,11 @@ export function classifyQuality(before, after) {
 
 // Accuracy % for a single move given the mover-POV win-chance drop.
 // Lichess: 103.1668·exp(-0.04354·Δwin%) - 3.1669, where Δwin% is in
-// percentage POINTS. Our drop is on the [-1,+1] scale (range 2.0 = 100
-// points), so Δwin% = 50·drop (audit A4 — the old code used 100·drop and
-// double-counted every loss).
+// percentage POINTS. moverWinDrop already applies Lichess's `/ 2`, so
+// 0.01 = one percentage point and Δwin% = 100·drop.
 export function moveAccuracy(drop) {
   if (drop == null) return null;
   if (drop <= 0) return 100;
-  const v = 103.1668 * Math.exp(-0.04354 * (drop * 50)) - 3.1669;
+  const v = 103.1668 * Math.exp(-0.04354 * (drop * 100)) - 3.1669;
   return Math.max(0, Math.min(100, Number.isFinite(v) ? v : 0));
 }

@@ -2531,6 +2531,28 @@ body.mobile-mode #learn-panel .retro-btn {
 body.mobile-mode #learn-panel .retro-choices {
   flex-wrap: wrap;
 }
+.learn-comparison-scroll { overflow-x: auto; margin: 2px 0 6px; }
+.learn-comparison {
+  width: 100%;
+  min-width: 390px;
+  border-collapse: collapse;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.learn-comparison th,
+.learn-comparison td {
+  padding: 5px 6px;
+  border-bottom: 1px solid rgba(255,255,255,.09);
+  text-align: right;
+  white-space: nowrap;
+}
+.learn-comparison th:first-child,
+.learn-comparison td:nth-child(2) { text-align: left; }
+.learn-comparison thead th { opacity: .62; font-weight: 600; }
+.learn-row-original { background: rgba(220,53,69,.10); }
+.learn-row-attempt-pass { background: rgba(40,167,69,.15); }
+.learn-row-attempt-fail { background: rgba(255,152,0,.12); }
+.learn-row-best { color: #9ed2ff; }
 body.learn-preparing #board.board-interaction-locked {
   box-shadow: 0 0 0 3px rgba(56, 147, 232, 0.72);
 }

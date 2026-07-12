@@ -899,7 +899,7 @@
 .live-graph-card[hidden] { display: none; }
 
 /* Sidebar-docked graph (toggled from the 📈 button in the move-list
-   header). Card flows inline above the notation at the SAME width
+   header). Card flows inline below the notation at the SAME width
    as the move-list column — no floating overlay, no fixed width. */
 .live-graph-card.sidebar-docked {
   position: static;
@@ -909,7 +909,8 @@
   transform: none;
   width: 100%;
   max-width: 100%;
-  margin-bottom: 6px;
+  margin-top: 6px;
+  margin-bottom: 0;
   padding: 8px 10px 10px;
 }
 .live-graph-card.sidebar-docked .live-graph-body {

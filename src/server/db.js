@@ -331,6 +331,23 @@ const migrations = [
         WHERE client_game_id IS NOT NULL;
     `,
   },
+  {
+    name: '015_portable_prefs_and_srs_v2',
+    sql: `
+      ALTER TABLE user_prefs
+        ADD COLUMN IF NOT EXISTS field_updated_at JSONB NOT NULL DEFAULT '{}';
+
+      CREATE TABLE IF NOT EXISTS srs_cards_v2 (
+        user_id      INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        card_key     TEXT NOT NULL,
+        card_json    JSONB NOT NULL,
+        updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (user_id, card_key)
+      );
+      CREATE INDEX IF NOT EXISTS idx_srs_cards_v2_user_due
+        ON srs_cards_v2(user_id, ((card_json->>'dueAt')::bigint));
+    `,
+  },
 ];
 
 export async function runMigrations() {

@@ -140,6 +140,13 @@ export const api = {
     const qs = new URLSearchParams({ group: group_name, name: opening_name });
     return req('DELETE', '/api/custom-openings?' + qs.toString());
   },
+
+  // Portable account state (authenticated users only).
+  getPreferences:  ()            => req('GET',   '/api/preferences'),
+  patchPreferences:(preferences) => req('PATCH', '/api/preferences', { preferences }),
+  listSrs:         ()            => req('GET',   '/api/srs'),
+  syncSrs:         (cards)       => req('PUT',   '/api/srs', { cards }),
+  clearSrs:        ()            => req('DELETE','/api/srs'),
 };
 
 // Convenience: return current user or null (catches 401).

@@ -278,6 +278,7 @@ export function gradeCard(card, grade) {
   }
   next.dueAt = now + next.intervalDays * DAY_MS;
   next.lastReviewedAt = now;
+  next.updatedAt = now;
   return next;
 }
 
@@ -293,6 +294,16 @@ export function dueMistakeCards(cap = 15) {
   const cards = loadSrsCards();
   const cardByKey = new Map(cards.map(c => [c.key, c]));
   const allMistakes = deriveMistakes();
+  // Reviewed cards carry a compact mistake snapshot for cross-device
+  // drills. Add any snapshots not derivable from this device's local
+  // archive (the full games remain in cloud My Games).
+  const mistakeKeys = new Set(allMistakes.map(srsKey));
+  for (const card of cards) {
+    if (card?._mistake && !mistakeKeys.has(card.key)) {
+      allMistakes.push(card._mistake);
+      mistakeKeys.add(card.key);
+    }
+  }
   // Keep user-side blunders + mistakes only; inaccuracies only get in
   // if we're light on more-severe material.
   const prioritised = [

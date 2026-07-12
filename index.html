@@ -265,6 +265,36 @@
       <small class="muted">Candidate modes overlay the engine's top 3 candidate moves (green = best, blue = 2nd, grey = 3rd). Maneuver mode (lila-style) chains the first 3 moves of the principal variation so you can see the plan, not just the next move.</small>
     </div>
 
+    <div class="setting">
+      <label for="learn-scan-time">Learn from Mistakes · scan time per position</label>
+      <select id="learn-scan-time">
+        <option value="200">Quick · 0.2 s (≈20 s for 50 moves)</option>
+        <option value="400" selected>Balanced · 0.4 s (≈40 s for 50 moves)</option>
+        <option value="750">Deep · 0.75 s (≈75 s for 50 moves)</option>
+        <option value="1500">Very deep · 1.5 s (≈150 s for 50 moves)</option>
+      </select>
+      <small class="muted">The first scan is single-PV for speed. Cached positions are reused.</small>
+    </div>
+
+    <div class="setting">
+      <label for="learn-attempt-time">Lesson attempt / top-three analysis</label>
+      <select id="learn-attempt-time">
+        <option value="1000">Fast · 1 second</option>
+        <option value="3000" selected>Lichess-style · 3 seconds</option>
+        <option value="5000">Deep · 5 seconds</option>
+      </select>
+    </div>
+
+    <div class="setting">
+      <label for="learn-tolerance">Accept alternatives within</label>
+      <select id="learn-tolerance">
+        <option value="4" selected>Lichess · 4 winning-probability points</option>
+        <option value="6">Friendly · 6 points</option>
+        <option value="8">Coaching · 8 points</option>
+      </select>
+      <small class="muted">This is not pawn evaluation. A move can differ from Stockfish #1 and still pass.</small>
+    </div>
+
   </section>
 
   <main class="uniboard">
@@ -568,12 +598,11 @@
             <button id="nav-end"   class="nav-btn" title="Live (End)">⏭</button>
           </div>
         </div>
-        <!-- Docking slot: when the user toggles the graph from the
-             move-list header, the live-graph card gets relocated
-             here so it sits above the notation at the same width as
-             the move list column. -->
-        <div id="notation-graph-slot" class="notation-graph-slot"></div>
         <div id="move-list" class="tview2-column"></div>
+        <!-- The existing live graph docks inline BELOW notation. Keeping
+             the same element/slot preserves its canvas, click navigation,
+             and review-mode transitions without a second graph instance. -->
+        <div id="notation-graph-slot" class="notation-graph-slot"></div>
         <input id="kbd-move" class="kbd-move" type="text"
                placeholder="Type a move: e4, Nf3, O-O… then ⏎"
                autocomplete="off" spellcheck="false">
@@ -1288,9 +1317,9 @@
   </div>
 
   <!-- ───────────────────────────────────────────────────────────────
-       Live eval graph — sits beneath the board in the analysis layout.
-       Toggled by a small "📈 Graph" button; during practice it's
-       hidden by default (anti-cheat) but the toggle is available.
+       Live eval graph — docks below notation in analysis/review.
+       During live practice it stays hidden and locked (anti-cheat),
+       then becomes available automatically when the game ends.
   ─────────────────────────────────────────────────────────────── -->
   <div id="live-graph-card" class="live-graph-card" hidden>
     <div class="live-graph-head">
