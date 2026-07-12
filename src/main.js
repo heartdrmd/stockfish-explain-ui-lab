@@ -6582,6 +6582,26 @@ async function main() {
           updatePMoves();
         }, 120);
       });
+
+      // Mobile keyboard etiquette: once the user moves from typing to
+      // browsing the opening results, give the screen back to the list.
+      // Blurring keeps the query intact; tapping the search input later
+      // focuses it normally and reopens the keyboard with the same text.
+      // Scope this to the results tree and mobile/coarse-pointer layouts so
+      // desktop mouse behavior is completely unchanged.
+      const dismissMobileSearchKeyboard = () => {
+        const mobilePicker = document.body.classList.contains('mobile-mode')
+          || window.matchMedia('(hover: none) and (pointer: coarse)').matches;
+        if (mobilePicker && document.activeElement === pSearch) pSearch.blur();
+      };
+      if (pTree) {
+        // pointerdown covers modern iOS/Android before a drag begins;
+        // touchstart is the Safari fallback. Neither prevents the later
+        // click, selection, favourite, preview, or quick-start action.
+        pTree.addEventListener('pointerdown', dismissMobileSearchKeyboard, { passive: true });
+        pTree.addEventListener('touchstart', dismissMobileSearchKeyboard, { passive: true });
+        pTree.addEventListener('scroll', dismissMobileSearchKeyboard, { passive: true });
+      }
     }
     if (pFavsOnly) {
       pFavsOnly.addEventListener('change', () => {
