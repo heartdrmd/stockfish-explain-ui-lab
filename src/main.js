@@ -6507,17 +6507,6 @@ async function main() {
       if (!bar || !pTree) return;
 
       function hideBar() { bar.hidden = true; }
-      function syncBarViewportInset() {
-        // iPhone Safari's expanding bottom toolbar and the on-screen
-        // keyboard reduce the visual viewport without always moving a
-        // fixed bottom:0 element. Raise the preview by exactly the covered
-        // portion instead of relying on a brittle hard-coded toolbar size.
-        const vv = window.visualViewport;
-        const covered = vv
-          ? Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop))
-          : 0;
-        bar.style.setProperty('--mobile-preview-viewport-bottom', `${covered}px`);
-      }
       function showBarFor(leaf) {
         // Resolve FEN — either the precomputed dataset.previewFen or
         // replay the SAN sequence.
@@ -6535,7 +6524,10 @@ async function main() {
         // Size: fit the board to ~18vh so the whole bar sits in ~22vh.
         // Clamped so very small phones don't render an unreadable board
         // and tablets don't waste a quarter of the screen on it.
-        const vh = window.innerHeight || 600;
+        // Size from the VISIBLE viewport on iPhone Safari. window.innerHeight
+        // may include browser-chrome-covered space and make the preview too
+        // tall even though its CSS bottom position is otherwise correct.
+        const vh = window.visualViewport?.height || window.innerHeight || 600;
         const boardPx = Math.max(140, Math.min(240, Math.round(vh * 0.18)));
         const squarePx = Math.floor(boardPx / 8);
         boardEl.innerHTML = previewBoardSvg(fen, { squarePx });
@@ -6544,12 +6536,8 @@ async function main() {
         nameEl.textContent = nameNode?.textContent?.trim() || '';
         const sans = (leaf.dataset.movesSan || '').trim();
         movesEl.textContent = [sans, ecoNode?.textContent?.trim()].filter(Boolean).join(' · ');
-        syncBarViewportInset();
         bar.hidden = false;
       }
-
-      window.visualViewport?.addEventListener('resize', syncBarViewportInset, { passive: true });
-      window.visualViewport?.addEventListener('scroll', syncBarViewportInset, { passive: true });
 
       // Click delegation on the tree — P button opens, any other tap
       // on a leaf hides the bar so a preview doesn't linger when the

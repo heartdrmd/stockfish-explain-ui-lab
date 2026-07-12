@@ -3115,9 +3115,10 @@ body.mobile-mode .practice-opening-tree .tree-leaf-del {
 body.mobile-mode .mobile-preview-bar {
   left: 8px;
   right: 8px;
-  bottom: calc(10px + env(safe-area-inset-bottom, 0px) + var(--mobile-preview-viewport-bottom, 0px));
+  bottom: calc(10px + env(safe-area-inset-bottom, 0px));
   width: auto;
   max-width: calc(100vw - 16px);
+  max-height: calc(100dvh - 24px);
   box-sizing: border-box;
   border: 1px solid rgba(255,255,255,0.16);
   border-top: 2px solid var(--c-primary, #3692e7);
