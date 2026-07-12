@@ -3060,9 +3060,9 @@ body.learn-preparing #board.board-interaction-locked cg-board {
 }
 /* Author-level `display:flex` above can outrank the browser's built-in
    `[hidden]` rule on mobile Safari. Make the JS `bar.hidden = true`
-   contract explicit, and never permit a setup preview over a live game. */
-.mobile-preview-bar[hidden],
-body.practice-mode .mobile-preview-bar {
+   contract explicit. Do not key this to body.practice-mode: the Practice
+   setup can be reopened while that class still describes the prior game. */
+.mobile-preview-bar[hidden] {
   display: none !important;
 }
 .mobile-preview-board {
