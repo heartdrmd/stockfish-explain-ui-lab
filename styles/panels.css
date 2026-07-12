@@ -3038,6 +3038,45 @@ body.learn-preparing #board.board-interaction-locked cg-board {
   }
 }
 
+/* Phone opening browser: it is a vertical list, never a two-dimensional
+   canvas. Long variation names used to preserve their flex min-width and
+   make the tree wider than its viewport, so a diagonal finger drag panned
+   the entire list left/right. Keep controls fixed and let only the name
+   consume/wrap within the remaining row width. */
+body.mobile-mode .practice-opening-tree {
+  overflow-x: hidden;
+  overscroll-behavior-x: none;
+  touch-action: pan-y;
+}
+body.mobile-mode .practice-opening-tree summary,
+body.mobile-mode .practice-opening-tree .tree-leaf {
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
+}
+body.mobile-mode .practice-opening-tree summary {
+  overflow: hidden;
+}
+body.mobile-mode .practice-opening-tree .tree-leaf-name {
+  min-width: 0;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  line-height: 1.25;
+}
+body.mobile-mode .practice-opening-tree .tree-leaf-fav,
+body.mobile-mode .practice-opening-tree .tree-leaf-side,
+body.mobile-mode .practice-opening-tree .tree-leaf-play,
+body.mobile-mode .practice-opening-tree .tree-leaf-preview,
+body.mobile-mode .practice-opening-tree .tree-leaf-eco,
+body.mobile-mode .practice-opening-tree .tree-lichess-badge,
+body.mobile-mode .practice-opening-tree .tree-leaf-del {
+  flex-shrink: 0;
+}
+
 /* Mobile preview bar — fixed at bottom of viewport. Shown when the
    user taps a leaf's P button. Dimensions are tuned so the bar takes
    roughly 1/5 of mobile viewport height, leaving the rest of the
