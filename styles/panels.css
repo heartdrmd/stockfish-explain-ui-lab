@@ -1046,6 +1046,21 @@ details.dissect-details[open] summary {
 #practice-modal .modal-card {
   padding-bottom: 64px;
 }
+/* Mobile Safari computes the unmentioned horizontal axis as `auto` when
+   overflow-y is auto. That permits elastic left/right rubber-banding even
+   when scrollWidth exactly equals clientWidth, making the entire settings
+   sheet and its text wobble. Lock only the horizontal overflow axis; do not
+   use touch-action:pan-y here because the strength/time sliders need genuine
+   horizontal gestures. */
+body.mobile-mode #practice-modal .modal-card {
+  overflow-x: hidden;
+  overscroll-behavior-x: none;
+}
+body.mobile-mode #practice-modal .tournament-setup,
+body.mobile-mode #practice-modal .setting {
+  min-width: 0;
+  max-width: 100%;
+}
 .tourn-standings {
   background: var(--c-bg-low);
   border-radius: var(--radius-small);
