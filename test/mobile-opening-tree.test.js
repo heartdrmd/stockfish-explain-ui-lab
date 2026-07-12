@@ -8,6 +8,7 @@ test('mobile opening browser is vertical-only and long names can shrink', async 
   assert.match(css, /body\.mobile-mode\s+\.practice-opening-tree\s*\{[\s\S]*?overscroll-behavior-y:\s*contain/);
   assert.match(css, /body\.mobile-mode\s+\.practice-opening-tree\s*\{[\s\S]*?touch-action:\s*pan-y/);
   assert.match(css, /grid-template-areas:[\s\S]*?"fav queue play preview eco badge delete"[\s\S]*?"name name name name name name name"/);
+  assert.match(css, /body\.mobile-mode\s+\.practice-opening-tree\s+\.tree-leaf-preview\s*\{[\s\S]*?display:\s*inline-block/);
   assert.match(css, /body\.mobile-mode\s+\.practice-opening-tree\s+\.tree-leaf-name\s*\{[\s\S]*?min-width:\s*0/);
   assert.match(css, /body\.mobile-mode\s+\.practice-opening-tree\s+\.tree-leaf-name\s*\{[\s\S]*?-webkit-line-clamp:\s*2/);
   assert.match(css, /body\.mobile-mode\s+\.mobile-preview-bar\s*\{[\s\S]*?safe-area-inset-bottom/);

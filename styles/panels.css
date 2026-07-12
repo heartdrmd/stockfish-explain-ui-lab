@@ -3090,7 +3090,10 @@ body.mobile-mode .practice-opening-tree .tree-leaf-fav { grid-area: fav; }
 body.mobile-mode .practice-opening-tree .tree-leaf-queue { grid-area: queue; }
 body.mobile-mode .practice-opening-tree .tree-leaf-side,
 body.mobile-mode .practice-opening-tree .tree-leaf-play { grid-area: play; }
-body.mobile-mode .practice-opening-tree .tree-leaf-preview { grid-area: preview; }
+body.mobile-mode .practice-opening-tree .tree-leaf-preview {
+  grid-area: preview;
+  display: inline-block;
+}
 body.mobile-mode .practice-opening-tree .tree-leaf-name { grid-area: name; }
 body.mobile-mode .practice-opening-tree .tree-leaf-eco {
   grid-area: eco;
@@ -3125,15 +3128,22 @@ body.mobile-mode .practice-opening-tree .tree-leaf-del {
 }
 
 /* Keep the P preview clear of iPhone browser chrome and away from the
-   lower-left edge. It remains fixed for easy comparison while scrolling,
-   but reads as a centred card with safe-area breathing room. */
+   lower-left edge. The bar now lives inside #practice-modal, whose 100dvh
+   box tracks Safari's currently visible height. Absolute positioning within
+   that box avoids the unstable page-level fixed-bottom coordinate system. */
+body.mobile-mode #practice-modal {
+  height: 100dvh;
+  min-height: 100dvh;
+  overflow: hidden;
+}
 body.mobile-mode .mobile-preview-bar {
+  position: absolute;
   left: 8px;
   right: 8px;
   bottom: calc(10px + env(safe-area-inset-bottom, 0px));
   width: auto;
   max-width: calc(100vw - 16px);
-  max-height: calc(100dvh - 24px);
+  max-height: calc(100% - 24px);
   box-sizing: border-box;
   border: 1px solid rgba(255,255,255,0.16);
   border-top: 2px solid var(--c-primary, #3692e7);
@@ -3226,7 +3236,7 @@ body.mobile-mode .mobile-preview-close {
 /* Desktop: hide the bar entirely (defence in depth — JS also won't
    open it there since the P button is hidden). */
 @media (hover: hover) and (pointer: fine) {
-  .mobile-preview-bar { display: none !important; }
+  body:not(.mobile-mode) .mobile-preview-bar { display: none !important; }
 }
 
 .practice-opening-tree .tree-leaf-del {
