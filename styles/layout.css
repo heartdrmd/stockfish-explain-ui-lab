@@ -695,6 +695,17 @@ body.nav-collapsed .site-header { min-height: 40px; padding: 6px 14px; }
     font-size: 12px;
     line-height: 1.2;
   }
+  body.mobile-mode #practice-actions .practice-engine-hint {
+    grid-template-columns: 86px minmax(0, 1fr);
+    margin-top: 6px;
+    padding-top: 6px;
+  }
+  body.mobile-mode #practice-actions .practice-engine-hint .hint-btn {
+    min-height: 44px;
+  }
+  body.mobile-mode #practice-actions .practice-hint-line {
+    padding: 6px;
+  }
   body.mobile-mode #practice-actions #btn-learn-mistakes {
     width: 100%;
     min-height: 44px;

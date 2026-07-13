@@ -2006,6 +2006,16 @@ body.practice-mode .practice-card[hidden]       { display: none !important; }
 .practice-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .practice-btn.resign-btn:hover { background: rgba(220,53,69,0.15); border-color: #dc3545; }
 .practice-btn.draw-btn:hover   { background: rgba(255,193,7,0.15);  border-color: #ffc107; }
+.practice-btn.hint-btn {
+  border-color: color-mix(in srgb, var(--c-accent, #7aa7ff) 64%, var(--c-border));
+  color: var(--c-font-clear);
+  letter-spacing: 0.015em;
+}
+.practice-btn.hint-btn:hover,
+.practice-btn.hint-btn.is-running {
+  background: color-mix(in srgb, var(--c-accent, #7aa7ff) 16%, var(--c-bg));
+  border-color: var(--c-accent, #7aa7ff);
+}
 .practice-btn.save-btn:hover   { background: rgba(82,196,26,0.15);  border-color: #52c41a; }
 .practice-btn.again-btn:hover  { background: rgba(122,167,255,0.15); border-color: var(--c-accent, #7aa7ff); }
 
@@ -2023,6 +2033,92 @@ body.practice-mode .practice-card[hidden]       { display: none !important; }
   color: var(--c-font-clear);
 }
 .practice-hint { font-style: italic; }
+.practice-engine-hint {
+  display: grid;
+  grid-template-columns: minmax(92px, 0.38fr) minmax(0, 1fr);
+  gap: 5px 6px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--c-border);
+}
+.practice-engine-hint label {
+  align-self: center;
+  color: var(--c-font-dim);
+  font-size: 11px;
+  font-weight: 650;
+}
+.practice-engine-hint select {
+  min-width: 0;
+  min-height: 32px;
+  padding: 4px 7px;
+  border: 1px solid var(--c-border);
+  border-radius: 4px;
+  background: var(--c-bg);
+  color: var(--c-font);
+}
+.practice-engine-hint .hint-btn {
+  grid-column: 1 / -1;
+  width: 100%;
+  min-height: 40px;
+}
+.practice-hint-results {
+  display: grid;
+  gap: 5px;
+  margin-top: 7px;
+}
+.practice-hint-results[hidden] { display: none !important; }
+.practice-hint-status {
+  margin: 0;
+  padding: 7px 8px;
+  border: 1px solid var(--c-border);
+  border-radius: 5px;
+  color: var(--c-font-dim);
+  font-size: 11px;
+}
+.practice-hint-line {
+  display: grid;
+  grid-template-columns: 25px minmax(42px, auto) minmax(0, 1fr);
+  align-items: baseline;
+  gap: 6px;
+  padding: 7px 8px;
+  border: 1px solid var(--c-border);
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--c-bg-zebra2) 75%, transparent);
+}
+.practice-hint-rank {
+  display: grid;
+  place-items: center;
+  width: 23px;
+  height: 23px;
+  border-radius: 50%;
+  background: var(--c-accent, #7aa7ff);
+  color: #111;
+  font-size: 11px;
+  font-weight: 800;
+}
+.practice-hint-move {
+  color: var(--c-font-clear);
+  font-size: 14px;
+  font-weight: 800;
+}
+.practice-hint-eval {
+  justify-self: end;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.practice-hint-pv {
+  grid-column: 2 / -1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--c-font-dim);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 10px;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 /* ─── Chess clock — polished ─── */
 .clock-display {
@@ -2648,6 +2744,49 @@ body.mobile-mode #learn-panel .retro-choices {
 .learn-row-attempt-pass { background: rgba(40,167,69,.15); }
 .learn-row-attempt-fail { background: rgba(255,152,0,.12); }
 .learn-row-best { color: #9ed2ff; }
+.learn-mistake-arrow {
+  position: absolute;
+  inset: 0;
+  z-index: 12;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  overflow: visible;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, .75));
+}
+.learn-mistake-arrow line {
+  stroke: #e84a4a;
+  stroke-width: 2.8;
+  stroke-linecap: round;
+  opacity: .84;
+}
+.learn-mistake-arrow marker path { fill: #e84a4a; opacity: .9; }
+.retro-mistake-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  min-height: 22px;
+  margin-left: 3px;
+  padding: 0 4px;
+  border: 1px solid rgba(255, 255, 255, .20);
+  border-radius: 4px;
+  background: #c73535;
+  color: #fff;
+  font-weight: 800;
+  line-height: 1;
+  vertical-align: middle;
+}
+.retro-mistake-mark[data-severity="inaccuracy"] { background: #2f78c4; }
+.retro-mistake-mark[data-severity="mistake"] { background: #d17c20; }
+.retro-mistake-mark[data-severity="blunder"] { background: #c73535; }
+.retro-original-hint {
+  display: inline-block;
+  margin-top: 5px;
+  color: #f08a8a;
+  font-size: 11px;
+  line-height: 1.35;
+}
 body.learn-preparing #board.board-interaction-locked {
   box-shadow: 0 0 0 3px rgba(56, 147, 232, 0.72);
 }

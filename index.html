@@ -371,6 +371,27 @@
             <button id="btn-resign"      class="practice-btn resign-btn" title="Concede the game">🏳 Resign</button>
             <button id="btn-offer-draw"  class="practice-btn draw-btn"   title="Offer a draw — engine decides based on the current evaluation">🤝 Offer Draw</button>
           </div>
+          <div class="practice-engine-hint">
+            <label for="practice-hint-time">Think time</label>
+            <select id="practice-hint-time" title="How long Stockfish should calculate this hint">
+              <option value="1000">1 second</option>
+              <option value="2000">2 seconds</option>
+              <option value="3000" selected>3 seconds</option>
+              <option value="5000">5 seconds</option>
+              <option value="10000">10 seconds</option>
+              <option value="15000">15 seconds</option>
+              <option value="30000">30 seconds</option>
+              <option value="60000">1 minute</option>
+              <option value="120000">2 minutes</option>
+              <option value="180000">3 minutes</option>
+              <option value="300000">5 minutes</option>
+            </select>
+            <button id="btn-practice-hint" class="practice-btn hint-btn" type="button"
+                    title="Ask Stockfish for your three strongest moves in this position">
+              SHOW 3 TOP ENGINE MOVES (HINT)
+            </button>
+          </div>
+          <div id="practice-hint-results" class="practice-hint-results" hidden aria-live="polite"></div>
           <p class="practice-hint muted" id="practice-draw-response" style="font-size:11px;margin:8px 0 0;min-height:14px;"></p>
         </div>
         <div class="practice-over" id="practice-over" hidden>

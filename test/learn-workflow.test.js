@@ -2,10 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-const [html, main, layout] = await Promise.all([
+const [html, main, layout, panels] = await Promise.all([
   readFile(new URL('../index.html', import.meta.url), 'utf8'),
   readFile(new URL('../src/main.js', import.meta.url), 'utf8'),
   readFile(new URL('../styles/layout.css', import.meta.url), 'utf8'),
+  readFile(new URL('../styles/panels.css', import.meta.url), 'utf8'),
 ]);
 
 test('mobile Learn has a dedicated slot immediately after the board unit', () => {
@@ -37,6 +38,21 @@ test('Learn exposes scan and top-three durations at launch and in the lesson pan
   assert.match(html, /id="mg-learn-attempt-time"/);
   assert.match(main, /data-learn-setting="scanMs"/);
   assert.match(main, /data-learn-setting="attemptMs"/);
+  assert.match(main, /state === 'setup'[\s\S]*?Choose how long Stockfish should analyse each move/);
+  assert.match(main, /id="learn-start">Start lesson scan/);
+  assert.match(main, /btnLearnMistakes\.addEventListener\('click', _openLearnSetup\)/);
+  assert.match(main, /learn-start'\)\?\.addEventListener\('click', _startLearnPreparation\)/);
+});
+
+test('Learn marks and previews the original error without replaying it', () => {
+  assert.match(main, /inaccuracy:\s*\{ mark: '\?!'/);
+  assert.match(main, /mistake:\s*\{ mark: '\?'/);
+  assert.match(main, /blunder:\s*\{ mark: '\?\?'/);
+  assert.match(main, /_learn\.originalSeverity = classifySeverityForPly\(prev, cur\)/);
+  assert.match(main, /board\.goToPly\(targetPly - 1\)[\s\S]*?_drawLearnMistakeArrow\(\)/);
+  assert.match(main, /id = 'learn-mistake-arrow'/);
+  assert.match(main, /The red arrow shows that original move; it has <strong>not<\/strong> been replayed/);
+  assert.match(panels, /\.learn-mistake-arrow line[\s\S]*?stroke:\s*#e84a4a/);
 });
 
 test('View solution and Give up both reveal the best move through top-three comparison', () => {

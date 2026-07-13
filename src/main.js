@@ -57,6 +57,7 @@ import { EvalGraph }     from './eval-graph.js';
 import { computeGameStats, renderStatsPanel } from './game-stats.js';
 import * as MoveTime from './movetime.js';
 import * as OpeningVariation from './opening-variation.js';
+import { buildPracticeHintLines } from './practice-hint.js';
 
 // Expose Chess to eval-graph's computeDivision helper — avoids a
 // circular import while still letting it replay SAN to count pieces
@@ -1284,6 +1285,9 @@ async function main() {
   // declared later is hoisted but still undefined.
   let practiceColor       = null;
   let practiceSearchToken = 0;
+  let practiceHintRun     = null;
+  let practiceHintRunId   = 0;
+  window.__practiceHintOwnsEngine = false;
   let paused              = false;
   let locked              = localStorage.getItem('stockfish-explain.engine-locked') === '1';
   window.__engineMuted    = locked;
@@ -1461,24 +1465,24 @@ async function main() {
   try { engine.setThreads(defaultThreads); } catch (_) { /* engine may still be booting */ }
 
   ui.rangeSkill.addEventListener('input', () => {
-    if (window.__learnOwnsEngine) return;
+    if (window.__learnOwnsEngine || window.__practiceHintOwnsEngine) return;
     ui.skillVal.textContent = ui.rangeSkill.value;
     engine.setSkill(+ui.rangeSkill.value);
   });
   ui.rangeMultipv.addEventListener('input', () => {
-    if (window.__learnOwnsEngine) return;
+    if (window.__learnOwnsEngine || window.__practiceHintOwnsEngine) return;
     ui.multipvVal.textContent = ui.rangeMultipv.value;
     engine.setMultiPV(+ui.rangeMultipv.value);
     fireAnalysis();
   });
   ui.rangeThreads.addEventListener('input', () => {
-    if (window.__learnOwnsEngine) return;
+    if (window.__learnOwnsEngine || window.__practiceHintOwnsEngine) return;
     ui.threadsVal.textContent = ui.rangeThreads.value;
     engine.setThreads(+ui.rangeThreads.value);
     fireAnalysis();
   });
   ui.limitMode.addEventListener('change', () => {
-    if (window.__learnOwnsEngine) return;
+    if (window.__learnOwnsEngine || window.__practiceHintOwnsEngine) return;
     const m = ui.limitMode.value;
     if (m === 'depth')    ui.limitValue.value = 18;
     if (m === 'movetime') ui.limitValue.value = 2000;
@@ -1486,7 +1490,7 @@ async function main() {
     fireAnalysis();
   });
   ui.limitValue.addEventListener('change', () => {
-    if (window.__learnOwnsEngine) return;
+    if (window.__learnOwnsEngine || window.__practiceHintOwnsEngine) return;
     fireAnalysis();
   });
 
@@ -1597,7 +1601,7 @@ async function main() {
   }
 
   ui.selectFlavor.addEventListener('change', async () => {
-    if (window.__learnOwnsEngine) return;
+    if (window.__learnOwnsEngine || window.__practiceHintOwnsEngine) return;
     const f = ui.selectFlavor.value;
     if (f === currentFlavor) return;
     localStorage.setItem(FLAVOR_STORAGE, f);
@@ -3097,6 +3101,61 @@ async function main() {
   bindLearnSetting(learnQuickAttemptSelect, 'attemptMs');
   bindLearnSetting(mgLearnAttemptSelect, 'attemptMs');
   bindLearnSetting(learnToleranceSelect, 'tolerancePoints');
+
+  const _learnSeverityMeta = (severity) => ({
+    inaccuracy: { mark: '?!', label: 'Inaccuracy' },
+    mistake:    { mark: '?',  label: 'Mistake' },
+    blunder:    { mark: '??', label: 'Blunder' },
+  }[severity] || { mark: '?', label: 'Mistake' });
+
+  // The original mistake is shown without replaying it: Learn keeps the
+  // board on the pre-move FEN and draws this dedicated red overlay from the
+  // move's origin to destination. A separate SVG avoids exposing engine
+  // arrows, which remain hidden during the find phase.
+  function _clearLearnMistakeArrow() {
+    document.getElementById('learn-mistake-arrow')?.remove();
+  }
+
+  function _drawLearnMistakeArrow() {
+    _clearLearnMistakeArrow();
+    const uci = (_learn.playedUci || '').toLowerCase();
+    if (!/^[a-h][1-8][a-h][1-8][qrbn]?$/.test(uci) || board.fen() !== _learn.prevFen) return;
+    const boardEl = document.getElementById('board');
+    if (!boardEl) return;
+    const center = (square) => {
+      const file = square.charCodeAt(0) - 97;
+      const rank = Number(square[1]) - 1;
+      const white = board.orientation !== 'black';
+      const col = white ? file : 7 - file;
+      const row = white ? 7 - rank : rank;
+      return [(col + 0.5) * 12.5, (row + 0.5) * 12.5];
+    };
+    const [x1, y1] = center(uci.slice(0, 2));
+    const [targetX, targetY] = center(uci.slice(2, 4));
+    const dx = targetX - x1;
+    const dy = targetY - y1;
+    const length = Math.max(1, Math.hypot(dx, dy));
+    const x2 = targetX - (dx / length) * 3.7;
+    const y2 = targetY - (dy / length) * 3.7;
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.id = 'learn-mistake-arrow';
+    svg.classList.add('learn-mistake-arrow');
+    svg.setAttribute('viewBox', '0 0 100 100');
+    svg.setAttribute('preserveAspectRatio', 'none');
+    svg.setAttribute('aria-hidden', 'true');
+    svg.dataset.uci = uci;
+    svg.innerHTML = `<defs>
+      <marker id="learn-mistake-arrowhead" viewBox="0 0 10 10" refX="8" refY="5"
+              markerWidth="4" markerHeight="4" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z"></path>
+      </marker>
+    </defs>
+    <line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"
+          marker-end="url(#learn-mistake-arrowhead)"></line>`;
+    boardEl.appendChild(svg);
+    _learn.arrowFen = _learn.prevFen;
+  }
+
   // Auto-clear the learn-mode best-move arrow as soon as the user
   // navigates / moves away from the position it was drawn for. Without
   // this the green arrow stayed glued to the squares it pointed at,
@@ -3108,12 +3167,18 @@ async function main() {
     try {
       if (board.fen && board.fen() !== _learn.arrowFen) {
         if (board.drawArrows) board.drawArrows([]);
+        _clearLearnMistakeArrow();
         _learn.arrowFen = null;
       }
     } catch {}
   }
   board.addEventListener('move', _clearLearnArrowIfStale);
   board.addEventListener('nav',  _clearLearnArrowIfStale);
+  board.addEventListener('orientation-change', () => {
+    if (_learn.active && document.body.classList.contains('learn-phase-find')) {
+      _drawLearnMistakeArrow();
+    }
+  });
 
   // Per-FEN cache of the one-pass sweep's best move. Consulted by
   // _showSolution to render the green arrow + SAN instantly with no
@@ -3217,6 +3282,7 @@ async function main() {
     // Wipe any best-move arrow we drew — close = nothing should
     // linger on the board.
     try { if (board.drawArrows) board.drawArrows([]); } catch {}
+    _clearLearnMistakeArrow();
     _learn.arrowFen = null;
     _learn.openingUcis = new Set();
     _learn.preparing = false;
@@ -3327,6 +3393,8 @@ async function main() {
     const solved = _solvedCount();
     const counterText = state === 'preparing'
       ? 'Scanning…'
+      : state === 'setup'
+        ? 'Ready'
       : state === 'end'
         ? `${total}/${total} · Done`
         : `${idx}/${total}`;
@@ -3345,10 +3413,23 @@ async function main() {
       : `<button class="retro-btn retro-continue" id="learn-finish">✓ Finish</button>`;
 
     let inner = '';
-    if (state === 'find') {
+    if (state === 'setup') {
+      inner = `
+        <p class="retro-prompt">Choose how long Stockfish should analyse each move</p>
+        <p class="retro-played">Longer scans can find subtler inaccuracies, but take longer for a full game. You can change both times above before starting.</p>
+        <div class="retro-choices">
+          <button class="retro-btn retro-continue" id="learn-start">Start lesson scan ▶</button>
+          <button class="retro-btn" id="learn-close-end">Cancel</button>
+        </div>`;
+    } else if (state === 'find') {
+      const severity = _learnSeverityMeta(_learn.originalSeverity);
+      const moveNumber = Math.ceil(_learn.targetPly / 2);
+      const moveLabel = _learn.targetPly % 2 ? `Move ${moveNumber}` : `Move ${moveNumber}…`;
       inner = `
         <p class="retro-prompt">Find a better move for <strong>${color}</strong></p>
-        <p class="retro-played">You played <strong>${_learn.playedSan || '?'}</strong>.<br>
+        <p class="retro-played">${moveLabel}: You played <strong>${escapeHtml(_learn.playedSan || '?')}</strong>
+           <span class="retro-mistake-mark" data-severity="${_learn.originalSeverity || 'mistake'}" title="${severity.label}">${severity.mark}</span>.<br>
+           <span class="retro-original-hint">The red arrow shows that original move; it has <strong>not</strong> been replayed. Make a better move on the board.</span><br>
            <span style="opacity:0.6;font-size:11px;">Any reasonable move within ${_learnSettings.tolerancePoints} win-probability points of the best is accepted — you don't need the engine's exact pick.</span></p>
         <div class="retro-choices">
           <button class="retro-btn" id="learn-solution">View solution + top 3</button>
@@ -3473,10 +3554,14 @@ async function main() {
     p.innerHTML = titleBar + _learnTimingControlsHtml(state) + `<div class="retro-body">${inner}</div>`;
     p.querySelector('#learn-close')?.addEventListener('click', _closeLearnPanel);
     p.querySelector('#learn-close-end')?.addEventListener('click', _closeLearnPanel);
+    p.querySelector('#learn-start')?.addEventListener('click', _startLearnPreparation);
     // Finish the final item into a visible N/N · Done state. This keeps
     // the completion result on screen until the user closes or restarts.
     p.querySelector('#learn-finish')?.addEventListener('click', () => {
       if (_learn.targetPly) _learn.solvedPlies.add(_learn.targetPly);
+      _clearLearnMistakeArrow();
+      try { board.drawArrows?.([]); } catch {}
+      _learn.arrowFen = null;
       _renderLearnPanel('end');
     });
     p.querySelector('#learn-next')?.addEventListener('click', _goNextMistake);
@@ -3584,6 +3669,9 @@ async function main() {
       // declaring completion (user may have gone back manually).
       const earlier = all.find(p => !_learn.solvedPlies.has(p));
       if (earlier != null) { _enterLearnMode(earlier); return; }
+      _clearLearnMistakeArrow();
+      try { board.drawArrows?.([]); } catch {}
+      _learn.arrowFen = null;
       _renderLearnPanel('end');
       return;
     }
@@ -3672,6 +3760,7 @@ async function main() {
 
   function _revealLearnBestMove(best) {
     if (!best?.uci || !_learn.prevFen) return false;
+    _clearLearnMistakeArrow();
     _learn.bestUci = best.uci;
     _learn.bestSan = best.san || best.uci;
     _learn.bestEvalFmt = _formatLearnEval(best.cpWhite, best.mateWhite);
@@ -3896,6 +3985,7 @@ async function main() {
     _learn.prevFen = prev.fen;
     _learn.playedSan = cur.san;
     _learn.playedUci = _mainlineNodeAtPly(targetPly)?.uci || null;
+    _learn.originalSeverity = classifySeverityForPly(prev, cur) || 'mistake';
     _learn.bestBeforeCpWhite = prev.cpWhite ?? 0;
     _learn.bestBeforeMateWhite = prev.mate ?? null;
     _learn.originalCpWhite = cur.cpWhite ?? null;
@@ -3925,6 +4015,7 @@ async function main() {
     // clearing it here, the arrow persists when the user clicks
     // 'Next mistake' and paints over the new position).
     try { if (board.drawArrows) board.drawArrows([]); } catch {}
+    _clearLearnMistakeArrow();
     // Lock scroll position through the DOM churn below: goToPly,
     // flipBoard, panel creation + layout reflow can each nudge the
     // window scroll (e.g. a hidden panel becoming visible shifts the
@@ -3945,6 +4036,7 @@ async function main() {
       try { board.flipBoard(); } catch {}
     }
     _renderLearnPanel('find');
+    _drawLearnMistakeArrow();
     if (targetPly <= 20) {
       OpeningExplorer.queryOpeningExplorer(prev.fen, { moves: 12 }).then(data => {
         if (!_learn.active || _learn.targetPly !== targetPly) return;
@@ -4121,8 +4213,26 @@ async function main() {
   // count whenever the accuracy strip re-renders.
   const btnLearnMistakes = document.getElementById('btn-learn-mistakes');
   const learnCountBadge = document.getElementById('learn-btn-count');
-  if (btnLearnMistakes) {
-    btnLearnMistakes.addEventListener('click', async () => {
+  function _openLearnSetup() {
+    if (_learn.preparing) return;
+    _learn.runId = (_learn.runId || 0) + 1;
+    _learn.userDismissed = false;
+    _learn.active = false;
+    window.__learnOwnsEngine = false;
+    document.body.classList.remove('learn-active', 'learn-phase-find', 'learn-preparing');
+    _clearLearnMistakeArrow();
+    try { if (board.drawArrows) board.drawArrows([]); } catch {}
+    _learn.arrowFen = null;
+    try { board.setInteractionLocked?.(false); } catch {}
+    try { window.__setLearnEngineControls?.({ active: false, preparing: false }); } catch {}
+    if (document.body.classList.contains('mobile-mode')) {
+      document.body.classList.remove('mobile-drawer-collapsed');
+      document.body.classList.add('mobile-postgame-analysis');
+    }
+    _renderLearnPanel('setup');
+  }
+
+  async function _startLearnPreparation() {
       if (_learn.preparing) return;
       const runId = (_learn.runId || 0) + 1;
       _learn.runId = runId;
@@ -4206,7 +4316,11 @@ async function main() {
         } catch {}
         updateLearnButton();
       }
-    });
+  }
+  if (btnLearnMistakes) {
+    // First click is a timing preflight. Stockfish starts only after the
+    // user confirms the per-move scan/search durations.
+    btnLearnMistakes.addEventListener('click', _openLearnSetup);
   }
   const updateLearnButton = () => {
     if (!btnLearnMistakes || !learnCountBadge) return;
@@ -4888,11 +5002,10 @@ async function main() {
     // bootEngine's post-await fireAnalysis() races the rest of main().
     if (!mainInitDone) { pendingFireAnalysis = true; return; }
 
-    // Learn owns the single browser engine from preparation through the
-    // last graded move. Navigation and move events still repaint the UI,
-    // but must not start a competing infinite search that can overwrite a
-    // lesson probe or consume its bestmove.
-    if (window.__learnOwnsEngine) return;
+    // Learn and the explicit practice-hint search each temporarily own the
+    // single browser engine. Navigation and move events still repaint the
+    // UI, but must not start a competing search or consume their bestmove.
+    if (window.__learnOwnsEngine || window.__practiceHintOwnsEngine) return;
 
     // Root-cause guard for practice-start ghost-bestmove: during SAN
     // replay of an opening (and similar bulk move loads), every move
@@ -5333,6 +5446,7 @@ async function main() {
   // undo / new-game invalidates it.
   board.addEventListener('move',     () => {
     if (window.__threatMode) window.__exitThreatMode({ silent: true });
+    _clearPracticeHint({ cancelSearch: true, clearResults: true, restartAnalysis: false });
     renderMoveList(); fireAnalysis();
     scheduleDraftSave();
     scheduleTimelineRender();
@@ -5345,6 +5459,7 @@ async function main() {
   });
   board.addEventListener('new-game', () => {
     if (window.__threatMode) window.__exitThreatMode({ silent: true });
+    _clearPracticeHint({ cancelSearch: true, clearResults: true, restartAnalysis: false });
     // Exiting any active / finished practice game when a fresh board
     // starts. The practice card hides via CSS once the class is gone.
     practiceColor = null;
@@ -5400,10 +5515,12 @@ async function main() {
   });
   board.addEventListener('undo',     () => {
     if (window.__threatMode) window.__exitThreatMode({ silent: true });
+    _clearPracticeHint({ cancelSearch: true, clearResults: true, restartAnalysis: false });
     renderMoveList(); fireAnalysis();
   });
   board.addEventListener('nav',      () => {
     if (window.__threatMode) window.__exitThreatMode({ silent: true });
+    _clearPracticeHint({ cancelSearch: true, clearResults: true, restartAnalysis: false });
     renderMoveList();
     // When returning to live, run the normal game loop (which lets the engine
     // auto-play if it's its turn). When reviewing history, just analyse.
@@ -7645,6 +7762,221 @@ async function main() {
     });
   }
 
+  // ────────── On-demand practice hint ──────────
+  // Practice normally keeps Stockfish silent on the user's turn. This is
+  // the explicit exception: the user asks for three candidates, so we lend
+  // the single engine to a fixed-time MultiPV search, then restore every
+  // engine setting before the normal practice loop resumes.
+  const PRACTICE_HINT_TIME_KEY = 'stockfish-explain.practice-hint-time-ms';
+  const practiceHintButton = document.getElementById('btn-practice-hint');
+  const practiceHintTime = document.getElementById('practice-hint-time');
+  const practiceHintResults = document.getElementById('practice-hint-results');
+
+  function _setPracticeHintButton(running) {
+    if (!practiceHintButton) return;
+    practiceHintButton.classList.toggle('is-running', running);
+    practiceHintButton.textContent = running
+      ? 'CANCEL HINT · STOCKFISH THINKING…'
+      : 'SHOW 3 TOP ENGINE MOVES (HINT)';
+    if (practiceHintTime) practiceHintTime.disabled = running;
+  }
+
+  function _showPracticeHintStatus(message) {
+    if (!practiceHintResults) return;
+    const status = document.createElement('p');
+    status.className = 'practice-hint-status';
+    status.textContent = message;
+    practiceHintResults.replaceChildren(status);
+    practiceHintResults.hidden = false;
+  }
+
+  function _renderPracticeHintLines(lines, searchedFen) {
+    if (!practiceHintResults) return;
+    if (!lines.length) {
+      _showPracticeHintStatus('Stockfish did not return a legal candidate for this position.');
+      return;
+    }
+
+    const fragment = document.createDocumentFragment();
+    const heading = document.createElement('p');
+    heading.className = 'practice-hint-status';
+    const forSide = searchedFen.split(' ')[1] === 'b' ? 'Black' : 'White';
+    heading.textContent = `Best moves for you (${forSide}). Every score is White POV.`;
+    fragment.appendChild(heading);
+
+    for (const line of lines) {
+      const card = document.createElement('div');
+      card.className = 'practice-hint-line';
+
+      const rank = document.createElement('span');
+      rank.className = 'practice-hint-rank';
+      rank.textContent = String(line.rank);
+
+      const move = document.createElement('strong');
+      move.className = 'practice-hint-move';
+      move.textContent = line.san;
+
+      const evaluation = document.createElement('span');
+      evaluation.className = 'practice-hint-eval';
+      evaluation.textContent = `${line.evalText} · White POV`;
+
+      const pv = document.createElement('span');
+      pv.className = 'practice-hint-pv';
+      pv.textContent = line.pvSan ? `Line: ${line.pvSan}` : 'Line unavailable';
+
+      card.append(rank, move, evaluation, pv);
+      fragment.appendChild(card);
+    }
+
+    practiceHintResults.replaceChildren(fragment);
+    practiceHintResults.hidden = false;
+  }
+
+  function _restorePracticeHintEngine(run) {
+    if (!run?.engine) return;
+    try { run.engine.setMultiPV(run.savedMultiPV); } catch {}
+    try { run.engine.setSkill(run.savedSkill); } catch {}
+  }
+
+  function _clearPracticeHint({
+    cancelSearch = false,
+    clearResults = false,
+    restartAnalysis = true,
+  } = {}) {
+    const run = practiceHintRun;
+    practiceHintRun = null;
+    practiceHintRunId++;
+    window.__practiceHintOwnsEngine = false;
+
+    if (run) {
+      try { run.engine.removeEventListener('bestmove', run.onBest); } catch {}
+      if (run.timeoutId) clearTimeout(run.timeoutId);
+      if (cancelSearch) {
+        try { run.engine.stop(); } catch {}
+      }
+      _restorePracticeHintEngine(run);
+    }
+
+    _setPracticeHintButton(false);
+    if (clearResults && practiceHintResults) {
+      practiceHintResults.replaceChildren();
+      practiceHintResults.hidden = true;
+    }
+    if (restartAnalysis && run) {
+      try { fireAnalysis(); } catch {}
+    }
+  }
+
+  function _finishPracticeHint(run, { topMoves = null, error = null } = {}) {
+    if (practiceHintRun !== run || run.id !== practiceHintRunId) return;
+    practiceHintRun = null;
+    window.__practiceHintOwnsEngine = false;
+    try { run.engine.removeEventListener('bestmove', run.onBest); } catch {}
+    if (run.timeoutId) clearTimeout(run.timeoutId);
+    _restorePracticeHintEngine(run);
+    _setPracticeHintButton(false);
+
+    if (error) {
+      _showPracticeHintStatus(error);
+    } else if (board.fen() !== run.fen) {
+      _showPracticeHintStatus('Position changed, so the old hint was discarded. Ask again on your turn.');
+    } else {
+      _renderPracticeHintLines(buildPracticeHintLines(topMoves, run.fen, 3), run.fen);
+    }
+    try { fireAnalysis(); } catch {}
+  }
+
+  function _startPracticeHint() {
+    if (practiceHintRun) {
+      _clearPracticeHint({ cancelSearch: true, clearResults: false });
+      _showPracticeHintStatus('Hint cancelled.');
+      return;
+    }
+    if (!practiceColor || document.body.classList.contains('practice-finished')) {
+      _showPracticeHintStatus('Start a practice game to use this hint.');
+      return;
+    }
+    if (!board.isAtLive() || board.chess.turn() !== practiceColor[0]) {
+      _showPracticeHintStatus('The hint is available at the live position on your turn.');
+      return;
+    }
+    if (window.__learnOwnsEngine) {
+      _showPracticeHintStatus('Finish or cancel the lesson scan before asking for a practice hint.');
+      return;
+    }
+    if (!engine?.ready || window.__engineRecovering) {
+      _showPracticeHintStatus('Stockfish is still starting. Please try the hint again in a moment.');
+      return;
+    }
+
+    const allowedMs = new Set(Array.from(practiceHintTime?.options || [], option => +option.value));
+    const requestedMs = +practiceHintTime?.value || 3000;
+    const thinkMs = allowedMs.has(requestedMs) ? requestedMs : 3000;
+    try { localStorage.setItem(PRACTICE_HINT_TIME_KEY, String(thinkMs)); } catch {}
+
+    const runEngine = engine;
+    const run = {
+      id: ++practiceHintRunId,
+      engine: runEngine,
+      fen: board.fen(),
+      savedMultiPV: runEngine.multipv,
+      savedSkill: runEngine.skill,
+      timeoutId: 0,
+      onBest: null,
+    };
+    practiceHintRun = run;
+    window.__practiceHintOwnsEngine = true;
+    practiceSearchToken++;
+    _setPracticeHintButton(true);
+    const duration = thinkMs < 60_000
+      ? `${thinkMs / 1000} second${thinkMs === 1000 ? '' : 's'}`
+      : `${thinkMs / 60_000} minute${thinkMs === 60_000 ? '' : 's'}`;
+    _showPracticeHintStatus(`Stockfish is calculating three moves for you · ${duration}…`);
+
+    run.onBest = (event) => {
+      if (practiceHintRun !== run || run.id !== practiceHintRunId) return;
+      const eventFen = event.detail?.fen;
+      if (eventFen && eventFen !== run.fen) {
+        _finishPracticeHint(run, { error: 'Stockfish finished an older search. Please ask for the hint again.' });
+        return;
+      }
+      _finishPracticeHint(run, { topMoves: event.detail?.topMoves || [] });
+    };
+    runEngine.addEventListener('bestmove', run.onBest);
+
+    // The Engine class also has a bounded-search watchdog. This outer timer
+    // is only a final UI escape hatch, leaving enough slack for WASM startup
+    // and the stop/bestmove handshake on slower phones.
+    run.timeoutId = setTimeout(() => {
+      if (practiceHintRun !== run) return;
+      try { runEngine.removeEventListener('bestmove', run.onBest); } catch {}
+      try { runEngine.stop(); } catch {}
+      _finishPracticeHint(run, { error: 'The hint took too long. Stockfish was stopped safely; please try again.' });
+    }, Math.max(thinkMs + 8000, Math.round(thinkMs * 1.6) + 4000));
+
+    try {
+      runEngine.stop();
+      runEngine.setSkill(20);
+      runEngine.setMultiPV(3);
+      runEngine.start(run.fen, { movetime: thinkMs });
+    } catch (error) {
+      _finishPracticeHint(run, { error: `Could not start the hint: ${error.message || error}` });
+    }
+  }
+
+  if (practiceHintTime) {
+    try {
+      const saved = localStorage.getItem(PRACTICE_HINT_TIME_KEY);
+      if (saved && Array.from(practiceHintTime.options).some(option => option.value === saved)) {
+        practiceHintTime.value = saved;
+      }
+    } catch {}
+    practiceHintTime.addEventListener('change', () => {
+      try { localStorage.setItem(PRACTICE_HINT_TIME_KEY, practiceHintTime.value); } catch {}
+    });
+  }
+  practiceHintButton?.addEventListener('click', _startPracticeHint);
+
   // ────────── Practice game-end helpers ──────────
   // finishPracticeGame centralises the transition from "in-progress"
   // to "analysis mode". Called by natural game-over (in fireAnalysis),
@@ -7652,6 +7984,7 @@ async function main() {
   // the practice-finished class is the idempotent guard.
   function finishPracticeGame(resultTag, narrative) {
     if (document.body.classList.contains('practice-finished')) return;
+    _clearPracticeHint({ cancelSearch: true, clearResults: true, restartAnalysis: false });
     document.body.classList.add('practice-finished');
     document.body.classList.remove('practice-thinking');
     setTimeout(() => { try { window.__showDefaultGraph?.(); } catch {} }, 0);
