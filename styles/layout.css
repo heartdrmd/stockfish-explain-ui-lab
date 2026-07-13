@@ -417,7 +417,6 @@ body.nav-collapsed .site-header { min-height: 40px; padding: 6px 14px; }
    CSS order only — HTML order is preserved so JS queries stay intact. */
 .tools > .engine-power-row { order: 0; }
 .tools > .ceval            { order: 1; }
-.tools > #learn-panel-host { order: 2; }
 .tools > #accuracy-strip   { order: 2; }
 .tools > .move-list-wrap   { order: 3; }
 .tools > .tabbed           { order: 4; }
@@ -692,6 +691,18 @@ body.nav-collapsed .site-header { min-height: 40px; padding: 6px 14px; }
     top: auto;
     bottom: auto;
   }
+  /* Learn has a dedicated slot between the complete sticky board and the
+     larger analysis workspace. It never lives inside the collapsible tools
+     drawer, which keeps the lesson visible and prevents board overlays. */
+  body.mobile-mode.learn-panel-open .learn-panel-host:not([hidden]) {
+    order: 1;
+  }
+  body.mobile-mode.learn-panel-open.mobile-postgame-analysis .tools {
+    order: 2;
+  }
+  body.mobile-mode.learn-panel-open.mobile-postgame-analysis #practice-actions:not([hidden]) {
+    order: 3;
+  }
   body.mobile-mode.mobile-postgame-analysis .tools::before {
     content: "▲ LIVE POST-GAME ANALYSIS · Threats, variations & history · tap to collapse";
     color: var(--c-accent);
@@ -771,5 +782,14 @@ body.nav-collapsed .site-header { min-height: 40px; padding: 6px 14px; }
     width: 100%;
     max-height: 180px;
     overflow-y: auto;
+  }
+  body.mobile-mode.learn-panel-open.mobile-postgame-analysis .uniboard {
+    grid-template-areas:
+      "mobile-board mobile-learn"
+      "mobile-actions mobile-analysis";
+  }
+  body.mobile-mode.learn-panel-open .learn-panel-host:not([hidden]) {
+    grid-area: mobile-learn;
+    align-self: start;
   }
 }

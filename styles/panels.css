@@ -2521,9 +2521,10 @@ body.practice-mode .practice-card[hidden]       { display: none !important; }
 
 body.mobile-mode .learn-panel-host:not([hidden]) {
   display: block;
-  width: 100%;
+  width: min(100%, 560px);
   min-width: 0;
   margin: 6px 0;
+  align-self: center;
 }
 body.mobile-mode #learn-panel {
   position: relative !important;

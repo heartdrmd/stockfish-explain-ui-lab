@@ -41,6 +41,25 @@ export function winChanceWhite(cp, mate) {
   return 2 / (1 + Math.exp(WIN_MULTIPLIER * cp)) - 1;
 }
 
+// Stockfish reports a search score from the side-to-move's point of view.
+// The rest of this app stores and displays evaluations from White's point of
+// view, so every engine result must cross this boundary exactly once.
+export function engineScoreToWhite(score, fen) {
+  if (score == null || !Number.isFinite(score)) return null;
+  const sideToMove = (fen && fen.split(' ')[1]) || 'w';
+  return sideToMove === 'b' ? -score : score;
+}
+
+// Canonical visible evaluation format. Positive always favours White and
+// negative always favours Black, including mate scores.
+export function formatWhiteEval(cpWhite, mateWhite) {
+  if (mateWhite != null && Number.isFinite(mateWhite)) {
+    return mateWhite < 0 ? `#-${Math.abs(mateWhite)}` : `#${mateWhite}`;
+  }
+  if (cpWhite == null || !Number.isFinite(cpWhite)) return '—';
+  return `${cpWhite >= 0 ? '+' : ''}${(cpWhite / 100).toFixed(2)}`;
+}
+
 // Which colour just moved to reach `after`? The side to move IN `after`
 // is the opponent of the mover, so mover = opposite of after's STM.
 // Returns 'white' | 'black' (defaults to the side that would have moved

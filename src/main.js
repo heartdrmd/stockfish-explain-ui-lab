@@ -22,7 +22,15 @@ import { renderOpeningBlock, renderOpeningForAI, detectOpening } from './opening
 import { LICHESS_OPENINGS } from './openings_lichess.js';
 import { OPENING_ALIASES } from './openings_aliases.js';
 import * as EcoLookup from './eco-lookup.js';
-import { classifyQuality, classifySeverity, isLearnCandidateDrop, moverWinDrop, winChanceWhite } from './evals.js';
+import {
+  classifyQuality,
+  classifySeverity,
+  engineScoreToWhite,
+  formatWhiteEval,
+  isLearnCandidateDrop,
+  moverWinDrop,
+  winChanceWhite,
+} from './evals.js';
 
 // ─── Module-scoped alias cache ─────────────────────────────────────
 // WeakMap persists across every renderTree() call so alias lookups
@@ -2963,13 +2971,15 @@ async function main() {
       const gameOver = document.body.classList.contains('practice-finished') ||
                        document.body.classList.contains('analysis-archived') ||
                        !document.body.classList.contains('practice-mode');
-      // Auto-enter learn mode on pill click is the default — but
-      // skip it if the user explicitly closed the panel earlier this
-      // session (userDismissed). They get plain navigation instead;
-      // clicking the 🎓 button re-arms auto-enter.
-      const shouldAutoEnter = isOverClass && gameOver && !_learn.userDismissed &&
-        _findMistakePlies().includes(ply);
+      // A classified pill is an explicit lesson shortcut. Plain/good move
+      // pills remain navigation-only.
+      const shouldAutoEnter = isOverClass && gameOver && _findMistakePlies().includes(ply);
       if (shouldAutoEnter && typeof window.__enterLearnMode === 'function') {
+        // Clicking a classified error is an explicit request to learn it,
+        // even if the user closed an earlier lesson. Previously the sticky
+        // userDismissed flag made these clicks work only sometimes.
+        _learn.userDismissed = false;
+        _hydrateLearnSolutions([ply]);
         window.__enterLearnMode(ply);
       } else if (board.goToPly) {
         board.goToPly(ply);
@@ -3081,7 +3091,7 @@ async function main() {
   // _showSolution to render the green arrow + SAN instantly with no
   // second verification search.
   //   key:   pre-mistake FEN
-  //   value: { uci, san, cpWhite, evalFmt, depth }
+  //   value: { uci, san, cpWhite, mateWhite, evalFmt, depth }
   const _verifierBest = new Map();
   // Shared sigmoid (audit A5); coalesce null→0 for this helper's callers.
   const _cpToWinChance = (cp, mate = null) => winChanceWhite(cp, mate) ?? 0;
@@ -3152,10 +3162,9 @@ async function main() {
     _learn.panel = p;
     _positionLearnPanel(p);
     if (document.body.classList.contains('mobile-mode')) {
-      // The post-game action card that launches Learn sits later in the
-      // document than the analysis tools. Bring the newly docked lesson
-      // into view without hiding the sticky board above it.
-      setTimeout(() => p.scrollIntoView({ block: 'end' }), 0);
+      // Bring the newly docked lesson into view only when necessary; the
+      // sticky board above it remains fully visible.
+      setTimeout(() => p.scrollIntoView({ block: 'nearest' }), 0);
     }
     // Reposition on window resize / scroll so it stays glued to board.
     if (!_learn._resizeBound) {
@@ -3199,13 +3208,9 @@ async function main() {
   function _solvedCount() { return _learn.solvedPlies.size; }
 
   function _formatLearnEval(cpWhite, mateWhite) {
-    if (mateWhite != null) {
-      const povMate = _learn.solverColor === 'w' ? mateWhite : -mateWhite;
-      return `${povMate >= 0 ? '#' : '#-'}${Math.abs(povMate)}`;
-    }
-    if (cpWhite == null || !Number.isFinite(cpWhite)) return '—';
-    const povCp = _learn.solverColor === 'w' ? cpWhite : -cpWhite;
-    return `${povCp >= 0 ? '+' : ''}${(povCp / 100).toFixed(2)}`;
+    // Match the main engine, gauge, graph and accuracy tooltips: visible
+    // evals are always White POV. Pass/fail grading remains solver POV.
+    return formatWhiteEval(cpWhite, mateWhite);
   }
 
   function _formatLearnWin(cpWhite, mateWhite) {
@@ -3243,14 +3248,14 @@ async function main() {
     };
     const topRows = data.top.map((line, i) => rowHtml(`Engine #${i + 1}`, line, i === 0 ? 'learn-row-best' : '')).join('');
     return `<div class="learn-comparison-scroll"><table class="learn-comparison">
-      <thead><tr><th>Result</th><th>Move</th><th>Eval</th><th>Win</th><th>vs #1</th></tr></thead>
+      <thead><tr><th>Result</th><th>Move</th><th>Eval (White)</th><th>Your win</th><th>vs #1</th></tr></thead>
       <tbody>
         ${rowHtml('Original', data.original, 'learn-row-original')}
         ${rowHtml('Your try', data.attempt, _learn.gradePassed ? 'learn-row-attempt-pass' : 'learn-row-attempt-fail')}
         ${topRows}
       </tbody>
     </table></div>
-    <p class="retro-played" style="opacity:.68;font-size:11px;margin-top:7px;">Eval and winning chance are from your side. “pts” means winning-probability points behind Engine #1.</p>`;
+    <p class="retro-played" style="opacity:.68;font-size:11px;margin-top:7px;">Eval is always White POV, matching the main engine. “Your win” and “pts” are relative to the side solving this lesson.</p>`;
   }
 
   function _renderLearnPanel(state) {
@@ -3268,9 +3273,14 @@ async function main() {
     const idx = _currentMistakeIndex();
     const total = _countMistakeTotal();
     const solved = _solvedCount();
+    const counterText = state === 'preparing'
+      ? 'Scanning…'
+      : state === 'end'
+        ? `${total}/${total} · Done`
+        : `${idx}/${total}`;
     const titleBar = `<div class="retro-title">
         <span>🎓 Learn from mistakes</span>
-        <span class="retro-counter" title="Solved / current / total">${solved} · ${idx} / ${total}</span>
+        <span class="retro-counter" title="Current lesson / total">${counterText}</span>
         <button class="retro-close" id="learn-close" title="Close">×</button>
       </div>`;
     // Will the next-action button advance to another mistake or end
@@ -3280,7 +3290,7 @@ async function main() {
       p !== _learn.targetPly && !_learn.solvedPlies.has(p));
     const continueBtn = hasMoreUnsolved
       ? `<button class="retro-btn retro-continue" id="learn-next">Next ▶</button>`
-      : `<button class="retro-btn retro-continue" id="learn-finish">✓ Done</button>`;
+      : `<button class="retro-btn retro-continue" id="learn-finish">✓ Finish</button>`;
 
     let inner = '';
     if (state === 'find') {
@@ -3317,11 +3327,12 @@ async function main() {
           <span class="retro-icon">✗</span>
           <span>Not quite</span>
         </div>
-        <p class="retro-played" style="opacity:0.8;">Try a different move — or click below to see the best.</p>
+        <p class="retro-played" style="opacity:0.8;">Try a different move, compare it with the top three, or give up and continue.</p>
         ${diffLine}
         <div class="retro-choices">
-          <button class="retro-btn" id="learn-compare">Show your result + top 3</button>
           <button class="retro-btn" id="learn-retry">Try again</button>
+          <button class="retro-btn" id="learn-compare">Show top 3</button>
+          <button class="retro-btn retro-continue" id="learn-give-up">Give up · next ▶</button>
         </div>`;
     } else if (state === 'comparing') {
       inner = `<p class="retro-prompt">⏳ Comparing your move with the top three…</p>
@@ -3330,12 +3341,12 @@ async function main() {
     } else if (state === 'comparison') {
       inner = `${_learnComparisonHtml()}
         <div class="retro-choices">
-          ${_learn.gradePassed ? continueBtn : '<button class="retro-btn" id="learn-retry">Try again</button><button class="retro-btn retro-continue" id="learn-next">Skip / next ▶</button>'}
+          ${_learn.gradePassed ? continueBtn : '<button class="retro-btn" id="learn-retry">Try again</button><button class="retro-btn retro-continue" id="learn-give-up">Give up · next ▶</button>'}
         </div>`;
     } else if (state === 'view') {
       inner = `
         <p class="retro-prompt">Best was <strong>${_learn.bestSan || '?'}</strong></p>
-        <p class="retro-played">Evaluation after best: <strong>${_learn.bestEvalFmt || '?'}</strong></p>
+        <p class="retro-played">Evaluation after best (White POV): <strong>${_learn.bestEvalFmt || '?'}</strong></p>
         <div class="retro-choices">
           ${continueBtn}
         </div>`;
@@ -3396,16 +3407,15 @@ async function main() {
     p.innerHTML = titleBar + `<div class="retro-body">${inner}</div>`;
     p.querySelector('#learn-close')?.addEventListener('click', _closeLearnPanel);
     p.querySelector('#learn-close-end')?.addEventListener('click', _closeLearnPanel);
-    // ✓ Done — last-mistake variant of the next button. Marks the
-    // current mistake solved (so the counter shows N/N) and closes
-    // the panel cleanly. Skips the 'end' summary screen since the
-    // user already worked through every mistake.
+    // Finish the final item into a visible N/N · Done state. This keeps
+    // the completion result on screen until the user closes or restarts.
     p.querySelector('#learn-finish')?.addEventListener('click', () => {
       if (_learn.targetPly) _learn.solvedPlies.add(_learn.targetPly);
-      _closeLearnPanel();
+      _renderLearnPanel('end');
     });
     p.querySelector('#learn-next')?.addEventListener('click', _goNextMistake);
     p.querySelector('#learn-skip')?.addEventListener('click', _goNextMistake);
+    p.querySelector('#learn-give-up')?.addEventListener('click', _goNextMistake);
     p.querySelector('#learn-solution')?.addEventListener('click', _showSolution);
     p.querySelector('#learn-compare')?.addEventListener('click', _loadLearnComparison);
     p.querySelector('#learn-retry')?.addEventListener('click', () => _enterLearnMode(_learn.targetPly));
@@ -3468,11 +3478,12 @@ async function main() {
         const c = new Chess(prev.fen);
         san = c.move({ from: uci.slice(0, 2), to: uci.slice(2, 4), promotion: uci[4] || undefined })?.san || uci;
       } catch {}
-      const cp = cached.cpWhite;
-      const evalFmt = cached.mate != null
-        ? `#${cached.mate}`
-        : cp == null ? '?' : `${cp >= 0 ? '+' : ''}${(cp / 100).toFixed(2)}`;
-      _verifierBest.set(prev.fen, { uci, san, cpWhite: cp, evalFmt, depth: cached.depth || 0 });
+      const cpWhite = cached.cpWhite ?? null;
+      const mateWhite = cached.mate ?? null;
+      const evalFmt = formatWhiteEval(cpWhite, mateWhite);
+      _verifierBest.set(prev.fen, {
+        uci, san, cpWhite, mateWhite, evalFmt, depth: cached.depth || 0,
+      });
     }
   }
 
@@ -3512,13 +3523,12 @@ async function main() {
 
   function _lineToLearnRow(line, fen) {
     if (!line) return null;
-    const whiteToMove = fen.split(' ')[1] === 'w';
-    const signed = whiteToMove ? line.score : -line.score;
+    const whiteScore = engineScoreToWhite(line.score, fen);
     return {
       uci: line.uci,
       san: line.san || line.uci,
-      cpWhite: line.scoreKind === 'mate' ? null : signed,
-      mateWhite: line.scoreKind === 'mate' ? signed : null,
+      cpWhite: line.scoreKind === 'mate' ? null : whiteScore,
+      mateWhite: line.scoreKind === 'mate' ? whiteScore : null,
       pvSan: line.pvSan || '',
     };
   }
@@ -3712,10 +3722,10 @@ async function main() {
       try {
         const hist = engine.history || [];
         const last = hist[hist.length - 1];
-        const cp = last?.score ?? 0;
-        const stm = probeFen.split(' ')[1];
-        const cpPov = stm === 'w' ? cp : -cp;
-        _learn.bestEvalFmt = `${cpPov >= 0 ? '+' : ''}${(cpPov/100).toFixed(2)}`;
+        const whiteScore = engineScoreToWhite(last?.score, probeFen);
+        _learn.bestEvalFmt = last?.scoreKind === 'mate'
+          ? formatWhiteEval(null, whiteScore)
+          : formatWhiteEval(whiteScore, null);
       } catch {}
       _renderLearnPanel('view');
     };
@@ -3939,13 +3949,11 @@ async function main() {
           // searchmoves probe: score is from preFen's STM POV
           // representing the eval AFTER user's move. Convert to
           // white POV via the prev (solver-to-move) FEN.
-          const preStm = _learn.prevFen.split(' ')[1];
-          const signed = preStm === 'w' ? score : -score;
+          const signed = engineScoreToWhite(score, _learn.prevFen);
           if (isMate) mateAfterWhite = signed; else cpAfterWhite = signed;
         } else {
           // Fallback: post-FEN probe; score is from postFen's STM POV.
-          const stmAfter = postFen.split(' ')[1];
-          const signed = stmAfter === 'w' ? score : -score;
+          const signed = engineScoreToWhite(score, postFen);
           if (isMate) mateAfterWhite = signed; else cpAfterWhite = signed;
         }
         // Cache the result so a retry of the SAME move is instant

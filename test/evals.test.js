@@ -3,11 +3,29 @@ import assert from 'node:assert/strict';
 
 import {
   classifySeverity,
+  engineScoreToWhite,
+  formatWhiteEval,
   isLearnCandidateDrop,
   moveAccuracy,
   moverWinDrop,
   winChanceWhite,
 } from '../src/evals.js';
+
+test('engine scores cross into White POV exactly once for either side', () => {
+  const whiteFen = '8/8/8/8/8/8/8/8 w - - 0 1';
+  const blackFen = '8/8/8/8/8/8/8/8 b - - 0 1';
+  assert.equal(engineScoreToWhite(125, whiteFen), 125);
+  assert.equal(engineScoreToWhite(125, blackFen), -125);
+  assert.equal(engineScoreToWhite(-80, blackFen), 80);
+});
+
+test('visible evals use the same White POV convention for cp and mate', () => {
+  assert.equal(formatWhiteEval(125, null), '+1.25');
+  assert.equal(formatWhiteEval(-125, null), '-1.25');
+  assert.equal(formatWhiteEval(null, 3), '#3');
+  assert.equal(formatWhiteEval(null, -3), '#-3');
+  assert.equal(formatWhiteEval(null, null), '—');
+});
 
 test('moverWinDrop matches Lichess povDiff probability scale', () => {
   const before = { cpWhite: 0, mate: null, fen: '8/8/8/8/8/8/8/8 w - - 0 1' };

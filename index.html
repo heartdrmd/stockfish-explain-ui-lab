@@ -427,6 +427,11 @@
       </section>
     </div>
 
+    <!-- Mobile gives Learn its own normal-flow slot immediately after the
+         board, so lessons cannot disappear inside or be covered by the
+         collapsible analysis drawer. Desktop still floats the panel. -->
+    <div id="learn-panel-host" class="learn-panel-host" hidden></div>
+
     <section class="tools">
       <!-- Engine power + threat — kept at top so the ON/OFF toggle is
            always at hand. The "thinking" readout (score/depth/PV)
@@ -445,10 +450,6 @@
         </button>
       </div>
       <div id="threat-output" class="threat-output" hidden></div>
-
-      <!-- On phones Learn is docked here as a normal responsive tool
-           panel. Desktop keeps the established floating panel. -->
-      <div id="learn-panel-host" class="learn-panel-host" hidden></div>
 
       <!-- Engine output (score / depth / PV lines) — moved below
            move list via CSS `order`. -->
