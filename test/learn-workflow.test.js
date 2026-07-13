@@ -61,6 +61,14 @@ test('View solution and Give up both reveal the best move through top-three comp
   assert.match(main, /Solution revealed:/);
 });
 
+test('Learn comparison and board distinguish best, accepted try, and original error', () => {
+  assert.match(main, /i === 0 \? 'BEST MOVE' : `Engine #\$\{i \+ 1\}`/);
+  assert.match(panels, /\.learn-row-best[\s\S]*?font-size:\s*12\.5px[\s\S]*?font-weight:\s*800/);
+  assert.match(main, /function _drawLearnFeedbackArrows[\s\S]*?board\.goToPly\(_learn\.targetPly - 1\)[\s\S]*?_drawLearnMistakeArrow\(\)/);
+  assert.match(main, /_drawLearnFeedbackArrows\(top\[0\], \{ revealBest: true \}\)/);
+  assert.match(main, /_drawLearnFeedbackArrows\(null, \{ revealBest: false \}\)/);
+});
+
 test('Learn comparison labels visible evaluations as White POV', () => {
   assert.match(main, /<th>Eval \(White\)<\/th>/);
   assert.match(main, /Eval is always White POV, matching the main engine/);

@@ -58,6 +58,7 @@ import { computeGameStats, renderStatsPanel } from './game-stats.js';
 import * as MoveTime from './movetime.js';
 import * as OpeningVariation from './opening-variation.js';
 import { buildPracticeHintLines, upsertPracticeHint } from './practice-hint.js';
+import { buildLearnFeedbackArrows } from './learn-arrows.js';
 
 // Expose Chess to eval-graph's computeDivision helper — avoids a
 // circular import while still letting it replay SAN to count pieces
@@ -3159,6 +3160,32 @@ async function main() {
     _learn.arrowFen = _learn.prevFen;
   }
 
+  // Keep every lesson arrow on the same PRE-mistake position:
+  //   thin red  = the original mistake (dedicated SVG above)
+  //   green     = Stockfish's best move, once the answer is visible
+  //   thin blue = the learner's accepted alternative
+  //   thick blue= the learner found Stockfish #1 exactly
+  // Navigating back here does not delete a successful variation from the
+  // game tree; it only restores the board view so all arrows share one FEN.
+  function _drawLearnFeedbackArrows(best = null, { revealBest = true } = {}) {
+    if (!_learn.prevFen || !_learn.targetPly) return { shapes: [], exactBest: false };
+    const bestUci = best?.uci || _learn.bestUci || _learn.solutionUci || null;
+    const feedback = buildLearnFeedbackArrows({
+      bestUci,
+      attemptUci: _learn.attemptUci,
+      attemptAccepted: !!_learn.gradePassed,
+      revealBest,
+    });
+    try {
+      if (board.goToPly) board.goToPly(_learn.targetPly - 1);
+      if (board.fen() !== _learn.prevFen) return feedback;
+      board.drawArrows?.(feedback.shapes);
+      _drawLearnMistakeArrow();
+      _learn.arrowFen = _learn.prevFen;
+    } catch {}
+    return feedback;
+  }
+
   // Auto-clear the learn-mode best-move arrow as soon as the user
   // navigates / moves away from the position it was drawn for. Without
   // this the green arrow stayed glued to the squares it pointed at,
@@ -3343,7 +3370,7 @@ async function main() {
         <td>${deltaText}</td>
       </tr>`;
     };
-    const topRows = data.top.map((line, i) => rowHtml(`Engine #${i + 1}`, line, i === 0 ? 'learn-row-best' : '')).join('');
+    const topRows = data.top.map((line, i) => rowHtml(i === 0 ? 'BEST MOVE' : `Engine #${i + 1}`, line, i === 0 ? 'learn-row-best' : '')).join('');
     return `<div class="learn-comparison-scroll"><table class="learn-comparison">
       <thead><tr><th>Result</th><th>Move</th><th>Eval (White)</th><th>Your win</th><th>vs #1</th></tr></thead>
       <tbody>
@@ -3744,6 +3771,10 @@ async function main() {
       };
       if (_learn.solutionRequested) _revealLearnBestMove(top[0]);
       _renderLearnPanel('comparison');
+      // Showing the comparison already reveals #1 in the table, so mirror
+      // it on the retracted board. The original red arrow remains visible;
+      // an accepted attempt is added in blue by the same helper.
+      _drawLearnFeedbackArrows(top[0], { revealBest: true });
     } catch (err) {
       console.warn('[learn] top-three comparison failed', err);
       if (_learn.active && !_learn.userDismissed && _learn.compareSeq === seq) {
@@ -3763,24 +3794,12 @@ async function main() {
 
   function _revealLearnBestMove(best) {
     if (!best?.uci || !_learn.prevFen) return false;
-    _clearLearnMistakeArrow();
     _learn.bestUci = best.uci;
     _learn.bestSan = best.san || best.uci;
     _learn.bestEvalFmt = _formatLearnEval(best.cpWhite, best.mateWhite);
     _learn.solutionRevealed = true;
     _learn.solvedPlies.add(_learn.targetPly);
-    try {
-      if (board.goToPly) board.goToPly(_learn.targetPly - 1);
-      if (board.drawArrows && board.fen() === _learn.prevFen) {
-        board.drawArrows([{
-          orig: best.uci.slice(0, 2),
-          dest: best.uci.slice(2, 4),
-          brush: 'green',
-          modifiers: { lineWidth: 22 },
-        }]);
-        _learn.arrowFen = _learn.prevFen;
-      }
-    } catch {}
+    _drawLearnFeedbackArrows(best, { revealBest: true });
     return true;
   }
 
@@ -3801,6 +3820,10 @@ async function main() {
   function _completeLearnAttempt(passed) {
     _learn.gradePassed = !!passed;
     _renderLearnPanel(passed ? 'win' : 'fail');
+    // Always retract the trial to the lesson position. A passed move is
+    // previewed in blue immediately: thick if the scan already proves it
+    // is #1, otherwise thin until the top-three comparison confirms it.
+    _drawLearnFeedbackArrows(null, { revealBest: false });
     // A successful lesson is solved, so revealing the comparison no
     // longer spoils a retry. Failed attempts keep it behind the explicit
     // “Show your result + top 3” button.
@@ -3839,17 +3862,8 @@ async function main() {
       _learn.bestUci = cachedBest.uci;
       _learn.bestEvalFmt = cachedBest.evalFmt;
       _learn.solvedPlies.add(_learn.targetPly);
-      try {
-        if (board.drawArrows && board.fen() === prev.fen) {
-          board.drawArrows([{
-            orig: cachedBest.uci.slice(0, 2),
-            dest: cachedBest.uci.slice(2, 4),
-            brush: 'green',
-            modifiers: { lineWidth: 22 },
-          }]);
-          _learn.arrowFen = prev.fen;
-        }
-      } catch {}
+      _learn.solutionRevealed = true;
+      _drawLearnFeedbackArrows(cachedBest, { revealBest: true });
       console.log('[learn-mode] solution served from preparation cache (no probe)', cachedBest);
       _renderLearnPanel('view');
       return;
@@ -3914,17 +3928,8 @@ async function main() {
         const m = c.move({ from: bestUci.slice(0, 2), to: bestUci.slice(2, 4), promotion: bestUci[4] || undefined });
         _learn.bestSan = m ? m.san : bestUci;
       } catch { _learn.bestSan = bestUci; }
-      try {
-        if (board.drawArrows && board.fen() === probeFen) {
-          board.drawArrows([{
-            orig: bestUci.slice(0, 2),
-            dest: bestUci.slice(2, 4),
-            brush: 'green',
-            modifiers: { lineWidth: 22 },
-          }]);
-          _learn.arrowFen = probeFen;
-        }
-      } catch {}
+      _learn.solutionRevealed = true;
+      _drawLearnFeedbackArrows({ uci: bestUci, san: _learn.bestSan }, { revealBest: true });
       _learn.solvedPlies.add(_learn.targetPly);
       // Store eval if we have it (best-effort).
       try {

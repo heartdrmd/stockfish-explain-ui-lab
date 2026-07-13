@@ -2743,7 +2743,15 @@ body.mobile-mode #learn-panel .retro-choices {
 .learn-row-original { background: rgba(220,53,69,.10); }
 .learn-row-attempt-pass { background: rgba(40,167,69,.15); }
 .learn-row-attempt-fail { background: rgba(255,152,0,.12); }
-.learn-row-best { color: #9ed2ff; }
+.learn-row-best {
+  color: #a9e3af;
+  font-size: 12.5px;
+  font-weight: 800;
+}
+.learn-row-best td:nth-child(2) {
+  font-size: 13.5px;
+  letter-spacing: .01em;
+}
 .learn-mistake-arrow {
   position: absolute;
   inset: 0;
