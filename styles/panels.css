@@ -659,12 +659,10 @@ details.dissect-details[open] summary {
   padding: 12px;
   display: flex;
   flex-direction: column;
-  /* Let the wrap grow to a generous chunk of the viewport — the
-     #move-list inside scrolls internally. The old 420 px cap meant the
-     notation + (new) notation-below-slot + input all had to share that
-     budget, squeezing moves down to only 2–3 visible rows after
-     loading a long game. */
+  /* Keep notation in a bounded internal scroller so swiping through moves
+     never drags the page or the sticky board. */
   max-height: min(78vh, 780px);
+  min-height: 0;
 }
 
 .move-list-header {
@@ -754,9 +752,14 @@ details.dissect-details[open] summary {
 .nav-btn:hover  { background: var(--c-bg-zebra2); }
 .nav-btn:active { background: var(--c-primary); color: white; }
 
-#move-list {
+.move-list-wrap > #move-list {
   overflow-y: auto;
-  flex: 1;
+  flex: 1 1 220px;
+  min-height: 0;
+  overscroll-behavior-y: contain;
+  overscroll-behavior-x: none;
+  touch-action: pan-y;
+  -webkit-overflow-scrolling: touch;
 }
 
 /* ──────────────────────────────────────────────────────────────── */
@@ -2760,15 +2763,18 @@ body.mobile-mode #learn-panel .retro-choices {
   height: 100%;
   pointer-events: none;
   overflow: visible;
-  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, .22));
+  /* Lichess autoShape.ts uses Chessground paleRed at lineWidth 8.
+     Chessground's #882020 × .4 brush, combined with this site's .7
+     cg-shapes layer, is an effective .28 opacity. Match that exactly. */
+  filter: none;
 }
 .learn-mistake-arrow line {
-  stroke: #ef7777;
-  stroke-width: 1.8;
+  stroke: #882020;
+  stroke-width: 1.5625;
   stroke-linecap: round;
-  opacity: .30;
+  opacity: .28;
 }
-.learn-mistake-arrow marker path { fill: #ef7777; opacity: .34; }
+.learn-mistake-arrow marker path { fill: #882020; opacity: .28; }
 .retro-mistake-mark {
   display: inline-flex;
   align-items: center;

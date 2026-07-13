@@ -3170,6 +3170,12 @@ async function main() {
   function _drawLearnFeedbackArrows(best = null, { revealBest = true } = {}) {
     if (!_learn.prevFen || !_learn.targetPly) return { shapes: [], exactBest: false };
     const bestUci = best?.uci || _learn.bestUci || _learn.solutionUci || null;
+    // Once #1 is visible on the board/table, preserve it beside every
+    // learner attempt in notation. addNode() is UCI-idempotent, so an
+    // exact-best attempt is reused instead of duplicated.
+    if (revealBest && bestUci) {
+      _recordLearnBestVariation({ ...best, uci: bestUci });
+    }
     const feedback = buildLearnFeedbackArrows({
       bestUci,
       attemptUci: _learn.attemptUci,
@@ -3433,14 +3439,10 @@ async function main() {
         <span class="retro-counter" title="Current lesson / total">${counterText}</span>
         <button class="retro-close" id="learn-close" title="Close">×</button>
       </div>`;
-    // Will the next-action button advance to another mistake or end
-    // the session? Used to swap "Next ▶" → "Done ✓" on the LAST one.
-    const allRemaining = _findMistakePlies();
-    const hasMoreUnsolved = allRemaining.some(p =>
-      p !== _learn.targetPly && !_learn.solvedPlies.has(p));
-    const continueBtn = hasMoreUnsolved
-      ? `<button class="retro-btn retro-continue" id="learn-next">Next ▶</button>`
-      : `<button class="retro-btn retro-continue" id="learn-finish">✓ Finish</button>`;
+    // Match Lichess retrospection: solved/viewed lessons ALWAYS say Next.
+    // The click itself determines whether another lesson exists; only then
+    // does the dedicated completion screen appear.
+    const continueBtn = `<button class="retro-btn retro-continue" id="learn-next">Next ▶</button>`;
 
     let inner = '';
     if (state === 'setup') {
@@ -3585,15 +3587,6 @@ async function main() {
     p.querySelector('#learn-close')?.addEventListener('click', _closeLearnPanel);
     p.querySelector('#learn-close-end')?.addEventListener('click', _closeLearnPanel);
     p.querySelector('#learn-start')?.addEventListener('click', _startLearnPreparation);
-    // Finish the final item into a visible N/N · Done state. This keeps
-    // the completion result on screen until the user closes or restarts.
-    p.querySelector('#learn-finish')?.addEventListener('click', () => {
-      if (_learn.targetPly) _learn.solvedPlies.add(_learn.targetPly);
-      _clearLearnMistakeArrow();
-      try { board.drawArrows?.([]); } catch {}
-      _learn.arrowFen = null;
-      _renderLearnPanel('end');
-    });
     p.querySelector('#learn-next')?.addEventListener('click', _goNextMistake);
     p.querySelector('#learn-skip')?.addEventListener('click', _goNextMistake);
     p.querySelector('#learn-give-up')?.addEventListener('click', _giveUpAndShowSolution);
@@ -3648,6 +3641,50 @@ async function main() {
   function _mainlineNodeAtPly(ply) {
     try { return board.tree?.mainlineNodes?.()[ply - 1] || null; }
     catch { return null; }
+  }
+
+  function _mainlinePathAtPly(ply) {
+    const tree = board.tree;
+    if (!tree?.root) return null;
+    let path = '';
+    let node = tree.root;
+    for (let i = 0; i < ply; i++) {
+      const child = node.children?.[0];
+      if (!child) return null;
+      path += child.id;
+      node = child;
+    }
+    return path;
+  }
+
+  function _recordLearnBestVariation(best) {
+    const rawUci = String(best?.uci || '').toLowerCase();
+    if (!/^[a-h][1-8][a-h][1-8][qrbn]?$/.test(rawUci) || !_learn.prevFen) return null;
+    const parentPath = _mainlinePathAtPly(_learn.targetPly - 1);
+    if (parentPath == null) return null;
+    try {
+      const chess = new Chess(_learn.prevFen);
+      const move = chess.move({
+        from: rawUci.slice(0, 2),
+        to: rawUci.slice(2, 4),
+        promotion: rawUci[4] || undefined,
+      });
+      if (!move) return null;
+      const result = board.tree.addNode({
+        uci: rawUci,
+        san: move.san || best?.san || rawUci,
+        fen: chess.fen(),
+      }, parentPath);
+      if (result) {
+        board.dispatchEvent(new CustomEvent('tree-changed', {
+          detail: { source: 'learn-best', path: result.path, created: result.created },
+        }));
+      }
+      return result;
+    } catch (err) {
+      console.warn('[learn] could not preserve best move as variation', err);
+      return null;
+    }
   }
 
   function _hydrateLearnSolutions(candidates) {

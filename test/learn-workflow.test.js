@@ -29,6 +29,8 @@ test('Learn shows simple lesson progress and explicit retry or give-up actions',
   assert.match(main, /id="learn-compare">Show top 3/);
   assert.match(main, /id="learn-give-up">Give up · solution/);
   assert.match(main, /learn-give-up'\)\?\.addEventListener\('click', _giveUpAndShowSolution\)/);
+  assert.match(main, /const continueBtn = `<button class="retro-btn retro-continue" id="learn-next">Next ▶<\/button>`/);
+  assert.doesNotMatch(main, /id="learn-finish"/);
 });
 
 test('Learn exposes scan and top-three durations at launch and in the lesson panel', () => {
@@ -52,7 +54,7 @@ test('Learn marks and previews the original error without replaying it', () => {
   assert.match(main, /board\.goToPly\(targetPly - 1\)[\s\S]*?_drawLearnMistakeArrow\(\)/);
   assert.match(main, /id = 'learn-mistake-arrow'/);
   assert.match(main, /The red arrow shows that original move; it has <strong>not<\/strong> been replayed/);
-  assert.match(panels, /\.learn-mistake-arrow line[\s\S]*?stroke-width:\s*1\.8[\s\S]*?opacity:\s*\.30/);
+  assert.match(panels, /\.learn-mistake-arrow line[\s\S]*?stroke:\s*#882020[\s\S]*?stroke-width:\s*1\.5625[\s\S]*?opacity:\s*\.28/);
 });
 
 test('View solution and Give up both reveal the best move through top-three comparison', () => {
@@ -73,6 +75,14 @@ test('every Learn attempt remains in notation as a side variation', () => {
   assert.doesNotMatch(main, /deleteAt\(trialPath\)/);
   assert.match(main, /Keep it there permanently as a notation[\s\S]*?including unsuccessful tries/);
   assert.match(main, /function _completeLearnAttempt[\s\S]*?_drawLearnFeedbackArrows\(null, \{ revealBest: false \}\)/);
+  assert.match(main, /function _recordLearnBestVariation[\s\S]*?board\.tree\.addNode[\s\S]*?source: 'learn-best'/);
+  assert.match(main, /if \(revealBest && bestUci\)[\s\S]*?_recordLearnBestVariation/);
+});
+
+test('notation scroll is contained without moving the sticky board or page', () => {
+  assert.match(panels, /\.move-list-wrap\s*\{[\s\S]*?max-height:\s*min\(78vh, 780px\)[\s\S]*?min-height:\s*0/);
+  assert.match(panels, /\.move-list-wrap > #move-list\s*\{[\s\S]*?overflow-y:\s*auto[\s\S]*?overscroll-behavior-y:\s*contain[\s\S]*?touch-action:\s*pan-y/);
+  assert.match(layout, /body\.mobile-mode \.board-eval-wrap[\s\S]*?position:\s*sticky/);
 });
 
 test('Learn comparison labels visible evaluations as White POV', () => {
