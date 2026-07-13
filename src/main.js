@@ -3801,7 +3801,12 @@ async function main() {
     const savedScrollX = window.scrollX;
     // Jump board to pre-mistake position.
     if (board.goToPly) board.goToPly(targetPly - 1);
-    if (board.orientation !== (_learn.solverColor === 'w' ? 'white' : 'black')) {
+    // A saved/practice game stays viewed from the user's side throughout
+    // review, including lessons on an opponent move. Free analysis (no
+    // known user side) still faces the side solving the position.
+    const lessonOrientation = _learn.reviewColor || practiceColor ||
+      (_learn.solverColor === 'w' ? 'white' : 'black');
+    if (board.orientation !== lessonOrientation) {
       try { board.flipBoard(); } catch {}
     }
     _renderLearnPanel('find');
@@ -4451,6 +4456,19 @@ async function main() {
         bestUci: start.bestUci || null,
       });
     }
+  }
+
+  function orientBoardForSavedGame(userColor) {
+    const desired = userColor === 'black' ? 'black'
+      : userColor === 'white' ? 'white'
+      : null;
+    // Legacy/analysis games may have no recorded side. In that case do
+    // not surprise the user by changing their current orientation.
+    if (desired && board.orientation !== desired) {
+      try { board.flipBoard(); } catch {}
+    }
+    const clockDisplay = document.getElementById('clock-digital');
+    if (clockDisplay && desired) clockDisplay.dataset.userColor = desired;
   }
 
   function countPersistedMistakes(plies) {
@@ -7837,6 +7855,7 @@ async function main() {
       board.newGame();
       window.__loadedLocalGameId = g.id;
       _learn.reviewColor = g.userColor || null;
+      orientBoardForSavedGame(g.userColor);
       window.__practiceOpeningPlies = 0;
       try {
         if (g.startingFen && g.startingFen !== board.startingFen) {
@@ -9076,6 +9095,7 @@ async function main() {
       window.__loadedLocalGameId = null;
     }
     _learn.reviewColor = game?.user_color || null;
+    orientBoardForSavedGame(game?.user_color);
     window.__practiceOpeningPlies = 0;
     const plies = Array.isArray(game.plies) ? game.plies : [];
     hydrateSavedAnalysis(game, board.startingFen);
