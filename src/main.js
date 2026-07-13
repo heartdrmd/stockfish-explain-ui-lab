@@ -9772,11 +9772,22 @@ async function main() {
           blackName = practiceColor === 'black' ? (window.__currentUser?.username || 'You') : 'Stockfish';
           userSideForReview = practiceColor;
         }
+        // Keep the review actions alive across graph refreshes. Engine
+        // bestmove/navigation events call update() repeatedly; replacing
+        // the stats HTML used to delete the archived-game Learn button.
+        const existingReviewCta = statsWrap.querySelector('.live-graph-cta');
         statsWrap.innerHTML = [
           renderStatsPanel({ side: 'white', name: whiteName, stats: stats.white, isUser: userSideForReview === 'white', byKind: stats.byKind }),
           renderStatsPanel({ side: 'black', name: blackName, stats: stats.black, isUser: userSideForReview === 'black', byKind: stats.byKind }),
           `<div class="gs-reanalyze-wrap"><button class="gs-reanalyze" title="Re-run Stockfish on every position to refresh the mistake/blunder counts">🔄 Reanalyze for mistakes</button><span class="gs-reanalyze-status"></span></div>`,
         ].join('');
+        if (existingReviewCta && card.classList.contains('review-mode')) {
+          statsWrap.querySelector('.gs-reanalyze-wrap')?.remove();
+          // On phones the important action comes immediately below the
+          // graph; desktop keeps it after the two side-stat panels.
+          if (document.body.classList.contains('mobile-mode')) statsWrap.prepend(existingReviewCta);
+          else statsWrap.appendChild(existingReviewCta);
+        }
         // Live panel: cycling acts on the CURRENT mainline directly,
         // no game-load step needed.
         if (!statsWrap._wired) {
@@ -9791,14 +9802,17 @@ async function main() {
         // panels sit under the move list on the right (user layout
         // preference).
         const notationSlot = document.getElementById('notation-below-slot');
-        if (card.classList.contains('review-mode') && notationSlot && statsWrap.parentElement !== notationSlot) {
+        const mobileReview = card.classList.contains('review-mode') &&
+          document.body.classList.contains('mobile-mode');
+        if (card.classList.contains('review-mode') && !mobileReview && notationSlot && statsWrap.parentElement !== notationSlot) {
           // Install a drag handle at the top of the slot so the user
           // can resize the stats pane (drag down → more notation, drag
           // up → more stats).
           installStatsResizer(notationSlot);
           notationSlot.appendChild(statsWrap);
-        } else if (!card.classList.contains('review-mode') && statsWrap.parentElement !== card) {
-          // Back to its original home inside the card when not in review.
+        } else if ((!card.classList.contains('review-mode') || mobileReview) && statsWrap.parentElement !== card) {
+          // Mobile review keeps Learn + stats in the graph card below
+          // the board. Non-review restores the card's original layout.
           card.appendChild(statsWrap);
         }
       } else {
@@ -10088,7 +10102,8 @@ async function main() {
             <button class="gs-reanalyze-stop"      data-cta="stop" hidden>⏹ Stop</button>
           </div>
           <span class="gs-reanalyze-status"></span>`;
-        statsWrap.appendChild(cta);
+        if (document.body.classList.contains('mobile-mode')) statsWrap.prepend(cta);
+        else statsWrap.appendChild(cta);
         // Wire CTA
         cta.querySelector('[data-cta="learn"]').addEventListener('click', () => {
           const btn = document.getElementById('btn-learn-mistakes');
