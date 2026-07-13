@@ -4112,6 +4112,7 @@ async function main() {
     _learn.reviewColor = null;
     window.__loadedCloudGameId = null;
     window.__loadedLocalGameId = null;
+    window.__loadedGameAnalysisMeta = null;
     try { window.__mistakesSweptForFen = null; } catch {}
     updateLearnButton();
   });
@@ -4259,6 +4260,7 @@ async function main() {
   // never evaluated before, so every other ply had cpWhite: null.
   let sweepRunning = false;
   let sweepAbort = false;
+  let lastSweepStats = null;
   // Auto-abort ordinary background reanalysis when the user needs the
   // engine. A Learn-owned sweep is different: it snapshots its target
   // positions first, so history navigation is safe and must not cancel it.
@@ -4279,6 +4281,11 @@ async function main() {
     if (sweepRunning) return false;
     sweepRunning = true;
     sweepAbort = false;
+    const startedAt = Date.now();
+    let sweepTotal = 0;
+    let sweepReused = 0;
+    let sweepProbed = 0;
+    let sweepCompleted = false;
     // Snapshot the live engine state + mute flag so we can restore.
     const wasMuted = window.__engineMuted === true;
     const savedSweepSkill = engine.skill;
@@ -4308,6 +4315,7 @@ async function main() {
           targets.push({ fen: replay.fen(), label: mv.san });
         }
       }
+      sweepTotal = targets.length;
       let done = 0;
       if (onProgress) onProgress(0, targets.length);
       for (const t of targets) {
@@ -4316,11 +4324,23 @@ async function main() {
           break;
         }
         const existing = fenEvalCache.get(t.fen);
+        const savedMeta = window.__loadedGameAnalysisMeta;
+        // A completed persisted Learn cache is authoritative regardless
+        // of the numerical depth reached by its time-based search. A
+        // 400 ms phone scan may finish below depth 18 but is still the
+        // exact result the user chose and saved. Only an explicit
+        // force=true Reanalyze should replace it; missing entries are
+        // still probed individually as a self-healing fallback.
+        const reusableSaved = !force && savedMeta?.version >= 1 &&
+          Number(savedMeta.positions || 0) >= targets.length &&
+          existing && (existing.cpWhite != null || existing.mate != null) &&
+          (!requireBestMove || existing.bestUci);
         // Learn scans reuse a sufficiently deep cached best move even when
         // their configured budget is time-based. Explicit Reanalyze passes
         // set force=true because the user asked for a fresh result.
-        if (!force && existing && existing.depth != null && existing.depth >= minDepth &&
-            (!requireBestMove || existing.bestUci)) {
+        if (reusableSaved || (!force && existing && existing.depth != null && existing.depth >= minDepth &&
+            (!requireBestMove || existing.bestUci))) {
+          sweepReused++;
           done++;
           if (onProgress) onProgress(done, targets.length);
           continue;
@@ -4332,6 +4352,7 @@ async function main() {
         // call engine.stop() to nudge a real bestmove out and let the
         // loop continue. 12 s budget = generous for depth-12 probes.
         try {
+          sweepProbed++;
           const probeP = AICoach.probeEngine(engine, t.fen, minDepth, 1, movetimeMs);
           const timer = new Promise(res => setTimeout(() => res('__timeout__'), 12_000));
           const winner = await Promise.race([probeP, timer]);
@@ -4344,8 +4365,19 @@ async function main() {
         done++;
         if (onProgress) onProgress(done, targets.length);
       }
-      return !sweepAbort;
+      sweepCompleted = !sweepAbort;
+      return sweepCompleted;
     } finally {
+      lastSweepStats = {
+        completed: sweepCompleted,
+        total: sweepTotal,
+        reused: sweepReused,
+        probed: sweepProbed,
+        minDepth,
+        movetimeMs,
+        force,
+        elapsedMs: Date.now() - startedAt,
+      };
       sweepRunning = false;
       sweepAbort = false;
       window.__engineMuted = wasMuted;
@@ -4357,7 +4389,7 @@ async function main() {
     }
   }
 
-  function collectPersistableMainlinePlies() {
+  function collectPersistableMainlinePlies(analysisMeta = null) {
     const out = [];
     let cur = board.tree?.root;
     while (cur?.children?.length) {
@@ -4371,10 +4403,54 @@ async function main() {
         cpWhite: ev.cpWhite ?? null,
         mate: ev.mate ?? null,
         depth: ev.depth ?? null,
+        bestUci: ev.bestUci || null,
       });
       cur = n;
     }
+    if (out.length && analysisMeta) {
+      const start = fenEvalCache.get(board.startingFen) || {};
+      out[0].analysisMeta = analysisMeta;
+      out[0].startAnalysis = {
+        cpWhite: start.cpWhite ?? null,
+        mate: start.mate ?? null,
+        depth: start.depth ?? null,
+        bestUci: start.bestUci || null,
+      };
+    }
     return out;
+  }
+
+  function savedAnalysisMeta(plies) {
+    return Array.isArray(plies) && plies.length ? (plies[0]?.analysisMeta || null) : null;
+  }
+
+  function savedAnalysisLabel(plies) {
+    const meta = savedAnalysisMeta(plies);
+    if (!meta?.analyzedAt) return '';
+    const budget = Number(meta.movetimeMs) > 0
+      ? `${Number(meta.movetimeMs) >= 1000
+          ? `${(Number(meta.movetimeMs) / 1000).toFixed(Number(meta.movetimeMs) % 1000 ? 1 : 0)} s`
+          : `${Number(meta.movetimeMs)} ms`}/move`
+      : `depth ${meta.minDepth || '?'}`;
+    const when = new Date(meta.analyzedAt);
+    const date = Number.isNaN(when.getTime()) ? '' : when.toLocaleString([], {
+      month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit',
+    });
+    return `Saved Learn analysis · ${budget}${date ? ` · ${date}` : ''}`;
+  }
+
+  function hydrateSavedAnalysis(game, startingFen) {
+    const plies = Array.isArray(game?.plies) ? game.plies : [];
+    window.__loadedGameAnalysisMeta = savedAnalysisMeta(plies);
+    const start = plies[0]?.startAnalysis;
+    if (start && startingFen && (start.cpWhite != null || start.mate != null)) {
+      fenEvalCache.set(startingFen, {
+        cpWhite: start.cpWhite ?? null,
+        mate: start.mate ?? null,
+        depth: start.depth || 0,
+        bestUci: start.bestUci || null,
+      });
+    }
   }
 
   function countPersistedMistakes(plies) {
@@ -4388,7 +4464,18 @@ async function main() {
   }
 
   async function persistReanalysisForLoadedGame() {
-    const plies = collectPersistableMainlinePlies();
+    const priorMeta = window.__loadedGameAnalysisMeta || null;
+    const freshMeta = lastSweepStats?.completed && lastSweepStats.probed > 0
+      ? {
+          version: 1,
+          analyzedAt: new Date().toISOString(),
+          movetimeMs: lastSweepStats.movetimeMs || 0,
+          minDepth: lastSweepStats.minDepth || 0,
+          positions: lastSweepStats.total || 0,
+          engineFlavor: currentFlavor || null,
+        }
+      : priorMeta;
+    const plies = collectPersistableMainlinePlies(freshMeta);
     if (!plies.length) return false;
     const localId = window.__loadedLocalGameId;
     if (Number.isFinite(+localId)) {
@@ -4406,6 +4493,7 @@ async function main() {
         return false;
       }
     }
+    window.__loadedGameAnalysisMeta = freshMeta;
     return true;
   }
 
@@ -7755,6 +7843,7 @@ async function main() {
           board.chess.load(g.startingFen);
           board.startingFen = g.startingFen;
         }
+        hydrateSavedAnalysis(g, board.startingFen);
         // Build UCI list from stored SAN so playUciMoves can rebuild
         // the GameTree — without this the move list stays empty and
         // only the final position is visible. Replay SAN through a
@@ -7768,7 +7857,14 @@ async function main() {
           if (!m) break;
           uciMoves.push(m.from + m.to + (m.promotion || ''));
           if (p.cpWhite != null || p.mate != null) {
-            try { fenEvalCache.set(replay.fen(), { cpWhite: p.cpWhite ?? null, mate: p.mate ?? null, depth: p.depth || 0 }); } catch {}
+            try {
+              fenEvalCache.set(replay.fen(), {
+                cpWhite: p.cpWhite ?? null,
+                mate: p.mate ?? null,
+                depth: p.depth || 0,
+                bestUci: p.bestUci || null,
+              });
+            } catch {}
           }
         }
         // Reset chess.js to starting fen before playUciMoves (which
@@ -7779,7 +7875,8 @@ async function main() {
           board.playUciMoves(uciMoves, { animate: false });
         }
         try { fireAnalysis(); } catch {}
-        ui.narrationText.innerHTML = `📚 Loaded archived game: <strong>${escHtml(g.opening?.name || 'game')}</strong> (${g.date}). Walk through with ← → to review with full engine eval.`;
+        const savedLabel = savedAnalysisLabel(g.plies);
+        ui.narrationText.innerHTML = `📚 Loaded archived game: <strong>${escHtml(g.opening?.name || 'game')}</strong> (${g.date}). Walk through with ← → to review with full engine eval.${savedLabel ? ` <strong>${escHtml(savedLabel)}</strong> — Learn reuses it without rescanning.` : ''}`;
       } catch (err) {
         console.warn('[archive] load failed', err);
         alert('Could not load that game.');
@@ -8943,10 +9040,23 @@ async function main() {
       const idx = ((row._cycleIdx | 0) % plyList.length);
       row._cycleIdx = idx + 1;
       const targetPly = plyList[idx];
+      const lessonKind = row.dataset.kind || '';
       // If we JUST loaded the game, give the tree a moment to populate
       // before navigating; if it was already loaded, jump immediately.
       setTimeout(() => {
-        try { board.goToPly?.(targetPly); } catch {}
+        try {
+          if (lessonKind && typeof window.__enterLearnMode === 'function') {
+            // Inaccuracy, Mistake and Blunder rows are lesson shortcuts:
+            // open the exact pre-error position and let the user try a
+            // better move. Shared handler means mobile + desktop match.
+            if (typeof o.beforeLesson === 'function') o.beforeLesson({ targetPly, kind: lessonKind });
+            _learn.userDismissed = false;
+            _hydrateLearnSolutions([targetPly]);
+            window.__enterLearnMode(targetPly);
+          } else {
+            board.goToPly?.(targetPly);
+          }
+        } catch {}
       }, wasLoaded ? 0 : 180);
     });
   }
@@ -8968,6 +9078,7 @@ async function main() {
     _learn.reviewColor = game?.user_color || null;
     window.__practiceOpeningPlies = 0;
     const plies = Array.isArray(game.plies) ? game.plies : [];
+    hydrateSavedAnalysis(game, board.startingFen);
     const uciMoves = [];
     const replay = new Chess();
     for (const p of plies) {
@@ -8977,13 +9088,21 @@ async function main() {
       if (!m) break;
       uciMoves.push(m.from + m.to + (m.promotion || ''));
       if (p.cpWhite != null || p.mate != null) {
-        try { fenEvalCache.set(replay.fen(), { cpWhite: p.cpWhite ?? null, mate: p.mate ?? null, depth: p.depth || 0 }); } catch {}
+        try {
+          fenEvalCache.set(replay.fen(), {
+            cpWhite: p.cpWhite ?? null,
+            mate: p.mate ?? null,
+            depth: p.depth || 0,
+            bestUci: p.bestUci || null,
+          });
+        } catch {}
       }
     }
     if (uciMoves.length) board.playUciMoves(uciMoves, { animate: false });
     try { fireAnalysis(); } catch {}
     if (ui.narrationText) {
-      ui.narrationText.innerHTML = `📚 Loaded cloud game: <strong>${(game.opening_name || 'game')}</strong>. Walk through with ← → to review.`;
+      const savedLabel = savedAnalysisLabel(plies);
+      ui.narrationText.innerHTML = `📚 Loaded cloud game: <strong>${(game.opening_name || 'game')}</strong>. Walk through with ← → to review.${savedLabel ? ` <strong>${savedLabel}</strong> — Learn reuses it without rescanning.` : ''}`;
     }
   }
 
@@ -9266,7 +9385,8 @@ async function main() {
         const date = new Date(game.played_at).toLocaleString();
         const modeLabel = game.mode === 'practice' ? 'Practice' : 'Analysis';
         const side = game.user_color ? ` · played as ${game.user_color}` : '';
-        dSub.textContent = `${date} · ${modeLabel}${side} · ${game.result || '*'}`;
+        const savedLabel = savedAnalysisLabel(game.plies);
+        dSub.textContent = `${date} · ${modeLabel}${side} · ${game.result || '*'}${savedLabel ? ` · ${savedLabel}` : ''}`;
         // Eval graph
         const plies = Array.isArray(game.plies) ? game.plies : [];
         // Click-to-jump: clicking any point (especially the
@@ -9334,6 +9454,7 @@ async function main() {
         paintStats(plies);
         wireStatsInteractions(dStatsWrap, {
           loadFirst: () => loadCloudGameOntoBoard(game),
+          beforeLesson: () => closeTab(),
           onReanalyzed,
           resetLoaded: true,
         });
@@ -9844,6 +9965,8 @@ async function main() {
     function exitReviewMode() {
       card.classList.remove('review-mode');
       card._reviewGame = null;
+      const graphHeading = card.querySelector('.live-graph-head strong');
+      if (graphHeading) graphHeading.textContent = '📈 Evaluation timeline';
       const mtWrap = document.getElementById('live-movetime-wrap');
       if (mtWrap) mtWrap.hidden = true;
       if (card.parentElement && card.parentElement.id === 'board-below-slot') document.body.appendChild(card);
@@ -10033,6 +10156,11 @@ async function main() {
     window.__openReviewMode = (game) => {
       card.classList.add('review-mode');
       card._reviewGame = game;   // so update() can pull player names
+      const graphHeading = card.querySelector('.live-graph-head strong');
+      if (graphHeading) {
+        const savedLabel = savedAnalysisLabel(game?.plies);
+        graphHeading.textContent = `📈 Evaluation timeline${savedLabel ? ` · ${savedLabel}` : ''}`;
+      }
       // Dock the card into the slot below the board so the timeline
       // is embedded in the page flow (user feedback).
       const slot = document.getElementById('board-below-slot');

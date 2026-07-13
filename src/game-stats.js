@@ -120,7 +120,7 @@ export function renderStatsPanel({ side, name, stats, isUser, byKind }) {
     const clickable = plies.length > 0;
     const cls = `gs-row gs-${kind}${clickable ? ' gs-clickable' : ''}`;
     const dataAttrs = clickable
-      ? ` data-side="${side}" data-kind="${kindKey}" data-plies="${plies.join(',')}" title="Click to cycle through each ${label.toLowerCase()}"`
+      ? ` data-side="${side}" data-kind="${kindKey}" data-plies="${plies.join(',')}" title="Click to try a better move at each ${label.toLowerCase()}"`
       : '';
     return `<div class="${cls}"${dataAttrs}><span class="gs-n">${n}</span><span class="gs-label">${label}</span></div>`;
   };
