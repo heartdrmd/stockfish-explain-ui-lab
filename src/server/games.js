@@ -56,13 +56,51 @@ function buildFilters(req) {
   return { params, where };
 }
 
+export function sanitizePracticeHints(value) {
+  if (value == null) return [];
+  if (!Array.isArray(value)) throw new Error('hints must be an array');
+  if (value.length > 100) throw new Error('too many hints');
+  const clean = [];
+  for (const raw of value) {
+    if (!raw || typeof raw !== 'object') continue;
+    const fen = typeof raw.fen === 'string' ? raw.fen.slice(0, 200) : '';
+    const ply = Number.isFinite(+raw.ply) ? Math.max(0, Math.min(1000, Math.trunc(+raw.ply))) : null;
+    if (!fen || ply == null) continue;
+    const lines = (Array.isArray(raw.lines) ? raw.lines : []).slice(0, 3).map((line, index) => ({
+      rank: Math.max(1, Math.min(3, Math.trunc(+line?.rank || index + 1))),
+      uci: typeof line?.uci === 'string' && /^[a-h][1-8][a-h][1-8][qrbn]?$/.test(line.uci)
+        ? line.uci : null,
+      san: typeof line?.san === 'string' ? line.san.slice(0, 32) : null,
+      pvSan: typeof line?.pvSan === 'string' ? line.pvSan.slice(0, 500) : '',
+      cpWhite: line?.cpWhite != null && Number.isFinite(+line.cpWhite)
+        ? Math.max(-1_000_000, Math.min(1_000_000, +line.cpWhite)) : null,
+      mateWhite: line?.mateWhite != null && Number.isFinite(+line.mateWhite)
+        ? Math.max(-1000, Math.min(1000, +line.mateWhite)) : null,
+      evalText: typeof line?.evalText === 'string' ? line.evalText.slice(0, 24) : '—',
+    }));
+    clean.push({
+      version: 1,
+      ply,
+      fen,
+      side: raw.side === 'black' ? 'black' : 'white',
+      thinkMs: Number.isFinite(+raw.thinkMs)
+        ? Math.max(500, Math.min(300_000, Math.trunc(+raw.thinkMs))) : 3000,
+      engineFlavor: typeof raw.engineFlavor === 'string' ? raw.engineFlavor.slice(0, 80) : null,
+      analyzedAt: typeof raw.analyzedAt === 'string' ? raw.analyzedAt.slice(0, 40) : null,
+      lines,
+    });
+  }
+  if (JSON.stringify(clean).length > 100_000) throw new Error('hints too large');
+  return clean;
+}
+
 export function wireGames(app) {
   // Write limiter shared from server.js (audit S4). No-op if unwired.
   const writeLimiter = app.locals?.limiters?.writeLimiter || ((req, res, next) => next());
 
   // POST /api/games
   // Body: { pgn, result, opening_name, opening_eco, white_name, black_name,
-  //         user_color, mode, plies, mistakes_count, blunders_count }
+  //         user_color, mode, plies, hints, mistakes_count, blunders_count }
   // Response: { id, played_at }
   app.post('/api/games', writeLimiter, requireAuthOrGuest, async (req, res) => {
     try {
@@ -76,6 +114,9 @@ export function wireGames(app) {
       const clientGameId = typeof b.client_game_id === 'string' &&
         /^[A-Za-z0-9_-]{8,128}$/.test(b.client_game_id)
         ? b.client_game_id : null;
+      let hints;
+      try { hints = sanitizePracticeHints(b.hints); }
+      catch (err) { return res.status(400).json({ error: err.message }); }
 
       const userId  = req.user  ? req.user.id  : null;
       const guestId = req.guest ? req.guest.id : null;
@@ -83,9 +124,9 @@ export function wireGames(app) {
       const { rows } = await query(`
         INSERT INTO games(
           user_id, guest_id, pgn, result, opening_name, opening_eco,
-          white_name, black_name, user_color, mode, plies,
+          white_name, black_name, user_color, mode, plies, hints,
           mistakes_count, blunders_count, client_game_id
-        ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+        ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
         ON CONFLICT DO NOTHING
         RETURNING id, played_at
       `, [
@@ -100,6 +141,7 @@ export function wireGames(app) {
         b.user_color || null,
         b.mode || null,
         b.plies ? JSON.stringify(b.plies) : null,
+        JSON.stringify(hints),
         Number.isFinite(+b.mistakes_count) ? +b.mistakes_count : 0,
         Number.isFinite(+b.blunders_count) ? +b.blunders_count : 0,
         clientGameId,
@@ -182,7 +224,8 @@ export function wireGames(app) {
       const { rows } = await query(`
         SELECT id, result, opening_name, opening_eco, white_name, black_name,
                user_color, mode, mistakes_count, blunders_count, played_at,
-               jsonb_array_length(COALESCE(plies, '[]'::jsonb)) AS ply_count
+               jsonb_array_length(COALESCE(plies, '[]'::jsonb)) AS ply_count,
+               jsonb_array_length(COALESCE(hints, '[]'::jsonb)) AS hint_count
           FROM games
          WHERE ${where.join(' AND ')}
          ORDER BY ${orderBy}

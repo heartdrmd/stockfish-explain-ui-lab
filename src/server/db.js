@@ -348,6 +348,18 @@ const migrations = [
         ON srs_cards_v2(user_id, ((card_json->>'dueAt')::bigint));
     `,
   },
+  {
+    // On-demand practice hints belong to the archived game just like its
+    // per-ply review data. Each entry stores the searched FEN/ply, chosen
+    // time budget, engine flavor and three canonical White-POV lines.
+    // JSONB keeps the candidate/PV shape evolvable without another table
+    // or one row per engine line. Legacy games naturally read as [].
+    name: '016_practice_hints',
+    sql: `
+      ALTER TABLE games
+        ADD COLUMN IF NOT EXISTS hints JSONB NOT NULL DEFAULT '[]'::jsonb;
+    `,
+  },
 ];
 
 export async function runMigrations() {

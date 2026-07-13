@@ -57,7 +57,7 @@ import { EvalGraph }     from './eval-graph.js';
 import { computeGameStats, renderStatsPanel } from './game-stats.js';
 import * as MoveTime from './movetime.js';
 import * as OpeningVariation from './opening-variation.js';
-import { buildPracticeHintLines } from './practice-hint.js';
+import { buildPracticeHintLines, upsertPracticeHint } from './practice-hint.js';
 
 // Expose Chess to eval-graph's computeDivision helper — avoids a
 // circular import while still letting it replay SAN to count pieces
@@ -1287,6 +1287,7 @@ async function main() {
   let practiceSearchToken = 0;
   let practiceHintRun     = null;
   let practiceHintRunId   = 0;
+  let practiceHintHistory = [];
   window.__practiceHintOwnsEngine = false;
   let paused              = false;
   let locked              = localStorage.getItem('stockfish-explain.engine-locked') === '1';
@@ -2481,6 +2482,7 @@ async function main() {
           // book moves).
           practiceSkill:  (typeof ui !== 'undefined' && ui.rangeSkill) ? +ui.rangeSkill.value : null,
           openingPlies:   window.__practiceOpeningPlies || 0,
+          practiceHints:  practiceHintHistory,
         };
         localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
       } catch (err) { console.warn('[draft] save failed', err); }
@@ -2537,6 +2539,7 @@ async function main() {
       if (draft.orientation && draft.orientation !== board.orientation) board.flipBoard();
       if (draft.practiceColor) {
         practiceColor = draft.practiceColor;
+        practiceHintHistory = Array.isArray(draft.practiceHints) ? draft.practiceHints.slice(0, 100) : [];
         document.body.classList.add('practice-mode');
         if (draft.practiceFinished) document.body.classList.add('practice-finished');
         // ── AUDIT P1 ROOT-CAUSE FIX ────────────────────────────────
@@ -4896,6 +4899,7 @@ async function main() {
                       Result: result || '*',
                     }}),
       plies,
+      hints:       mode === 'practice' ? practiceHintHistory.slice() : [],
     };
     // A2: assign the local id up front so we can mark it cloud-synced
     // after the direct upload below (archiveGame would otherwise pick
@@ -4951,6 +4955,7 @@ async function main() {
         user_color:     userColor,
         mode:           mode || 'analysis',
         plies,
+        hints:           game.hints,
         mistakes_count: mistakesCount,
         blunders_count: blundersCount,
       }).then(res => {
@@ -5463,6 +5468,7 @@ async function main() {
     // Exiting any active / finished practice game when a fresh board
     // starts. The practice card hides via CSS once the class is gone.
     practiceColor = null;
+    practiceHintHistory = [];
     // A1: drop any archive snapshot from the previous game so the next
     // archive can't reuse it. Also clear the pending engine-turn FEN so
     // a stale replay can't fire on the fresh board.
@@ -7532,6 +7538,12 @@ async function main() {
       window.__practiceStyle = style;
       refreshReplayButton();
 
+      // A new practice session gets a fresh hint history even when it
+      // starts from the current board (that path intentionally skips
+      // board.newGame(), whose listener normally performs this reset).
+      _clearPracticeHint({ cancelSearch: true, clearResults: true, restartAnalysis: false });
+      practiceHintHistory = [];
+
       if (useCurrent) {
         // Keep the current board position as-is — don't newGame / reset.
         // The tree, FEN, and move history all remain. Practice just kicks
@@ -7832,6 +7844,36 @@ async function main() {
     practiceHintResults.hidden = false;
   }
 
+  function _rememberPracticeHint(run, lines) {
+    const record = {
+      version: 1,
+      ply: run.ply,
+      fen: run.fen,
+      side: run.fen.split(' ')[1] === 'b' ? 'black' : 'white',
+      thinkMs: run.thinkMs,
+      engineFlavor: run.engineFlavor,
+      analyzedAt: new Date().toISOString(),
+      // Persist canonical White-POV numeric fields, not only the display
+      // string, so later review screens can reformat or compare safely.
+      lines: lines.slice(0, 3).map(line => ({
+        rank: line.rank,
+        uci: line.uci,
+        san: line.san,
+        pvSan: line.pvSan,
+        cpWhite: line.cpWhite,
+        mateWhite: line.mateWhite,
+        evalText: line.evalText,
+      })),
+    };
+    practiceHintHistory = upsertPracticeHint(practiceHintHistory, record);
+    scheduleDraftSave();
+    console.log('[practice-hint] saved with game draft', {
+      ply: record.ply,
+      thinkMs: record.thinkMs,
+      lines: record.lines.length,
+    });
+  }
+
   function _restorePracticeHintEngine(run) {
     if (!run?.engine) return;
     try { run.engine.setMultiPV(run.savedMultiPV); } catch {}
@@ -7881,7 +7923,9 @@ async function main() {
     } else if (board.fen() !== run.fen) {
       _showPracticeHintStatus('Position changed, so the old hint was discarded. Ask again on your turn.');
     } else {
-      _renderPracticeHintLines(buildPracticeHintLines(topMoves, run.fen, 3), run.fen);
+      const lines = buildPracticeHintLines(topMoves, run.fen, 3);
+      _rememberPracticeHint(run, lines);
+      _renderPracticeHintLines(lines, run.fen);
     }
     try { fireAnalysis(); } catch {}
   }
@@ -7919,6 +7963,9 @@ async function main() {
       id: ++practiceHintRunId,
       engine: runEngine,
       fen: board.fen(),
+      ply: board.chess.history().length,
+      thinkMs,
+      engineFlavor: currentFlavor || null,
       savedMultiPV: runEngine.multipv,
       savedSkill: runEngine.skill,
       timeoutId: 0,
@@ -8427,7 +8474,8 @@ async function main() {
         }
         try { fireAnalysis(); } catch {}
         const savedLabel = savedAnalysisLabel(g.plies);
-        ui.narrationText.innerHTML = `📚 Loaded archived game: <strong>${escHtml(g.opening?.name || 'game')}</strong> (${g.date}). Walk through with ← → to review with full engine eval.${savedLabel ? ` <strong>${escHtml(savedLabel)}</strong> — Learn reuses it without rescanning.` : ''}`;
+        const hintCount = Array.isArray(g.hints) ? g.hints.length : 0;
+        ui.narrationText.innerHTML = `📚 Loaded archived game: <strong>${escHtml(g.opening?.name || 'game')}</strong> (${g.date}). Walk through with ← → to review with full engine eval.${savedLabel ? ` <strong>${escHtml(savedLabel)}</strong> — Learn reuses it without rescanning.` : ''}${hintCount ? ` <strong>${hintCount} saved engine hint${hintCount === 1 ? '' : 's'}.</strong>` : ''}`;
       } catch (err) {
         console.warn('[archive] load failed', err);
         alert('Could not load that game.');
@@ -9654,7 +9702,8 @@ async function main() {
     try { fireAnalysis(); } catch {}
     if (ui.narrationText) {
       const savedLabel = savedAnalysisLabel(plies);
-      ui.narrationText.innerHTML = `📚 Loaded cloud game: <strong>${(game.opening_name || 'game')}</strong>. Walk through with ← → to review.${savedLabel ? ` <strong>${savedLabel}</strong> — Learn reuses it without rescanning.` : ''}`;
+      const hintCount = Array.isArray(game.hints) ? game.hints.length : 0;
+      ui.narrationText.innerHTML = `📚 Loaded cloud game: <strong>${(game.opening_name || 'game')}</strong>. Walk through with ← → to review.${savedLabel ? ` <strong>${savedLabel}</strong> — Learn reuses it without rescanning.` : ''}${hintCount ? ` <strong>${hintCount} saved engine hint${hintCount === 1 ? '' : 's'}.</strong>` : ''}`;
     }
   }
 
@@ -9803,9 +9852,11 @@ async function main() {
         mistakes_count: countByKind(g.plies, 'mistake') + countByKind(g.plies, 'blunder'),
         blunders_count: countByKind(g.plies, 'blunder'),
         ply_count:      Array.isArray(g.plies) ? g.plies.length : 0,
+        hint_count:     Array.isArray(g.hints) ? g.hints.length : 0,
         // Full fields needed for detail-pane renderer.
         pgn:            g.pgn,
         plies:          g.plies,
+        hints:          Array.isArray(g.hints) ? g.hints : [],
       };
     }
     function countByKind(plies, kind) {
@@ -9896,7 +9947,8 @@ async function main() {
         const opponent = g.mode === 'practice'
           ? (g.user_color === 'white' ? (g.black_name || 'Stockfish') : (g.white_name || 'Stockfish'))
           : '';
-        const meta = [modeLabel, opponent, `${g.ply_count || 0} plies`].filter(Boolean).join(' · ');
+        const hintMeta = g.hint_count ? `${g.hint_count} hint${g.hint_count === 1 ? '' : 's'}` : '';
+        const meta = [modeLabel, opponent, `${g.ply_count || 0} plies`, hintMeta].filter(Boolean).join(' · ');
         const mistakes = (g.mistakes_count || 0);
         const blunders = (g.blunders_count || 0);
         const mistChips = [];
@@ -9938,7 +9990,8 @@ async function main() {
         const modeLabel = game.mode === 'practice' ? 'Practice' : 'Analysis';
         const side = game.user_color ? ` · played as ${game.user_color}` : '';
         const savedLabel = savedAnalysisLabel(game.plies);
-        dSub.textContent = `${date} · ${modeLabel}${side} · ${game.result || '*'}${savedLabel ? ` · ${savedLabel}` : ''}`;
+        const hintCount = Array.isArray(game.hints) ? game.hints.length : 0;
+        dSub.textContent = `${date} · ${modeLabel}${side} · ${game.result || '*'}${savedLabel ? ` · ${savedLabel}` : ''}${hintCount ? ` · ${hintCount} saved hint${hintCount === 1 ? '' : 's'}` : ''}`;
         // Eval graph
         const plies = Array.isArray(game.plies) ? game.plies : [];
         // Click-to-jump: clicking any point (especially the
@@ -11376,6 +11429,7 @@ async function main() {
           user_color:     g.userColor || null,
           mode:           g.mode || 'analysis',
           plies:          g.plies || [],
+          hints:          Array.isArray(g.hints) ? g.hints : [],
           mistakes_count: mistakesCount,
           blunders_count: blundersCount,
         });

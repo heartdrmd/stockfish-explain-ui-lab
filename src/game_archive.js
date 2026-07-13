@@ -28,6 +28,12 @@
 //         depth:   number | null
 //       }, ...
 //     ]
+//     hints: [
+//       {
+//         ply, fen, side, thinkMs, engineFlavor, analyzedAt,
+//         lines: [{ rank, uci, san, pvSan, cpWhite, mateWhite, evalText }]
+//       }, ...
+//     ]
 //   }
 //
 // Storage uses localStorage. A 5MB browser quota holds ~200-300 games
