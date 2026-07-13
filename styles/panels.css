@@ -10,6 +10,52 @@
   min-height: 200px;
   transition: transform 0.25s ease;
 }
+
+/* Eval-only visibility control. The wrapper keeps the grid column stable,
+   so hiding the bar never resizes the board or shifts the desktop tools. */
+.eval-gauge-control {
+  position: relative;
+  gap: 3px;
+}
+.eval-gauge-control.eval-gauge-hidden .eval-gauge {
+  visibility: hidden;
+}
+.eval-gauge-control.panels-hidden {
+  display: none !important;
+}
+.eval-gauge-toggle {
+  flex: 0 0 22px;
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--c-border) 80%, transparent);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--c-bg-low) 82%, transparent);
+  color: var(--c-font-dim);
+  font: 700 9px/1 var(--font-mono);
+  letter-spacing: -0.04em;
+  cursor: pointer;
+  opacity: 0.56;
+  touch-action: manipulation;
+}
+.eval-gauge-toggle:hover,
+.eval-gauge-toggle:focus-visible {
+  opacity: 1;
+  color: var(--c-font);
+  border-color: var(--c-accent);
+  outline: none;
+}
+.eval-gauge-control.eval-gauge-hidden .eval-gauge-toggle {
+  opacity: 0.88;
+  color: var(--c-accent);
+}
+body.mobile-mode .eval-gauge-toggle {
+  width: 26px;
+  min-height: 26px;
+  margin-left: -5px;
+  flex-basis: 26px;
+  font-size: 10px;
+}
 /* When the board is flipped to Black-at-bottom, the gauge flips with
    it so the advantaged side always fills toward its own end of the
    visual board. Rotated 180deg is simpler than swapping which edge
@@ -2909,6 +2955,14 @@ body.learn-preparing #board.board-interaction-locked cg-board {
 .practice-opening-tree .side-pick.active[data-side-pick="white"] { background: #f5f5f5; color: #0b0b0b; border-color: #777; }
 .practice-opening-tree .side-pick.active[data-side-pick="black"] { background: #111;    color: #fff;    border-color: #000; }
 .practice-opening-tree .side-pick.active[data-side-pick="both"]  { background: #7aa7ff; color: #fff;    border-color: #4a7fd9; }
+.practice-opening-tree .fav-quick-hint {
+  margin-left: 7px;
+  color: var(--c-font-dim);
+  font-size: 9px;
+  font-weight: 400;
+  letter-spacing: 0.01em;
+  opacity: 0.72;
+}
 /* Match-reason subtitle — shown under the leaf name when a search
    query hit a non-name field (moves / ECO / alias). */
 .practice-opening-tree .tree-leaf-reason {
@@ -3086,6 +3140,7 @@ body.mobile-mode .practice-opening-tree .tree-leaf {
   min-width: 0;
   max-width: 100%;
   row-gap: 4px;
+  touch-action: manipulation;
 }
 body.mobile-mode .practice-opening-tree .tree-leaf-fav { grid-area: fav; }
 body.mobile-mode .practice-opening-tree .tree-leaf-queue { grid-area: queue; }

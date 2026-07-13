@@ -421,10 +421,15 @@
         <div id="board-below-slot" class="board-below-slot"></div>
       </section>
 
-      <section class="eval-gauge" id="eval-gauge" aria-label="Evaluation (white's view)">
-        <div class="gauge-black" id="gauge-black" style="height:50%"></div>
-        <div class="gauge-tick zero"></div>
-      </section>
+      <div class="eval-gauge-control" id="eval-gauge-control">
+        <section class="eval-gauge" id="eval-gauge" aria-label="Evaluation (white's view)">
+          <div class="gauge-black" id="gauge-black" style="height:50%"></div>
+          <div class="gauge-tick zero"></div>
+        </section>
+        <button type="button" id="eval-gauge-toggle" class="eval-gauge-toggle"
+                aria-label="Hide evaluation bar" aria-pressed="true"
+                title="Hide evaluation bar">E</button>
+      </div>
     </div>
 
     <!-- Mobile gives Learn its own normal-flow slot immediately after the

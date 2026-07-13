@@ -301,6 +301,11 @@ body.nav-collapsed .site-header { min-height: 40px; padding: 6px 14px; }
   height: auto;
 }
 /* When the JS resize handle sets explicit width+height on #board, those win */
+.uniboard .eval-gauge-control {
+  display: none;
+  grid-area: gauge;
+  min-height: 0;
+}
 .uniboard .eval-gauge  { display: none; }
 .uniboard .tools       { grid-area: tools; }
 
@@ -316,7 +321,13 @@ body.nav-collapsed .site-header { min-height: 40px; padding: 6px 14px; }
     padding: 16px;
   }
   .uniboard .board-area { max-width: none; }
-  .uniboard .eval-gauge { display: flex; }
+  .uniboard .eval-gauge-control {
+    display: flex;
+    flex-direction: column;
+    align-self: stretch;
+    min-height: 0;
+  }
+  .uniboard .eval-gauge { display: flex; flex: 1 1 auto; }
 }
 
 /* --- col3 (≥ 1260px) --- */
@@ -605,10 +616,19 @@ body.nav-collapsed .site-header { min-height: 40px; padding: 6px 14px; }
   body.mobile-mode .board-eval-wrap .eval-gauge {
     display: flex;
     width: 16px;
+    flex: 1 1 auto;
     min-height: 0 !important;
     align-self: stretch;
     border: 1px solid var(--c-border);
     border-radius: 4px;
+  }
+  body.mobile-mode .board-eval-wrap .eval-gauge-control {
+    display: flex;
+    grid-area: gauge;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+    align-self: stretch;
   }
 
   /* Live Resign/Draw and the complete post-game action set now sit directly

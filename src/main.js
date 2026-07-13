@@ -4167,6 +4167,7 @@ async function main() {
     const btn = document.getElementById('nav-hide-panels');
     if (!btn) return;
     const gauge = document.getElementById('eval-gauge');
+    const gaugeControl = document.getElementById('eval-gauge-control');
     const accuracyStrip = document.getElementById('accuracy-strip');
     const getHidden = () => { try { return localStorage.getItem(KEY) === '1'; } catch { return false; } };
     const setHidden = (v) => { try { localStorage.setItem(KEY, v ? '1' : '0'); } catch {} };
@@ -4176,7 +4177,8 @@ async function main() {
       // [hidden] attribute (0-1-0). Inline style wins any selector
       // short of !important. That was why the previous 'Hide'
       // toggle ran but visually did nothing.
-      if (gauge) gauge.style.display = hidden ? 'none' : '';
+      if (gauge) gauge.style.display = '';
+      if (gaugeControl) gaugeControl.classList.toggle('panels-hidden', hidden);
       if (accuracyStrip) {
         accuracyStrip.style.display = hidden ? 'none' : '';
         if (hidden) accuracyStrip.dataset.userHidden = '1';
@@ -4190,6 +4192,32 @@ async function main() {
       const nowHidden = !getHidden();
       setHidden(nowHidden);
       apply(nowHidden);
+    });
+  })();
+
+  // ─── Small eval-bar-only toggle ──────────────────────────────────
+  // Separate from the existing 👁 control above: this leaves move
+  // accuracy and engine analysis untouched and never changes board width.
+  (() => {
+    const KEY = 'stockfish-explain.eval-gauge-hidden';
+    const control = document.getElementById('eval-gauge-control');
+    const btn = document.getElementById('eval-gauge-toggle');
+    if (!control || !btn) return;
+    const read = () => {
+      try { return localStorage.getItem(KEY) === '1'; } catch { return false; }
+    };
+    const apply = (hidden) => {
+      control.classList.toggle('eval-gauge-hidden', hidden);
+      btn.setAttribute('aria-pressed', String(!hidden));
+      btn.setAttribute('aria-label', hidden ? 'Show evaluation bar' : 'Hide evaluation bar');
+      btn.title = hidden ? 'Show evaluation bar' : 'Hide evaluation bar';
+      btn.textContent = hidden ? 'E+' : 'E';
+    };
+    apply(read());
+    btn.addEventListener('click', () => {
+      const hidden = !read();
+      try { localStorage.setItem(KEY, hidden ? '1' : '0'); } catch {}
+      apply(hidden);
     });
   })();
 
@@ -6011,7 +6039,7 @@ async function main() {
       if (favEntries.length) {
         const favDetails = document.createElement('details');
         favDetails.open = true;
-        favDetails.innerHTML = `<summary>⭐ Favourites <span class="tree-family-count">${favEntries.length}</span></summary>`;
+        favDetails.innerHTML = `<summary>⭐ Favourites <span class="tree-family-count">${favEntries.length}</span><span class="fav-quick-hint">double-click / double-tap to start</span></summary>`;
         for (const e of favEntries) favDetails.appendChild(renderLeaf(e, favs, selected));
         container.appendChild(favDetails);
       }
@@ -6125,6 +6153,10 @@ async function main() {
       }
       const starred = !!favs[entry.key];
       const side    = favs[entry.key] || null; // 'white' | 'black' | 'both' | null
+      if (starred) {
+        const sideLabel = side === 'both' ? 'either side' : side === 'black' ? 'Black' : 'White';
+        leaf.title = `Double-click or double-tap to start as ${sideLabel}`;
+      }
       const queueSet = loadQueueSet();
       const badge = entry.o._source === 'lichess' ? '<span class="tree-lichess-badge">DB</span>' : '';
       const custom = entry.o._custom
@@ -6182,6 +6214,26 @@ async function main() {
 
     // Click handlers on the tree.
     if (pTree) {
+      let lastFavouriteTapKey = '';
+      let lastFavouriteTapAt = 0;
+      const startFavouriteNow = (key) => {
+        const savedSide = loadFavs()[key];
+        if (!savedSide) return false;
+        const playSide = savedSide === 'both'
+          ? (Math.random() < 0.5 ? 'white' : 'black')
+          : savedSide;
+        pSel.value = key;
+        pColor.value = playSide;
+        // An explicit opening launch must override a stale "use current
+        // position" choice from a previous visit to Practice settings.
+        const useCurrent = document.getElementById('practice-use-current');
+        if (useCurrent) useCurrent.checked = false;
+        updatePMoves();
+        refreshToggleFavButton();
+        console.log('[practice-tree] favourite double activation → start', { key, side: playSide });
+        pStart.click();
+        return true;
+      };
       pTree.addEventListener('click', (ev) => {
         // Delete custom opening — checked first so the 🗑 button never
         // falls through to leaf-select or favourite-toggle.
@@ -6284,8 +6336,22 @@ async function main() {
         }
         const leaf = ev.target.closest('.tree-leaf');
         if (!leaf) return;
-        pSel.value = leaf.dataset.key;
-        console.log('[practice-tree] leaf click', { key: leaf.dataset.key, name: leaf.querySelector('.tree-leaf-name')?.textContent });
+        const leafKey = leaf.dataset.key;
+        const now = performance.now();
+        const isFavourite = !!loadFavs()[leafKey];
+        const isDoubleActivation = isFavourite && lastFavouriteTapKey === leafKey &&
+          now - lastFavouriteTapAt <= 500;
+        lastFavouriteTapKey = leafKey;
+        lastFavouriteTapAt = now;
+        if (isDoubleActivation) {
+          ev.preventDefault();
+          lastFavouriteTapKey = '';
+          lastFavouriteTapAt = 0;
+          startFavouriteNow(leafKey);
+          return;
+        }
+        pSel.value = leafKey;
+        console.log('[practice-tree] leaf click', { key: leafKey, name: leaf.querySelector('.tree-leaf-name')?.textContent });
         updatePMoves();
         refreshToggleFavButton();
         // Mark selected visually.
