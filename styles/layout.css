@@ -402,6 +402,16 @@ body.nav-collapsed .site-header { min-height: 40px; padding: 6px 14px; }
   body.nav-collapsed:not(.mobile-mode) .uniboard .tools > .ceval {
     top: 104px;           /* 48 (collapsed header) + 56 (engine-power-row) */
   }
+  /* A board unit taller than the usable viewport cannot obey desktop
+     position:sticky: the board-area (board + navigation) and the shorter
+     gauge control reach different sticky limits and visibly drift apart.
+     main.js marks that measured case so both elements scroll normally from
+     the same grid row. Smaller boards keep the established sticky behaviour. */
+  body:not(.mobile-mode) .uniboard.board-sticky-oversized .board-area,
+  body:not(.mobile-mode) .uniboard.board-sticky-oversized .eval-gauge-control {
+    position: relative;
+    top: auto;
+  }
   /* engine-power-row needs its own bg so items scrolling underneath
      don't leak through. */
   body:not(.mobile-mode) .uniboard .tools > .engine-power-row {

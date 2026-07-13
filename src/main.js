@@ -12426,14 +12426,35 @@ async function main() {
   // Gauge matches the BOARD's height exactly (from rank 8 top to rank 1 bottom),
   // not board-area (which includes the nav row below).
   const boardInner = document.getElementById('board');
-  const ro = new ResizeObserver(() => {
+  const boardLayout = ui.boardArea?.closest('.uniboard');
+  const syncEvalGaugeGeometry = () => {
     const rect = boardInner.getBoundingClientRect();
     if (rect.height > 0) {
       ui.evalGauge.style.height = rect.height + 'px';
       ui.evalGauge.style.minHeight = '0';
     }
-  });
+    // Desktop keeps the board and gauge sticky only while the complete board
+    // unit (square + navigation / docked review content) fits below the
+    // toolbar. If it does not fit, independent sticky elements hit different
+    // limits while scrolling and the bar appears longer than the board.
+    if (boardLayout && ui.boardArea) {
+      const stickyTop = document.body.classList.contains('nav-collapsed') ? 48 : 68;
+      const usableHeight = Math.max(0, window.innerHeight - stickyTop - 8);
+      const boardUnitHeight = ui.boardArea.getBoundingClientRect().height;
+      const oversized = !document.body.classList.contains('mobile-mode') &&
+        boardUnitHeight > usableHeight;
+      boardLayout.classList.toggle('board-sticky-oversized', oversized);
+    }
+  };
+  const ro = new ResizeObserver(syncEvalGaugeGeometry);
   ro.observe(boardInner);
+  if (ui.boardArea) ro.observe(ui.boardArea);
+  window.addEventListener('resize', syncEvalGaugeGeometry);
+  new MutationObserver(syncEvalGaugeGeometry).observe(document.body, {
+    attributes: true,
+    attributeFilter: ['class'],
+  });
+  syncEvalGaugeGeometry();
 
   // Resizable board — lichess-style drag handle. Keeps the board SQUARE
   // by setting explicit equal width + height on the board element.
