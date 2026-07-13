@@ -4076,13 +4076,10 @@ async function main() {
       const cachedAttempt = fenEvalCache.get(postFen);
       _learn.attemptCpWhite = cachedAttempt?.cpWhite ?? null;
       _learn.attemptMateWhite = cachedAttempt?.mate ?? null;
-      const trialPath = board.tree?.currentPath || '';
-      const discardFailedTrial = () => {
-        try {
-          if (trialPath && !board.tree.isMainlinePath(trialPath)) board.tree.deleteAt(trialPath);
-          board.goToPly(_learn.targetPly - 1);
-        } catch {}
-      };
+      // BoardController has already added this attempt beneath the
+      // pre-mistake node. Keep it there permanently as a notation
+      // variation — including unsuccessful tries — while the lesson UI
+      // returns to the pre-mistake position after grading.
       // ── ALREADY-SAW-SOLUTION SHORTCUT ─────────────────────────
       // If the user clicked Show Solution earlier this attempt and
       // is now playing the move they were shown, we already KNOW
@@ -4115,7 +4112,6 @@ async function main() {
         _learn.lastDiffPct = null;
         _learn.attemptCpWhite = _learn.originalCpWhite;
         _learn.attemptMateWhite = _learn.originalMateWhite;
-        discardFailedTrial();
         _completeLearnAttempt(false);
         return;
       }
@@ -4140,7 +4136,7 @@ async function main() {
           postFen: postFen.slice(0, 30) + '…', cachedCp: cached.cpWhite, depth: cached.depth, diff,
         });
         if (diff > -(_learnSettings.tolerancePoints / 100)) _completeLearnAttempt(true);
-        else { discardFailedTrial(); _completeLearnAttempt(false); }
+        else _completeLearnAttempt(false);
         return;
       }
       // ── CACHE MISS → searchmoves probe ─────────────────────────
@@ -4202,7 +4198,7 @@ async function main() {
         );
         _learn.lastDiffPct = Math.round(diff * 100);
         if (diff > -(_learnSettings.tolerancePoints / 100)) _completeLearnAttempt(true);
-        else { discardFailedTrial(); _completeLearnAttempt(false); }
+        else _completeLearnAttempt(false);
       };
       engine.addEventListener('bestmove', onBest);
       if (userUci) {

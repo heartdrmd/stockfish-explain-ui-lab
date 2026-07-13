@@ -52,7 +52,7 @@ test('Learn marks and previews the original error without replaying it', () => {
   assert.match(main, /board\.goToPly\(targetPly - 1\)[\s\S]*?_drawLearnMistakeArrow\(\)/);
   assert.match(main, /id = 'learn-mistake-arrow'/);
   assert.match(main, /The red arrow shows that original move; it has <strong>not<\/strong> been replayed/);
-  assert.match(panels, /\.learn-mistake-arrow line[\s\S]*?stroke:\s*#e84a4a/);
+  assert.match(panels, /\.learn-mistake-arrow line[\s\S]*?stroke-width:\s*1\.8[\s\S]*?opacity:\s*\.30/);
 });
 
 test('View solution and Give up both reveal the best move through top-three comparison', () => {
@@ -67,6 +67,12 @@ test('Learn comparison and board distinguish best, accepted try, and original er
   assert.match(main, /function _drawLearnFeedbackArrows[\s\S]*?board\.goToPly\(_learn\.targetPly - 1\)[\s\S]*?_drawLearnMistakeArrow\(\)/);
   assert.match(main, /_drawLearnFeedbackArrows\(top\[0\], \{ revealBest: true \}\)/);
   assert.match(main, /_drawLearnFeedbackArrows\(null, \{ revealBest: false \}\)/);
+});
+
+test('every Learn attempt remains in notation as a side variation', () => {
+  assert.doesNotMatch(main, /deleteAt\(trialPath\)/);
+  assert.match(main, /Keep it there permanently as a notation[\s\S]*?including unsuccessful tries/);
+  assert.match(main, /function _completeLearnAttempt[\s\S]*?_drawLearnFeedbackArrows\(null, \{ revealBest: false \}\)/);
 });
 
 test('Learn comparison labels visible evaluations as White POV', () => {
