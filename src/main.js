@@ -10172,12 +10172,25 @@ async function main() {
 
   function renderAuthUi() {
     const u = window.__currentUser;
+    const mobileHeader = document.body.classList.contains('mobile-mode');
     if (u) {
-      if (authSignin) authSignin.hidden = true;
-      if (authUser)   authUser.hidden = false;
+      if (authSignin) {
+        authSignin.hidden = !mobileHeader;
+        authSignin.textContent = mobileHeader ? '↪ Log out' : '👤 Sign in';
+        authSignin.title = mobileHeader
+          ? `Signed in as ${u.username} — log out`
+          : 'Sign in to sync games across devices';
+        authSignin.classList.toggle('is-logout', mobileHeader);
+      }
+      if (authUser) authUser.hidden = mobileHeader;
       if (authUserEl) authUserEl.textContent = '👤 ' + u.username;
     } else {
-      if (authSignin) authSignin.hidden = false;
+      if (authSignin) {
+        authSignin.hidden = false;
+        authSignin.textContent = '👤 Sign in';
+        authSignin.title = 'Sign in to sync games across devices';
+        authSignin.classList.remove('is-logout');
+      }
       if (authUser)   authUser.hidden = true;
       // Clear the username text explicitly so any rogue CSS that
       // overrides [hidden] still doesn't leak the previous user's
@@ -10192,12 +10205,21 @@ async function main() {
     if (authToggle) authToggle.textContent = mode === 'signup' ? 'Have an account? Sign in' : 'Need an account? Sign up';
     if (authError)  authError.textContent  = '';
     if (authPwd)    authPwd.value = '';
-    if (authModal)  authModal.hidden = false;
-    setTimeout(() => authUname?.focus(), 50);
+    if (authModal) {
+      authModal.hidden = false;
+      authModal.scrollTop = 0;
+    }
+    setTimeout(() => {
+      authModal?.querySelector('.auth-card')?.scrollIntoView({ block: 'center', inline: 'nearest' });
+      authUname?.focus({ preventScroll: true });
+    }, 50);
   }
   function closeAuth() { if (authModal) authModal.hidden = true; }
 
-  if (authSignin) authSignin.addEventListener('click', () => openAuth('signin'));
+  if (authSignin) authSignin.addEventListener('click', () => {
+    if (window.__currentUser) logoutCurrentUser();
+    else openAuth('signin');
+  });
   if (authToggle) authToggle.addEventListener('click', (e) => {
     e.preventDefault();
     openAuth(authMode === 'signin' ? 'signup' : 'signin');
@@ -10227,7 +10249,7 @@ async function main() {
       }
     });
   }
-  if (authLogout) authLogout.addEventListener('click', async () => {
+  async function logoutCurrentUser() {
     const wasUser = window.__currentUser?.username || '';
     let serverOk = false;
     try { await api.logout(); serverOk = true; } catch (err) {
@@ -10262,7 +10284,8 @@ async function main() {
       setTimeout(() => { toast.style.opacity = '0'; }, 2000);
       setTimeout(() => { toast.remove(); }, 2500);
     } catch {}
-  });
+  }
+  if (authLogout) authLogout.addEventListener('click', logoutCurrentUser);
 
   const PORTABLE_PREF_KEYS = [
     'stockfish-explain.arrow-mode',

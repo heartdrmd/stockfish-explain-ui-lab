@@ -100,10 +100,23 @@
 }
 .btn-auth-mini:hover { color: #e06; border-color: #e06; }
 
-/* Auth modal + download modal — compact card on a dim backdrop. */
-.modal-backdrop.auth-backdrop, .modal-backdrop {
-  /* fallback styling in case base doesn't cover it */
+/* Auth modal + download modal — compact card on a dim backdrop.
+   These use .modal-backdrop (not the older .modal class), so give the
+   backdrop its own complete fixed-overlay layout. Without this it sat in
+   normal document flow near the bottom of the page on mobile. */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  background: rgba(0,0,0,0.72);
 }
+.modal-backdrop[hidden] { display: none !important; }
 .modal-card.auth-card { width: 340px; max-width: 92vw; }
 .auth-label {
   display: block;
@@ -124,6 +137,29 @@
   border: 1px solid var(--c-border, #333);
   border-radius: 4px;
   box-sizing: border-box;
+}
+
+/* The signed-in mobile header uses the same compact slot as Sign in,
+   but its action must be unmistakably Log out. */
+.btn-auth.is-logout {
+  background: rgba(224, 96, 96, 0.13);
+  border-color: rgba(224, 96, 96, 0.55);
+  color: #ffaaaa;
+}
+
+@media (max-width: 640px), (max-height: 640px) and (max-width: 1024px) {
+  body.mobile-mode #auth-modal {
+    padding:
+      max(12px, env(safe-area-inset-top, 0px))
+      12px
+      max(12px, env(safe-area-inset-bottom, 0px));
+  }
+  body.mobile-mode #auth-modal .auth-card {
+    width: min(100%, 380px);
+    max-width: 100%;
+    max-height: calc(100dvh - 24px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+    overflow-y: auto;
+  }
 }
 .auth-label input:focus { outline: none; border-color: #4ec9b0; }
 .auth-error {
