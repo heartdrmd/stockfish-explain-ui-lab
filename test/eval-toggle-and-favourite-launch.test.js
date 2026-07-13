@@ -15,6 +15,10 @@ test('eval bar has an independent persistent toggle without resizing the board',
   assert.match(main, /classList\.toggle\('eval-gauge-hidden', hidden\)/);
   assert.match(panels, /eval-gauge-hidden \.eval-gauge[\s\S]*?visibility:\s*hidden/);
   assert.match(layout, /\.uniboard \.eval-gauge-control[\s\S]*?grid-area:\s*gauge/);
+  assert.match(layout, /\.uniboard \.eval-gauge-control[\s\S]*?align-self:\s*start/);
+  assert.match(layout, /\.uniboard \.eval-gauge \{[\s\S]*?flex:\s*0 0 auto/);
+  assert.match(layout, /body:not\(\.mobile-mode\) \.uniboard \.eval-gauge-control[\s\S]*?position:\s*sticky/);
+  assert.match(layout, /body\.mobile-mode \.board-eval-wrap \.eval-gauge \{[\s\S]*?flex:\s*0 0 auto/);
 });
 
 test('double-click or double-tap launches favourites with their saved side', () => {
