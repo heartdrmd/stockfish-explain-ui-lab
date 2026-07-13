@@ -77,6 +77,12 @@ export function classifySeverity(drop) {
   return null;
 }
 
+// Learn-from-mistakes must use the same definition as the rest of the app.
+// Any classified loss — inaccuracy, mistake, or blunder — is a lesson.
+export function isLearnCandidateDrop(drop) {
+  return classifySeverity(drop) != null;
+}
+
 // Full quality bucket for the accuracy pills / learn-mode:
 //   'unknown' (unevaluated) | 'best' | 'good' | 'ok' |
 //   'inaccuracy' | 'mistake' | 'blunder'

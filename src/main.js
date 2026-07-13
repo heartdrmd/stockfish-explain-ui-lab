@@ -22,7 +22,7 @@ import { renderOpeningBlock, renderOpeningForAI, detectOpening } from './opening
 import { LICHESS_OPENINGS } from './openings_lichess.js';
 import { OPENING_ALIASES } from './openings_aliases.js';
 import * as EcoLookup from './eco-lookup.js';
-import { classifyQuality, classifySeverity, moverWinDrop, winChanceWhite } from './evals.js';
+import { classifyQuality, classifySeverity, isLearnCandidateDrop, moverWinDrop, winChanceWhite } from './evals.js';
 
 // ─── Module-scoped alias cache ─────────────────────────────────────
 // WeakMap persists across every renderTree() call so alias lookups
@@ -3443,12 +3443,10 @@ async function main() {
                              (userColor === 'black' && !moverWasWhite);
         if (!moverWasUser) continue;                          // skip opponent moves
       }
-      // Lichess retrospection deliberately uses a larger 0.10 winning-
-      // chance swing than its ordinary inaccuracy markers. Training on
-      // every borderline 0.06 inaccuracy made our sessions noisy and
-      // much slower without teaching a meaningful correction.
+      // Use the app's shared Lichess thresholds: every classified
+      // inaccuracy (6+ points), mistake, and blunder is a lesson.
       const drop = moverWinDrop(plies[i - 1], plies[i]);
-      if (drop != null && drop > 0.10) list.push(i);
+      if (isLearnCandidateDrop(drop)) list.push(i);
     }
     return list;
   }
@@ -4036,10 +4034,7 @@ async function main() {
           if (!finished || !runIsCurrent()) return;
           window.__mistakesSweptForFen = sweepKey;
         }
-        let candidates = _findMistakePlies();
-        await _excludeMasterOpeningMoves(candidates);
-        if (!runIsCurrent()) return;
-        candidates = _findMistakePlies();
+        const candidates = _findMistakePlies();
         _hydrateLearnSolutions(candidates);
         await persistReanalysisForLoadedGame();
         if (!runIsCurrent()) return;
