@@ -25,16 +25,51 @@ export class Explainer {
       // instant even while the worker is still winding down its current
       // search iteration.
       if (window.__engineMuted) return;
+      if (e.detail?.fen && e.detail.fen !== this.currentFen) return;
       this._onThinking(e.detail);
     });
     this.engine.addEventListener('bestmove', (e) => {
       if (window.__engineMuted) return;
+      if (e.detail?.fen && e.detail.fen !== this.currentFen) return;
       this._onBestmove(e.detail);
     });
     this.board.addEventListener('why-not-region', (e) => this._onWhyNot(e.detail));
   }
 
   setFen(fen) { this.currentFen = fen; }
+
+  /**
+   * Immediately align visible evaluation UI with a newly-displayed FEN.
+   * A cached White-POV score is shown at once; otherwise the gauge resets
+   * to neutral while Stockfish starts. This prevents undo/history review
+   * from leaving the previous position's score on screen indefinitely.
+   */
+  showPositionEval(cached = null) {
+    const hasMate = cached?.mate != null && Number.isFinite(Number(cached.mate));
+    const hasCp = cached?.cpWhite != null && Number.isFinite(Number(cached.cpWhite));
+    if (!hasMate && !hasCp) {
+      this.ui.pearl.textContent = '…';
+      this.ui.pearl.className = 'pearl';
+      this.ui.gaugeBlack.style.height = '50%';
+      this.ui.depthLabel.textContent = 'analyzing new position…';
+      this.ui.npsLabel.textContent = '';
+      this.ui.barFill.style.width = '0%';
+      this.ui.pvLines.innerHTML = '<div class="pv-empty">Analysing this position…</div>';
+      return;
+    }
+
+    const kind = hasMate ? 'mate' : 'cp';
+    const score = Number(hasMate ? cached.mate : cached.cpWhite);
+    this.ui.pearl.textContent = Narr.formatScore(kind, score);
+    this.ui.pearl.className = 'pearl ' + scoreClass(kind, score);
+    this.ui.gaugeBlack.style.height = `${100 - gaugePercent(kind, score)}%`;
+    this.ui.depthLabel.textContent = cached.depth
+      ? `cached depth ${cached.depth} · refreshing…`
+      : 'cached evaluation · refreshing…';
+    this.ui.npsLabel.textContent = '';
+    this.ui.barFill.style.width = '0%';
+    this.ui.pvLines.innerHTML = '<div class="pv-empty">Refreshing this position…</div>';
+  }
 
   _sideToMove() {
     return this.currentFen ? this.currentFen.split(' ')[1] : 'w';

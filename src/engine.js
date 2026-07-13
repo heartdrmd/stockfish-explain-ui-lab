@@ -689,7 +689,15 @@ export class Engine extends EventTarget {
     if (this._watchdogId)    { clearTimeout(this._watchdogId);    this._watchdogId = 0; }
     this._clearStopHonor();
     this.dispatchEvent(new CustomEvent('bestmove', {
-      detail: { best: null, ponder: null, topMoves: [], history: this.history, stuck: true }
+      detail: {
+        best: null,
+        ponder: null,
+        topMoves: [],
+        history: this.history,
+        stuck: true,
+        fen: this.currentFen,
+        searchId: this._searchId,
+      }
     }));
     // ALSO dispatch engine-crashed so the main.js telemetry pipeline
     // counts it. Without this, "responsive-but-frozen" wedges (which
@@ -1070,6 +1078,12 @@ export class Engine extends EventTarget {
           topMoves: Array.from(this.topMoves.values())
                          .sort((a, b) => a.multipv - b.multipv),
           history:  this.history,
+          // Consumers can reject the final info lines from a search that
+          // was just stopped because the user moved, undid, or navigated.
+          // Without this tag, the previous position can repaint the eval
+          // gauge after the board already shows a different FEN.
+          fen: this.currentFen,
+          searchId: this._searchId,
         }
       }));
     }
@@ -1116,6 +1130,8 @@ export class Engine extends EventTarget {
         topMoves: Array.from(this.topMoves.values())
                        .sort((a, b) => a.multipv - b.multipv),
         history:  this.history,
+        fen:      this.currentFen,
+        searchId: this._searchId,
       };
       console.log('[engine] bestmove', {
         best: detail.best,

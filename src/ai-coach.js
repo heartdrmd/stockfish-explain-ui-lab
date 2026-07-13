@@ -120,15 +120,29 @@ export function isPremiumModel(model) {
  * @param {number} multipv   how many candidate lines to fetch (default 5)
  * @returns {Promise<{lines: Array<{uci, san, scoreKind, score, pvSan}>, depth, nodes}>}
  */
-export async function probeEngine(engine, fen, depth = 18, multipv = 5, movetimeMs = 0) {
+export async function probeEngine(engine, fen, depth = 18, multipv = 5, movetimeMs = 0, timeoutMs = 0) {
   const originalMultiPV = engine.multipv;
   engine.setMultiPV(multipv);
+  let onBest = null;
+  let timeoutId = 0;
+  let timedOut = false;
   try {
     // Start search and wait for bestmove
     engine.stop();
-    const done = new Promise(resolve => {
-      const onBest = (ev) => { engine.removeEventListener('bestmove', onBest); resolve(ev.detail); };
+    const done = new Promise((resolve, reject) => {
+      onBest = (ev) => {
+        engine.removeEventListener('bestmove', onBest);
+        if (timeoutId) clearTimeout(timeoutId);
+        resolve(ev.detail);
+      };
       engine.addEventListener('bestmove', onBest);
+      if (timeoutMs > 0) {
+        timeoutId = setTimeout(() => {
+          timedOut = true;
+          engine.removeEventListener('bestmove', onBest);
+          reject(new Error(`Stockfish probe timed out after ${timeoutMs} ms`));
+        }, timeoutMs);
+      }
     });
     // When movetimeMs > 0 it overrides depth; lets callers trade depth
     // for fixed wall-clock time per position (used by reanalyze-for-
@@ -161,6 +175,11 @@ export async function probeEngine(engine, fen, depth = 18, multipv = 5, movetime
     });
     return { lines, depth: result.history?.[result.history.length-1]?.depth || depth };
   } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+    if (onBest) engine.removeEventListener('bestmove', onBest);
+    if (timedOut) {
+      try { engine.stop(); } catch {}
+    }
     engine.setMultiPV(originalMultiPV);
   }
 }

@@ -2553,6 +2553,39 @@ body.practice-mode .practice-card[hidden]       { display: none !important; }
   font-size: 12px;
   font-weight: 700;
 }
+.learn-quick-settings {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: -2px 0 10px;
+  padding: 8px;
+  border: 1px solid rgba(56, 147, 232, 0.28);
+  border-radius: 4px;
+  background: rgba(56, 147, 232, 0.07);
+}
+.learn-quick-settings label,
+.retro-timing label {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  color: var(--c-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .02em;
+  text-transform: uppercase;
+}
+.learn-quick-settings select,
+.retro-timing select {
+  width: 100%;
+  min-width: 0;
+  padding: 5px 6px;
+  border: 1px solid var(--c-border);
+  border-radius: 3px;
+  background: var(--c-panel);
+  color: var(--c-text);
+  font-size: 11px;
+  text-transform: none;
+}
 
 /* The floating retro panel — matches lichess retro-box aesthetic.
    Square corners, tight padding, clear state colors. */
@@ -2624,6 +2657,29 @@ body.learn-preparing #board.board-interaction-locked cg-board {
 .engine-power.lesson-owned {
   background: linear-gradient(180deg, #397fc2 0%, #245984 100%);
   cursor: not-allowed;
+}
+.retro-timing {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 7px;
+  padding: 7px 10px;
+  background: rgba(0, 0, 0, .16);
+  border-bottom: 1px solid rgba(255, 255, 255, .08);
+}
+.retro-timing > span {
+  align-self: center;
+  max-width: 88px;
+  color: var(--c-muted);
+  font-size: 9px;
+  line-height: 1.2;
+}
+body.mobile-mode .retro-timing {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+body.mobile-mode .retro-timing > span {
+  grid-column: 1 / -1;
+  max-width: none;
 }
 .retro-title {
   display: flex;

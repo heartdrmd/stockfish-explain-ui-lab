@@ -2376,6 +2376,16 @@ async function main() {
   // features (eval timeline, mistake bank) have per-move data to read
   // without needing to re-analyse the whole game.
   const fenEvalCache = new Map(); // FEN → { cpWhite, mate, depth }
+  function syncDisplayedEvalToFen(fen, { force = false } = {}) {
+    if (!fen || !explainer) return;
+    const changed = explainer.currentFen !== fen;
+    explainer.setFen(fen);
+    if (!changed && !force) return;
+    // Cached values are always White POV, matching Explainer's gauge.
+    // If this position has never been searched, show neutral/pending—not
+    // the score from the move the user just took back.
+    explainer.showPositionEval(fenEvalCache.get(fen) || null);
+  }
   function captureEngineThinkingEval() {
     try {
       const live = engine && engine.history && engine.history.length
@@ -3054,21 +3064,39 @@ async function main() {
     _learnSettings = { ..._learnSettings, ...next };
     try { localStorage.setItem(LEARN_SETTINGS_KEY, JSON.stringify(_learnSettings)); } catch {}
   }
+  const LEARN_SETTING_SELECT_IDS = {
+    scanMs: ['learn-scan-time', 'learn-quick-scan-time', 'mg-learn-scan-time'],
+    attemptMs: ['learn-attempt-time', 'learn-quick-attempt-time', 'mg-learn-attempt-time'],
+    tolerancePoints: ['learn-tolerance'],
+  };
+  function _setLearnSetting(key, rawValue) {
+    const value = Number(rawValue);
+    if (!LEARN_SETTING_VALUES[key]?.has(value)) return;
+    _saveLearnSettings({ [key]: value });
+    for (const id of LEARN_SETTING_SELECT_IDS[key] || []) {
+      const select = document.getElementById(id);
+      if (select && select.value !== String(value)) select.value = String(value);
+    }
+  }
   const learnScanSelect = document.getElementById('learn-scan-time');
   const learnAttemptSelect = document.getElementById('learn-attempt-time');
   const learnToleranceSelect = document.getElementById('learn-tolerance');
-  if (learnScanSelect) {
-    learnScanSelect.value = String(_learnSettings.scanMs);
-    learnScanSelect.addEventListener('change', () => _saveLearnSettings({ scanMs: +learnScanSelect.value }));
-  }
-  if (learnAttemptSelect) {
-    learnAttemptSelect.value = String(_learnSettings.attemptMs);
-    learnAttemptSelect.addEventListener('change', () => _saveLearnSettings({ attemptMs: +learnAttemptSelect.value }));
-  }
-  if (learnToleranceSelect) {
-    learnToleranceSelect.value = String(_learnSettings.tolerancePoints);
-    learnToleranceSelect.addEventListener('change', () => _saveLearnSettings({ tolerancePoints: +learnToleranceSelect.value }));
-  }
+  const learnQuickScanSelect = document.getElementById('learn-quick-scan-time');
+  const learnQuickAttemptSelect = document.getElementById('learn-quick-attempt-time');
+  const mgLearnScanSelect = document.getElementById('mg-learn-scan-time');
+  const mgLearnAttemptSelect = document.getElementById('mg-learn-attempt-time');
+  const bindLearnSetting = (select, key) => {
+    if (!select) return;
+    select.value = String(_learnSettings[key]);
+    select.addEventListener('change', () => _setLearnSetting(key, select.value));
+  };
+  bindLearnSetting(learnScanSelect, 'scanMs');
+  bindLearnSetting(learnQuickScanSelect, 'scanMs');
+  bindLearnSetting(mgLearnScanSelect, 'scanMs');
+  bindLearnSetting(learnAttemptSelect, 'attemptMs');
+  bindLearnSetting(learnQuickAttemptSelect, 'attemptMs');
+  bindLearnSetting(mgLearnAttemptSelect, 'attemptMs');
+  bindLearnSetting(learnToleranceSelect, 'tolerancePoints');
   // Auto-clear the learn-mode best-move arrow as soon as the user
   // navigates / moves away from the position it was drawn for. Without
   // this the green arrow stayed glued to the squares it pointed at,
@@ -3258,6 +3286,30 @@ async function main() {
     <p class="retro-played" style="opacity:.68;font-size:11px;margin-top:7px;">Eval is always White POV, matching the main engine. “Your win” and “pts” are relative to the side solving this lesson.</p>`;
   }
 
+  function _learnTimingControlsHtml(state) {
+    if (state === 'end') return '';
+    const busy = state === 'preparing' || state === 'eval' || state === 'comparing';
+    const disabled = busy ? ' disabled' : '';
+    return `<div class="retro-timing" aria-label="Lesson analysis duration">
+      <label>Scan / move
+        <select data-learn-setting="scanMs"${disabled}>
+          <option value="200"${_learnSettings.scanMs === 200 ? ' selected' : ''}>0.2 s</option>
+          <option value="400"${_learnSettings.scanMs === 400 ? ' selected' : ''}>0.4 s</option>
+          <option value="750"${_learnSettings.scanMs === 750 ? ' selected' : ''}>0.75 s</option>
+          <option value="1500"${_learnSettings.scanMs === 1500 ? ' selected' : ''}>1.5 s</option>
+        </select>
+      </label>
+      <label>Try / top 3
+        <select data-learn-setting="attemptMs"${disabled}>
+          <option value="1000"${_learnSettings.attemptMs === 1000 ? ' selected' : ''}>1 s</option>
+          <option value="3000"${_learnSettings.attemptMs === 3000 ? ' selected' : ''}>3 s</option>
+          <option value="5000"${_learnSettings.attemptMs === 5000 ? ' selected' : ''}>5 s</option>
+        </select>
+      </label>
+      <span>${state === 'preparing' ? 'Locked during this scan' : 'Applies to next scan / search'}</span>
+    </div>`;
+  }
+
   function _renderLearnPanel(state) {
     // A delayed engine/database continuation must never resurrect a lesson
     // the user explicitly cancelled or closed. Starting a new lesson clears
@@ -3299,8 +3351,8 @@ async function main() {
         <p class="retro-played">You played <strong>${_learn.playedSan || '?'}</strong>.<br>
            <span style="opacity:0.6;font-size:11px;">Any reasonable move within ${_learnSettings.tolerancePoints} win-probability points of the best is accepted — you don't need the engine's exact pick.</span></p>
         <div class="retro-choices">
-          <button class="retro-btn" id="learn-solution">View solution</button>
-          <button class="retro-btn" id="learn-skip">Skip</button>
+          <button class="retro-btn" id="learn-solution">View solution + top 3</button>
+          <button class="retro-btn" id="learn-skip">Skip lesson</button>
         </div>`;
     } else if (state === 'eval') {
       inner = `
@@ -3327,21 +3379,26 @@ async function main() {
           <span class="retro-icon">✗</span>
           <span>Not quite</span>
         </div>
-        <p class="retro-played" style="opacity:0.8;">Try a different move, compare it with the top three, or give up and continue.</p>
+        <p class="retro-played" style="opacity:0.8;">Try a different move, compare it with the top three, or give up to reveal the solution.</p>
         ${diffLine}
         <div class="retro-choices">
           <button class="retro-btn" id="learn-retry">Try again</button>
           <button class="retro-btn" id="learn-compare">Show top 3</button>
-          <button class="retro-btn retro-continue" id="learn-give-up">Give up · next ▶</button>
+          <button class="retro-btn retro-continue" id="learn-give-up">Give up · solution</button>
         </div>`;
     } else if (state === 'comparing') {
       inner = `<p class="retro-prompt">⏳ Comparing your move with the top three…</p>
         <p class="retro-played">Full-strength Stockfish · ${(_learnSettings.attemptMs / 1000).toFixed(_learnSettings.attemptMs % 1000 ? 1 : 0)} s</p>
         <div class="retro-progress"><div id="learn-progress-fill"></div></div>`;
     } else if (state === 'comparison') {
-      inner = `${_learnComparisonHtml()}
+      const revealed = _learn.solutionRevealed
+        ? `<p class="retro-prompt">Solution revealed: <strong>${escapeHtml(_learn.bestSan || _learn.comparison?.top?.[0]?.san || '?')}</strong></p>`
+        : '';
+      inner = `${revealed}${_learnComparisonHtml()}
         <div class="retro-choices">
-          ${_learn.gradePassed ? continueBtn : '<button class="retro-btn" id="learn-retry">Try again</button><button class="retro-btn retro-continue" id="learn-give-up">Give up · next ▶</button>'}
+          ${(_learn.gradePassed || _learn.solutionRevealed)
+            ? continueBtn
+            : '<button class="retro-btn" id="learn-retry">Try again</button><button class="retro-btn retro-continue" id="learn-give-up">Give up · reveal #1</button>'}
         </div>`;
     } else if (state === 'view') {
       inner = `
@@ -3395,6 +3452,15 @@ async function main() {
           <button class="retro-btn" id="learn-solution">Try again</button>
           <button class="retro-btn" id="learn-skip">Skip</button>
         </div>`;
+    } else if (state === 'solution-partial') {
+      inner = `
+        <div class="retro-icon-line retro-win"><span class="retro-icon">✓</span><span>Solution revealed</span></div>
+        <p class="retro-prompt">Best was <strong>${escapeHtml(_learn.bestSan || '?')}</strong></p>
+        <p class="retro-played">The board arrow is correct, but Stockfish's top-three table was interrupted.</p>
+        <div class="retro-choices">
+          <button class="retro-btn" id="learn-compare">Retry top 3</button>
+          ${continueBtn}
+        </div>`;
     } else if (state === 'prep-fail') {
       inner = `
         <div class="retro-icon-line retro-fail"><span class="retro-icon">⚠</span><span>Lesson preparation stopped</span></div>
@@ -3404,7 +3470,7 @@ async function main() {
           <button class="retro-btn" id="learn-close-end">Close</button>
         </div>`;
     }
-    p.innerHTML = titleBar + `<div class="retro-body">${inner}</div>`;
+    p.innerHTML = titleBar + _learnTimingControlsHtml(state) + `<div class="retro-body">${inner}</div>`;
     p.querySelector('#learn-close')?.addEventListener('click', _closeLearnPanel);
     p.querySelector('#learn-close-end')?.addEventListener('click', _closeLearnPanel);
     // Finish the final item into a visible N/N · Done state. This keeps
@@ -3415,7 +3481,7 @@ async function main() {
     });
     p.querySelector('#learn-next')?.addEventListener('click', _goNextMistake);
     p.querySelector('#learn-skip')?.addEventListener('click', _goNextMistake);
-    p.querySelector('#learn-give-up')?.addEventListener('click', _goNextMistake);
+    p.querySelector('#learn-give-up')?.addEventListener('click', _giveUpAndShowSolution);
     p.querySelector('#learn-solution')?.addEventListener('click', _showSolution);
     p.querySelector('#learn-compare')?.addEventListener('click', _loadLearnComparison);
     p.querySelector('#learn-retry')?.addEventListener('click', () => _enterLearnMode(_learn.targetPly));
@@ -3428,6 +3494,9 @@ async function main() {
     p.querySelector('#learn-restart-prep')?.addEventListener('click', () => {
       _closeLearnPanel();
       setTimeout(() => btnLearnMistakes?.click(), 0);
+    });
+    p.querySelectorAll('[data-learn-setting]').forEach(select => {
+      select.addEventListener('change', () => _setLearnSetting(select.dataset.learnSetting, select.value));
     });
   }
   function _findMistakePlies() {
@@ -3546,22 +3615,30 @@ async function main() {
       let top = _learnComparisonCache.get(cacheKey);
       if (!top) {
         try { engine.setSkill(20); } catch {}
-        const result = await AICoach.probeEngine(engine, _learn.prevFen, 18, 3, _learnSettings.attemptMs);
+        const result = await AICoach.probeEngine(
+          engine,
+          _learn.prevFen,
+          18,
+          3,
+          _learnSettings.attemptMs,
+          Math.max(6000, _learnSettings.attemptMs + 4000),
+        );
         top = (result.lines || []).slice(0, 3).map(line => _lineToLearnRow(line, _learn.prevFen)).filter(Boolean);
         if (top.length) _learnComparisonCache.set(cacheKey, top);
       }
       if (!_learn.active || _learn.userDismissed || _learn.compareSeq !== seq) return;
-      let attempt = {
+      if (!top?.length) throw new Error('Stockfish returned no candidate moves');
+      let attempt = (_learn.attemptUci || _learn.attemptSan) ? {
         uci: _learn.attemptUci,
-        san: _learn.attemptSan || _learn.attemptUci || '—',
+        san: _learn.attemptSan || _learn.attemptUci,
         cpWhite: _learn.attemptCpWhite ?? null,
         mateWhite: _learn.attemptMateWhite ?? null,
-      };
+      } : null;
       // Exact engine/book moves may have skipped the searchmoves probe.
       // If the attempted UCI is one of MultiPV's lines, use that line's
       // like-for-like score in the comparison table.
       const matchingTop = top?.find(line => line.uci === _learn.attemptUci);
-      if ((attempt.cpWhite == null && attempt.mateWhite == null) && matchingTop) {
+      if (attempt && (attempt.cpWhite == null && attempt.mateWhite == null) && matchingTop) {
         attempt = { ...matchingTop, san: _learn.attemptSan || matchingTop.san };
       }
       _learn.comparison = {
@@ -3574,12 +3651,15 @@ async function main() {
         attempt,
         top: top || [],
       };
+      if (_learn.solutionRequested) _revealLearnBestMove(top[0]);
       _renderLearnPanel('comparison');
     } catch (err) {
       console.warn('[learn] top-three comparison failed', err);
       if (_learn.active && !_learn.userDismissed && _learn.compareSeq === seq) {
         _learn.comparisonError = true;
-        _renderLearnPanel(fallbackState);
+        _renderLearnPanel(_learn.solutionRequested && _learn.solutionRevealed
+          ? 'solution-partial'
+          : fallbackState);
       }
     } finally {
       _learn.comparing = false;
@@ -3588,6 +3668,42 @@ async function main() {
         try { board.setInteractionLocked?.(false); } catch {}
       }
     }
+  }
+
+  function _revealLearnBestMove(best) {
+    if (!best?.uci || !_learn.prevFen) return false;
+    _learn.bestUci = best.uci;
+    _learn.bestSan = best.san || best.uci;
+    _learn.bestEvalFmt = _formatLearnEval(best.cpWhite, best.mateWhite);
+    _learn.solutionRevealed = true;
+    _learn.solvedPlies.add(_learn.targetPly);
+    try {
+      if (board.goToPly) board.goToPly(_learn.targetPly - 1);
+      if (board.drawArrows && board.fen() === _learn.prevFen) {
+        board.drawArrows([{
+          orig: best.uci.slice(0, 2),
+          dest: best.uci.slice(2, 4),
+          brush: 'green',
+          modifiers: { lineWidth: 22 },
+        }]);
+        _learn.arrowFen = _learn.prevFen;
+      }
+    } catch {}
+    return true;
+  }
+
+  function _giveUpAndShowSolution() {
+    if (!_learn.active) return;
+    _learn.gradePassed = false;
+    _learn.solutionRequested = true;
+    if (_learn.comparison?.top?.length) {
+      _revealLearnBestMove(_learn.comparison.top[0]);
+      _renderLearnPanel('comparison');
+      return;
+    }
+    const cachedBest = _verifierBest.get(_learn.prevFen);
+    if (cachedBest) _revealLearnBestMove(cachedBest);
+    _loadLearnComparison();
   }
 
   function _completeLearnAttempt(passed) {
@@ -3612,7 +3728,7 @@ async function main() {
     }
   }
 
-  function _showSolution() {
+  function _showSingleSolutionFallback() {
     // Jump board forward one ply, showing the played move, then ask
     // engine for top candidate from the pre-mistake position.
     const plies = collectTimelinePlies();
@@ -3758,6 +3874,13 @@ async function main() {
       finish(null, 'timeout');
     }, 5000);
   }
+  function _showSolution() {
+    // A solution is not a skip: reveal Stockfish #1 on the board and use
+    // the same full-strength MultiPV search as “Show top 3”. This removes
+    // the old single-PV race where View solution could stop at a spinner
+    // or show only one move with no comparison.
+    _giveUpAndShowSolution();
+  }
   function _enterLearnMode(targetPly) {
     const plies = collectTimelinePlies();
     if (targetPly < 1 || targetPly >= plies.length) return;
@@ -3784,6 +3907,8 @@ async function main() {
     _learn.comparison = null;
     _learn.comparisonError = false;
     _learn.gradePassed = false;
+    _learn.solutionRequested = false;
+    _learn.solutionRevealed = false;
     _learn.compareSeq = (_learn.compareSeq || 0) + 1;
     _learn.openingUcis = new Set();
     // Clear any solution-revealed state from the previous mistake so
@@ -4791,8 +4916,8 @@ async function main() {
 
     // Kick the engine FIRST — the worker starts computing in parallel
     // while the rest of this function does its synchronous UI work.
+    syncDisplayedEvalToFen(fen);
     if (engineReady) {
-      explainer.setFen(fen);
       const chessNow = new Chess(fen);
       if (chessNow.isGameOver()) {
         ui.narrationText.innerHTML = gameOverMessage(chessNow);
@@ -5286,7 +5411,7 @@ async function main() {
       fireAnalysis();
     } else {
       const fen = rebuildFenAtPly(board.chess, board.viewPly);
-      explainer.setFen(fen);
+      syncDisplayedEvalToFen(fen);
       engine.stop();
       // Respect the locked/paused state — scrolling through history
       // must not revive a manually-stopped engine.
@@ -11981,6 +12106,8 @@ async function main() {
     'limit-mode', 'limit-value', 'select-hash', 'btn-clear-hash',
     'btn-preload-engines', 'btn-clear-engine-cache',
     'learn-scan-time', 'learn-attempt-time', 'learn-tolerance',
+    'learn-quick-scan-time', 'learn-quick-attempt-time',
+    'mg-learn-scan-time', 'mg-learn-attempt-time',
   ];
   const learnPrepMutationIds = [
     'btn-new', 'btn-undo', 'btn-practice', 'btn-paste-fen', 'btn-editor',

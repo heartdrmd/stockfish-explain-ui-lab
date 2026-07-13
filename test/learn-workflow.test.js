@@ -26,7 +26,23 @@ test('Learn shows simple lesson progress and explicit retry or give-up actions',
   assert.match(main, /state === 'end'[\s\S]*?`\$\{total\}\/\$\{total\} · Done`/);
   assert.match(main, /id="learn-retry">Try again/);
   assert.match(main, /id="learn-compare">Show top 3/);
-  assert.match(main, /id="learn-give-up">Give up · next/);
+  assert.match(main, /id="learn-give-up">Give up · solution/);
+  assert.match(main, /learn-give-up'\)\?\.addEventListener\('click', _giveUpAndShowSolution\)/);
+});
+
+test('Learn exposes scan and top-three durations at launch and in the lesson panel', () => {
+  assert.match(html, /id="learn-quick-scan-time"/);
+  assert.match(html, /id="learn-quick-attempt-time"/);
+  assert.match(html, /id="mg-learn-scan-time"/);
+  assert.match(html, /id="mg-learn-attempt-time"/);
+  assert.match(main, /data-learn-setting="scanMs"/);
+  assert.match(main, /data-learn-setting="attemptMs"/);
+});
+
+test('View solution and Give up both reveal the best move through top-three comparison', () => {
+  assert.match(main, /function _showSolution\(\)[\s\S]*?_giveUpAndShowSolution\(\)/);
+  assert.match(main, /if \(_learn\.solutionRequested\) _revealLearnBestMove\(top\[0\]\)/);
+  assert.match(main, /Solution revealed:/);
 });
 
 test('Learn comparison labels visible evaluations as White POV', () => {

@@ -646,6 +646,27 @@
 .mg-detail-title { font-weight: 700; font-size: 14px; }
 .mg-detail-sub   { font-size: 11px; color: var(--c-font-dim, rgba(255,255,255,0.55)); margin-top: 2px; }
 .mg-detail-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.mg-learn-timing {
+  flex: 1 0 100%;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.mg-learn-timing label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--c-font-dim, rgba(255,255,255,0.55));
+  font-size: 10px;
+}
+.mg-learn-timing select {
+  min-height: 28px;
+  border: 1px solid var(--c-border);
+  border-radius: 3px;
+  background: var(--c-panel);
+  color: var(--c-text);
+  font-size: 11px;
+}
 .mg-delete:hover {
   background: rgba(244, 67, 54, 0.15) !important;
   border-color: #f44336 !important;

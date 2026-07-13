@@ -384,6 +384,25 @@
             <span class="learn-btn-label">Learn from your mistakes</span>
             <span class="learn-btn-count" id="learn-btn-count"></span>
           </button>
+          <div class="learn-quick-settings" aria-label="Learn from Mistakes analysis duration">
+            <label for="learn-quick-scan-time">
+              Scan each move
+              <select id="learn-quick-scan-time">
+                <option value="200">0.2 s · quick</option>
+                <option value="400" selected>0.4 s · balanced</option>
+                <option value="750">0.75 s · deep</option>
+                <option value="1500">1.5 s · very deep</option>
+              </select>
+            </label>
+            <label for="learn-quick-attempt-time">
+              Try / top 3
+              <select id="learn-quick-attempt-time">
+                <option value="1000">1 s · fast</option>
+                <option value="3000" selected>3 s · Lichess-style</option>
+                <option value="5000">5 s · deep</option>
+              </select>
+            </label>
+          </div>
           <div class="practice-btn-row">
             <button id="btn-practice-save"  class="practice-btn save-btn" title="Download this game as PGN">💾 Save PGN</button>
             <button id="btn-dont-save"      class="practice-btn" title="Delete the auto-saved copy from the cloud — the local archive entry is untouched" hidden>🗑 Don't save</button>
@@ -1295,6 +1314,23 @@
             <div class="mg-detail-sub" id="mg-detail-sub">—</div>
           </div>
           <div class="mg-detail-actions">
+            <div class="mg-learn-timing" aria-label="Learn analysis duration">
+              <label for="mg-learn-scan-time">Lesson scan
+                <select id="mg-learn-scan-time">
+                  <option value="200">0.2 s / move</option>
+                  <option value="400" selected>0.4 s / move</option>
+                  <option value="750">0.75 s / move</option>
+                  <option value="1500">1.5 s / move</option>
+                </select>
+              </label>
+              <label for="mg-learn-attempt-time">Try / top 3
+                <select id="mg-learn-attempt-time">
+                  <option value="1000">1 s</option>
+                  <option value="3000" selected>3 s</option>
+                  <option value="5000">5 s</option>
+                </select>
+              </label>
+            </div>
             <button id="mg-detail-load"    class="btn btn-auth-primary" title="Load this game onto the board for full analysis">▶ Load on board</button>
             <button id="mg-detail-learn"   class="btn btn-learn-mistakes" title="Replay this game and find a better move at each mistake — Lichess-style">▶ LEARN FROM YOUR MISTAKES</button>
             <button id="mg-detail-pgn"     class="btn" title="Download this game as a PGN file">📥 PGN</button>
