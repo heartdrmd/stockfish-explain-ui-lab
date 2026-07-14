@@ -361,7 +361,7 @@ async function main() {
   {
     const STORAGE_KEY = 'stockfish-explain.board-size';
     const savedInit = parseInt(localStorage.getItem(STORAGE_KEY) || '', 10);
-    const sz = savedInit || defaultBoardSize();
+    const sz = fitBoardSizeForSticky(savedInit || defaultBoardSize());
     const el = document.getElementById('board');
     if (el) { el.style.width = sz + 'px'; el.style.height = sz + 'px'; }
     ui.boardArea.style.maxWidth = sz + 'px';
@@ -10890,7 +10890,7 @@ async function main() {
         // (body + movetime + padding + margins) + ~30 px board-nav.
         const vertBudget = vh - 340;
         const horzBudget = Math.floor(vw * 0.50);
-        const wantPx = Math.max(340, Math.min(vertBudget, horzBudget, 900));
+        const wantPx = fitBoardSizeForSticky(Math.max(220, Math.min(vertBudget, horzBudget, 900)));
         if (boardEl) { boardEl.style.width = wantPx + 'px'; boardEl.style.height = wantPx + 'px'; }
         if (barea)   { barea.style.maxWidth = wantPx + 'px'; barea.style.width = wantPx + 'px'; }
         try { localStorage.setItem('stockfish-explain.board-size', String(wantPx)); } catch {}
@@ -12918,24 +12918,11 @@ async function main() {
   // Gauge matches the BOARD's height exactly (from rank 8 top to rank 1 bottom),
   // not board-area (which includes the nav row below).
   const boardInner = document.getElementById('board');
-  const boardLayout = ui.boardArea?.closest('.uniboard');
   const syncEvalGaugeGeometry = () => {
     const rect = boardInner.getBoundingClientRect();
     if (rect.height > 0) {
       ui.evalGauge.style.height = rect.height + 'px';
       ui.evalGauge.style.minHeight = '0';
-    }
-    // Desktop keeps the board and gauge sticky only while the complete board
-    // unit (square + navigation / docked review content) fits below the
-    // toolbar. If it does not fit, independent sticky elements hit different
-    // limits while scrolling and the bar appears longer than the board.
-    if (boardLayout && ui.boardArea) {
-      const stickyTop = document.body.classList.contains('nav-collapsed') ? 48 : 68;
-      const usableHeight = Math.max(0, window.innerHeight - stickyTop - 8);
-      const boardUnitHeight = ui.boardArea.getBoundingClientRect().height;
-      const oversized = !document.body.classList.contains('mobile-mode') &&
-        boardUnitHeight > usableHeight;
-      boardLayout.classList.toggle('board-sticky-oversized', oversized);
     }
   };
   const ro = new ResizeObserver(syncEvalGaugeGeometry);
@@ -12966,7 +12953,10 @@ async function main() {
       if (_applyingSize) return;
       _applyingSize = true;
       try {
-        const sz = Math.max(300, Math.min(1100, Math.round(size)));
+        // A sticky element taller than its available viewport cannot remain
+        // anchored. Preserve desktop stickiness by fitting even a previously
+        // saved/manual board size beneath the header + navigation row.
+        const sz = fitBoardSizeForSticky(Math.max(220, Math.min(1100, Math.round(size))));
         ui.boardArea.style.maxWidth = sz + 'px';
         ui.boardArea.style.width    = sz + 'px';
         boardElForResize.style.width  = sz + 'px';
@@ -13017,7 +13007,14 @@ async function main() {
         // Skip if localStorage already has a user-set value different
         // from the default — we detect 'user has dragged' by checking
         // the user-touched flag set on pointerdown below.
-        if (!window.__boardSizeUserTouched) applySize(defaultBoardSize());
+        if (!window.__boardSizeUserTouched) {
+          applySize(defaultBoardSize());
+        } else {
+          // A later window-height reduction must also refit a manually-sized
+          // board; otherwise the sticky element becomes taller than its
+          // viewport and starts scrolling with the page.
+          applySize(boardElForResize.getBoundingClientRect().width);
+        }
       } finally { _windowResizeHandling = false; }
     });
 
@@ -13727,6 +13724,16 @@ function defaultBoardSize() {
   else budget = w - 40;
   const vertBudget = h - 180;    // header + nav row + padding
   return Math.max(320, Math.min(900, budget, vertBudget));
+}
+
+// Keep the complete desktop board unit (square + 56px navigation row) inside
+// the sticky viewport. Mobile owns its responsive size entirely in CSS.
+function fitBoardSizeForSticky(size) {
+  if (document.body?.classList.contains('mobile-mode')) return size;
+  const stickyTop = document.body?.classList.contains('nav-collapsed') ? 48 : 68;
+  const navAndGap = 64;
+  const verticalCap = Math.max(220, window.innerHeight - stickyTop - navAndGap);
+  return Math.min(size, verticalCap);
 }
 
 function setupTournament(board, fireAnalysis, pauseControl) {

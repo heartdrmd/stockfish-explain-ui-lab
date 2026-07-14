@@ -802,6 +802,7 @@
 }
 /* Slot beneath the board where the review-mode card gets relocated. */
 .board-below-slot {
+  grid-area: board-lower;
   width: 100%;
   margin-top: 10px;
 }
