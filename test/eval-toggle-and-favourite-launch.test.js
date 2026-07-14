@@ -31,6 +31,13 @@ test('desktop side columns scroll without moving or restructuring the board', ()
   assert.doesNotMatch(main, /function fitBoardSizeForSticky\(size\)/);
 });
 
+test('desktop notation keeps a protected internal scroller above the graph', () => {
+  assert.match(layout, /body:not\(\.mobile-mode\) \.uniboard \.move-list-wrap \{[\s\S]*?max-height:\s*none/);
+  assert.match(layout, /\.move-list-wrap > #move-list \{[\s\S]*?flex:\s*0 0 clamp\(220px, 36vh, 380px\)/);
+  assert.match(layout, /\.move-list-wrap > #move-list \{[\s\S]*?min-height:\s*220px[\s\S]*?overflow-y:\s*auto/);
+  assert.match(html, /id="move-list"[\s\S]*?id="notation-graph-slot"/);
+});
+
 test('double-click or double-tap launches favourites with their saved side', () => {
   assert.match(main, /double-click \/ double-tap to start/);
   assert.match(main, /const startFavouriteNow = \(key\)/);

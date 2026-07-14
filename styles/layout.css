@@ -443,6 +443,23 @@ body.nav-collapsed .site-header { min-height: 40px; padding: 6px 14px; }
   body:not(.mobile-mode) .uniboard .tools > .ceval { top: 56px; }
   body.nav-collapsed:not(.mobile-mode) .uniboard .tools > .engine-power-row { top: 0; }
   body.nav-collapsed:not(.mobile-mode) .uniboard .tools > .ceval { top: 56px; }
+
+  /* Protect notation from later siblings such as the docked evaluation
+     graph and review stats. The old flex item could shrink to zero inside
+     .move-list-wrap, making the graph look as though it had replaced the
+     moves. On desktop the right tools column is now the outer scroller, so
+     the card may grow naturally while notation keeps its own fixed-height
+     vertical scroll viewport. */
+  body:not(.mobile-mode) .uniboard .move-list-wrap {
+    max-height: none;
+  }
+  body:not(.mobile-mode) .uniboard .move-list-wrap > #move-list {
+    flex: 0 0 clamp(220px, 36vh, 380px);
+    min-height: 220px;
+    max-height: clamp(220px, 36vh, 380px);
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+  }
 }
 
 /* The left sidebar exists as a true left column only in the three-column
