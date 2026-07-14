@@ -53,6 +53,14 @@ test('Learn includes inaccuracies as well as mistakes and blunders', () => {
   assert.equal(isLearnCandidateDrop(null), false);
 });
 
+test('Learn sensitivity can include small misses without changing Lichess severity', () => {
+  assert.equal(classifySeverity(0.04), null);
+  assert.equal(isLearnCandidateDrop(0.04), false);
+  assert.equal(isLearnCandidateDrop(0.04, 0.04), true);
+  assert.equal(isLearnCandidateDrop(0.03, 0.03), true);
+  assert.equal(isLearnCandidateDrop(0.0299, 0.03), false);
+});
+
 test('move accuracy treats 0.10 as ten probability points', () => {
   const expected = 103.1668 * Math.exp(-0.04354 * 10) - 3.1669;
   assert.ok(Math.abs(moveAccuracy(0.10) - expected) < 1e-9);

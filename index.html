@@ -286,6 +286,16 @@
     </div>
 
     <div class="setting">
+      <label for="learn-sensitivity">Lesson sensitivity · include moves losing at least</label>
+      <select id="learn-sensitivity">
+        <option value="6" selected>Lichess · 6+ winning-probability points</option>
+        <option value="4">Sensitive · 4+ points</option>
+        <option value="3">Thorough · 3+ points</option>
+      </select>
+      <small class="muted">Below 6 points is shown as a Small miss—not falsely labelled a Lichess inaccuracy.</small>
+    </div>
+
+    <div class="setting">
       <label for="learn-tolerance">Accept alternatives within</label>
       <select id="learn-tolerance">
         <option value="4" selected>Lichess · 4 winning-probability points</option>
@@ -421,6 +431,14 @@
                 <option value="1000">1 s · fast</option>
                 <option value="3000" selected>3 s · Lichess-style</option>
                 <option value="5000">5 s · deep</option>
+              </select>
+            </label>
+            <label for="learn-quick-sensitivity" class="learn-sensitivity-setting">
+              Lessons to include
+              <select id="learn-quick-sensitivity">
+                <option value="6" selected>Lichess · 6+ pts</option>
+                <option value="4">Sensitive · 4+ pts</option>
+                <option value="3">Thorough · 3+ pts</option>
               </select>
             </label>
           </div>
@@ -798,6 +816,15 @@
             <option value="kasparov">   ♔ Kasparov — aggressive centre, attacking</option>
           </select>
           <small class="muted">Style biases the engine toward a specific type of move from its top candidates. Skill still controls raw strength.</small>
+        </div>
+        <div class="setting">
+          <label for="practice-learn-sensitivity">🎓 Post-game lesson sensitivity</label>
+          <select id="practice-learn-sensitivity" class="tourn-select">
+            <option value="6" selected>Lichess · 6+ points</option>
+            <option value="4">Sensitive · 4+ points</option>
+            <option value="3">Thorough · 3+ points</option>
+          </select>
+          <small class="muted">Controls Learn from Mistakes on desktop and mobile. Smaller 3–6 point losses are called Small misses.</small>
         </div>
         <div class="setting" style="grid-column: 1 / -1;">
           <label style="font-weight:600;display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px;">
@@ -1349,6 +1376,13 @@
                   <option value="1000">1 s</option>
                   <option value="3000" selected>3 s</option>
                   <option value="5000">5 s</option>
+                </select>
+              </label>
+              <label for="mg-learn-sensitivity">Lessons
+                <select id="mg-learn-sensitivity">
+                  <option value="6" selected>Lichess · 6+ pts</option>
+                  <option value="4">Sensitive · 4+ pts</option>
+                  <option value="3">Thorough · 3+ pts</option>
                 </select>
               </label>
             </div>

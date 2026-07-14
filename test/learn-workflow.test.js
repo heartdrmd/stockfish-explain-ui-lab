@@ -40,10 +40,22 @@ test('Learn exposes scan and top-three durations at launch and in the lesson pan
   assert.match(html, /id="mg-learn-attempt-time"/);
   assert.match(main, /data-learn-setting="scanMs"/);
   assert.match(main, /data-learn-setting="attemptMs"/);
-  assert.match(main, /state === 'setup'[\s\S]*?Choose how long Stockfish should analyse each move/);
+  assert.match(main, /state === 'setup'[\s\S]*?Choose scan time and which lessons to include/);
   assert.match(main, /id="learn-start">Start lesson scan/);
   assert.match(main, /btnLearnMistakes\.addEventListener\('click', _openLearnSetup\)/);
   assert.match(main, /learn-start'\)\?\.addEventListener\('click', _startLearnPreparation\)/);
+});
+
+test('lesson sensitivity is easy to adjust on desktop, mobile, Practice, and saved games', () => {
+  assert.match(html, /id="learn-sensitivity"/);
+  assert.match(html, /id="learn-quick-sensitivity"/);
+  assert.match(html, /id="practice-learn-sensitivity"/);
+  assert.match(html, /id="mg-learn-sensitivity"/);
+  assert.match(main, /lessonThresholdPoints: new Set\(\[3, 4, 6\]\)/);
+  assert.match(main, /data-learn-setting="lessonThresholdPoints"/);
+  assert.match(main, /isLearnCandidateDrop\(drop, _learnSettings\.lessonThresholdPoints \/ 100\)/);
+  assert.match(main, /'small-miss': \{ mark: 'MISS', label: 'Small miss' \}/);
+  assert.match(panels, /data-severity="small-miss"/);
 });
 
 test('Learn marks and previews the original error without replaying it', () => {

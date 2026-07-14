@@ -3054,6 +3054,7 @@ async function main() {
     scanMs: new Set([200, 400, 750, 1500]),
     attemptMs: new Set([1000, 3000, 5000]),
     tolerancePoints: new Set([4, 6, 8]),
+    lessonThresholdPoints: new Set([3, 4, 6]),
   };
   function _loadLearnSettings() {
     let raw = {};
@@ -3066,6 +3067,7 @@ async function main() {
       scanMs: pick('scanMs', 400),
       attemptMs: pick('attemptMs', 3000),
       tolerancePoints: pick('tolerancePoints', 4),
+      lessonThresholdPoints: pick('lessonThresholdPoints', 6),
     };
   }
   let _learnSettings = _loadLearnSettings();
@@ -3077,6 +3079,7 @@ async function main() {
     scanMs: ['learn-scan-time', 'learn-quick-scan-time', 'mg-learn-scan-time'],
     attemptMs: ['learn-attempt-time', 'learn-quick-attempt-time', 'mg-learn-attempt-time'],
     tolerancePoints: ['learn-tolerance'],
+    lessonThresholdPoints: ['learn-sensitivity', 'learn-quick-sensitivity', 'practice-learn-sensitivity', 'mg-learn-sensitivity'],
   };
   function _setLearnSetting(key, rawValue) {
     const value = Number(rawValue);
@@ -3086,14 +3089,23 @@ async function main() {
       const select = document.getElementById(id);
       if (select && select.value !== String(value)) select.value = String(value);
     }
+    if (key === 'lessonThresholdPoints') {
+      // Sensitivity filters already-computed eval drops, so update the
+      // lesson badge immediately without wasting time on another scan.
+      try { updateLearnButton(); } catch {}
+    }
   }
   const learnScanSelect = document.getElementById('learn-scan-time');
   const learnAttemptSelect = document.getElementById('learn-attempt-time');
   const learnToleranceSelect = document.getElementById('learn-tolerance');
+  const learnSensitivitySelect = document.getElementById('learn-sensitivity');
   const learnQuickScanSelect = document.getElementById('learn-quick-scan-time');
   const learnQuickAttemptSelect = document.getElementById('learn-quick-attempt-time');
+  const learnQuickSensitivitySelect = document.getElementById('learn-quick-sensitivity');
+  const practiceLearnSensitivitySelect = document.getElementById('practice-learn-sensitivity');
   const mgLearnScanSelect = document.getElementById('mg-learn-scan-time');
   const mgLearnAttemptSelect = document.getElementById('mg-learn-attempt-time');
+  const mgLearnSensitivitySelect = document.getElementById('mg-learn-sensitivity');
   const bindLearnSetting = (select, key) => {
     if (!select) return;
     select.value = String(_learnSettings[key]);
@@ -3106,8 +3118,13 @@ async function main() {
   bindLearnSetting(learnQuickAttemptSelect, 'attemptMs');
   bindLearnSetting(mgLearnAttemptSelect, 'attemptMs');
   bindLearnSetting(learnToleranceSelect, 'tolerancePoints');
+  bindLearnSetting(learnSensitivitySelect, 'lessonThresholdPoints');
+  bindLearnSetting(learnQuickSensitivitySelect, 'lessonThresholdPoints');
+  bindLearnSetting(practiceLearnSensitivitySelect, 'lessonThresholdPoints');
+  bindLearnSetting(mgLearnSensitivitySelect, 'lessonThresholdPoints');
 
   const _learnSeverityMeta = (severity) => ({
+    'small-miss': { mark: 'MISS', label: 'Small miss' },
     inaccuracy: { mark: '?!', label: 'Inaccuracy' },
     mistake:    { mark: '?',  label: 'Mistake' },
     blunder:    { mark: '??', label: 'Blunder' },
@@ -3409,6 +3426,13 @@ async function main() {
           <option value="5000"${_learnSettings.attemptMs === 5000 ? ' selected' : ''}>5 s</option>
         </select>
       </label>
+      <label>Lessons
+        <select data-learn-setting="lessonThresholdPoints"${disabled}>
+          <option value="6"${_learnSettings.lessonThresholdPoints === 6 ? ' selected' : ''}>Lichess · 6+</option>
+          <option value="4"${_learnSettings.lessonThresholdPoints === 4 ? ' selected' : ''}>Sensitive · 4+</option>
+          <option value="3"${_learnSettings.lessonThresholdPoints === 3 ? ' selected' : ''}>Thorough · 3+</option>
+        </select>
+      </label>
       <span>${state === 'preparing' ? 'Locked during this scan' : 'Applies to next scan / search'}</span>
     </div>`;
   }
@@ -3448,8 +3472,8 @@ async function main() {
     let inner = '';
     if (state === 'setup') {
       inner = `
-        <p class="retro-prompt">Choose how long Stockfish should analyse each move</p>
-        <p class="retro-played">Longer scans can find subtler inaccuracies, but take longer for a full game. You can change both times above before starting.</p>
+        <p class="retro-prompt">Choose scan time and which lessons to include</p>
+        <p class="retro-played">Longer scans can find subtler errors. Sensitive and Thorough also include smaller misses below Lichess's official 6-point inaccuracy cutoff.</p>
         <div class="retro-choices">
           <button class="retro-btn retro-continue" id="learn-start">Start lesson scan ▶</button>
           <button class="retro-btn" id="learn-close-end">Cancel</button>
@@ -3524,7 +3548,7 @@ async function main() {
     } else if (state === 'end') {
       inner = `
         <p class="retro-prompt">🎉 Session complete</p>
-        <p class="retro-played">Worked through ${solved} of ${total} mistake${total === 1 ? '' : 's'} from this game.</p>
+        <p class="retro-played">Worked through ${solved} of ${total} lesson${total === 1 ? '' : 's'} from this game.</p>
         <div class="retro-choices">
           <button class="retro-btn retro-continue" id="learn-restart">🔁 Start over</button>
           <button class="retro-btn" id="learn-close-end">Done</button>
@@ -3631,10 +3655,11 @@ async function main() {
                              (userColor === 'black' && !moverWasWhite);
         if (!moverWasUser) continue;                          // skip opponent moves
       }
-      // Use the app's shared Lichess thresholds: every classified
-      // inaccuracy (6+ points), mistake, and blunder is a lesson.
+      // Lichess mode includes every official inaccuracy (6+), mistake and
+      // blunder. Sensitive/Thorough additionally include smaller coaching
+      // misses without changing their official classification elsewhere.
       const drop = moverWinDrop(plies[i - 1], plies[i]);
-      if (isLearnCandidateDrop(drop)) list.push(i);
+      if (isLearnCandidateDrop(drop, _learnSettings.lessonThresholdPoints / 100)) list.push(i);
     }
     return list;
   }
@@ -4031,7 +4056,7 @@ async function main() {
     _learn.prevFen = prev.fen;
     _learn.playedSan = cur.san;
     _learn.playedUci = _mainlineNodeAtPly(targetPly)?.uci || null;
-    _learn.originalSeverity = classifySeverityForPly(prev, cur) || 'mistake';
+    _learn.originalSeverity = classifySeverityForPly(prev, cur) || 'small-miss';
     _learn.bestBeforeCpWhite = prev.cpWhite ?? 0;
     _learn.bestBeforeMateWhite = prev.mate ?? null;
     _learn.originalCpWhite = cur.cpWhite ?? null;
@@ -4351,7 +4376,7 @@ async function main() {
         await persistReanalysisForLoadedGame();
         if (!runIsCurrent()) return;
         if (!candidates.length) {
-          if (ui.narrationText) ui.narrationText.innerHTML = '🎉 No meaningful mistakes found in this game — clean play!';
+          if (ui.narrationText) ui.narrationText.innerHTML = '🎉 No moves crossed your selected lesson threshold — clean play!';
           _learn.active = false;
           window.__learnOwnsEngine = false;
           document.body.classList.remove('learn-active', 'learn-phase-find');
@@ -12571,9 +12596,10 @@ async function main() {
     'select-flavor', 'range-skill', 'range-multipv', 'range-threads',
     'limit-mode', 'limit-value', 'select-hash', 'btn-clear-hash',
     'btn-preload-engines', 'btn-clear-engine-cache',
-    'learn-scan-time', 'learn-attempt-time', 'learn-tolerance',
-    'learn-quick-scan-time', 'learn-quick-attempt-time',
-    'mg-learn-scan-time', 'mg-learn-attempt-time',
+    'learn-scan-time', 'learn-attempt-time', 'learn-tolerance', 'learn-sensitivity',
+    'learn-quick-scan-time', 'learn-quick-attempt-time', 'learn-quick-sensitivity',
+    'practice-learn-sensitivity',
+    'mg-learn-scan-time', 'mg-learn-attempt-time', 'mg-learn-sensitivity',
   ];
   const learnPrepMutationIds = [
     'btn-new', 'btn-undo', 'btn-practice', 'btn-paste-fen', 'btn-editor',

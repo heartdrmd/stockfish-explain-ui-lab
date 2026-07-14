@@ -96,10 +96,16 @@ export function classifySeverity(drop) {
   return null;
 }
 
-// Learn-from-mistakes must use the same definition as the rest of the app.
-// Any classified loss — inaccuracy, mistake, or blunder — is a lesson.
-export function isLearnCandidateDrop(drop) {
-  return classifySeverity(drop) != null;
+// Learn defaults to Lichess's 6-point inaccuracy threshold, but may include
+// smaller coaching misses when the learner explicitly selects a more
+// sensitive lesson list. Official severity labels remain unchanged.
+export function isLearnCandidateDrop(drop, minimumDrop = THRESHOLDS.inaccuracy) {
+  if (drop == null || !Number.isFinite(drop)) return false;
+  const requested = Number(minimumDrop);
+  const cutoff = Number.isFinite(requested)
+    ? Math.max(0, requested)
+    : THRESHOLDS.inaccuracy;
+  return drop >= cutoff;
 }
 
 // Full quality bucket for the accuracy pills / learn-mode:
