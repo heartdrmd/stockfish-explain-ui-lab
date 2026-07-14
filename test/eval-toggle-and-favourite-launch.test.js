@@ -23,6 +23,13 @@ test('eval bar has an independent persistent toggle without resizing the board',
   assert.match(main, /boardUnitHeight > usableHeight/);
 });
 
+test('move-accuracy eye toggle never hides the eval bar', () => {
+  assert.match(html, /id="nav-hide-panels"[^>]*title="Hide move accuracy colors"/);
+  assert.match(main, /btn\.title = hidden \? 'Show move accuracy colors' : 'Hide move accuracy colors'/);
+  assert.doesNotMatch(main, /gaugeControl\.classList\.toggle\('panels-hidden'/);
+  assert.doesNotMatch(panels, /\.eval-gauge-control\.panels-hidden/);
+});
+
 test('desktop side columns scroll without moving or restructuring the board', () => {
   assert.match(layout, /body:not\(\.mobile-mode\) \.uniboard \.tools \{[\s\S]*?max-height:[\s\S]*?overflow-y:\s*auto[\s\S]*?overscroll-behavior-y:\s*contain/);
   assert.match(layout, /@media \(min-width: 1260px\)[\s\S]*?body:not\(\.mobile-mode\) \.uniboard \.side \{[\s\S]*?overflow-y:\s*auto/);

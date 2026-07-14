@@ -20,9 +20,6 @@
 .eval-gauge-control.eval-gauge-hidden .eval-gauge {
   visibility: hidden;
 }
-.eval-gauge-control.panels-hidden {
-  display: none !important;
-}
 .eval-gauge-toggle {
   flex: 0 0 22px;
   width: 100%;

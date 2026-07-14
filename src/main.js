@@ -4542,35 +4542,25 @@ async function main() {
   };
   applyHiddenPanels();
 
-  // ─── Move-list header "👁 Hide panels" toggle ──────────────────────
-  // Hides BOTH the vertical eval bar (next to the board) and the move
-  // accuracy strip in a single click — so the user can clean up the UI
-  // for a no-distraction playing view. Click again to restore. State
-  // persisted per-browser.
+  // ─── Move-list header "👁 Move accuracy" toggle ────────────────────
+  // Controls only the colored move-accuracy strip. The eval bar has its
+  // own E/E+ control beside the board, so these preferences stay independent.
+  // State is persisted per-browser/account under the existing key.
   (() => {
     const KEY = 'stockfish-explain.panels-hidden-toggle';
     const btn = document.getElementById('nav-hide-panels');
     if (!btn) return;
-    const gauge = document.getElementById('eval-gauge');
-    const gaugeControl = document.getElementById('eval-gauge-control');
     const accuracyStrip = document.getElementById('accuracy-strip');
     const getHidden = () => { try { return localStorage.getItem(KEY) === '1'; } catch { return false; } };
     const setHidden = (v) => { try { localStorage.setItem(KEY, v ? '1' : '0'); } catch {} };
     const apply = (hidden) => {
-      // Use inline style.display — the .uniboard .eval-gauge rule
-      // uses a class selector (specificity 0-2-0) which beats the
-      // [hidden] attribute (0-1-0). Inline style wins any selector
-      // short of !important. That was why the previous 'Hide'
-      // toggle ran but visually did nothing.
-      if (gauge) gauge.style.display = '';
-      if (gaugeControl) gaugeControl.classList.toggle('panels-hidden', hidden);
       if (accuracyStrip) {
         accuracyStrip.style.display = hidden ? 'none' : '';
         if (hidden) accuracyStrip.dataset.userHidden = '1';
         else        delete accuracyStrip.dataset.userHidden;
       }
       btn.classList.toggle('active', hidden);
-      btn.title = hidden ? 'Show eval bar + move accuracy' : 'Hide eval bar + move accuracy';
+      btn.title = hidden ? 'Show move accuracy colors' : 'Hide move accuracy colors';
     };
     apply(getHidden());
     btn.addEventListener('click', () => {
