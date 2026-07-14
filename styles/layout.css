@@ -417,6 +417,52 @@ body.nav-collapsed .site-header { min-height: 40px; padding: 6px 14px; }
   body:not(.mobile-mode) .uniboard .tools > .engine-power-row {
     background: var(--c-bg);
   }
+
+  /* Desktop columns scroll independently. Wheel/trackpad movement over the
+     right analysis column must never drag the board, gauge, or docked graph
+     through the page. Keep the existing board/graph DOM and sizing intact;
+     only the already-established tools column becomes a contained viewport. */
+  body:not(.mobile-mode) .uniboard .tools {
+    position: sticky;
+    top: 68px;
+    align-self: start;
+    max-height: calc(100dvh - 76px);
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+    scrollbar-gutter: stable;
+    padding-right: 4px;
+  }
+  body.nav-collapsed:not(.mobile-mode) .uniboard .tools {
+    top: 48px;
+    max-height: calc(100dvh - 56px);
+  }
+  /* These two controls were page-sticky before the parent became its own
+     scroller. Pin them to the top of that scroller instead of leaving a
+     duplicate header-sized gap inside the right column. */
+  body:not(.mobile-mode) .uniboard .tools > .engine-power-row { top: 0; }
+  body:not(.mobile-mode) .uniboard .tools > .ceval { top: 56px; }
+  body.nav-collapsed:not(.mobile-mode) .uniboard .tools > .engine-power-row { top: 0; }
+  body.nav-collapsed:not(.mobile-mode) .uniboard .tools > .ceval { top: 56px; }
+}
+
+/* The left sidebar exists as a true left column only in the three-column
+   desktop layout. Give it the same contained scrolling behavior there;
+   narrower layouts keep their established stacked side panel. */
+@media (min-width: 1260px) {
+  body:not(.mobile-mode) .uniboard .side {
+    position: sticky;
+    top: 68px;
+    align-self: start;
+    max-height: calc(100dvh - 76px);
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+    scrollbar-gutter: stable;
+    padding-right: 4px;
+  }
+  body.nav-collapsed:not(.mobile-mode) .uniboard .side {
+    top: 48px;
+    max-height: calc(100dvh - 56px);
+  }
 }
 
 /* Side column cards */

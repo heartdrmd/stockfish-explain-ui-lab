@@ -23,6 +23,14 @@ test('eval bar has an independent persistent toggle without resizing the board',
   assert.match(main, /boardUnitHeight > usableHeight/);
 });
 
+test('desktop side columns scroll without moving or restructuring the board', () => {
+  assert.match(layout, /body:not\(\.mobile-mode\) \.uniboard \.tools \{[\s\S]*?max-height:[\s\S]*?overflow-y:\s*auto[\s\S]*?overscroll-behavior-y:\s*contain/);
+  assert.match(layout, /@media \(min-width: 1260px\)[\s\S]*?body:not\(\.mobile-mode\) \.uniboard \.side \{[\s\S]*?overflow-y:\s*auto/);
+  assert.match(layout, /\.tools > \.engine-power-row \{ top:\s*0; \}/);
+  assert.match(layout, /\.tools > \.ceval \{ top:\s*56px; \}/);
+  assert.doesNotMatch(main, /function fitBoardSizeForSticky\(size\)/);
+});
+
 test('double-click or double-tap launches favourites with their saved side', () => {
   assert.match(main, /double-click \/ double-tap to start/);
   assert.match(main, /const startFavouriteNow = \(key\)/);
