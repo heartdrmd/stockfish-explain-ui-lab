@@ -59,6 +59,7 @@ import * as MoveTime from './movetime.js';
 import * as OpeningVariation from './opening-variation.js';
 import { buildPracticeHintLines, upsertPracticeHint } from './practice-hint.js';
 import { buildLearnFeedbackArrows } from './learn-arrows.js';
+import { canReuseLearnScan, learnScanKey } from './learn-scan-cache.js';
 
 // Expose Chess to eval-graph's computeDivision helper — avoids a
 // circular import while still letting it replay SAN to count pieces
@@ -4297,7 +4298,21 @@ async function main() {
       if (initialPrepStatus) initialPrepStatus.textContent = `Analysing position 0 of ${prepTotal}…`;
       updateLearnButton();
       const mainlineKey = board.tree?.mainlineNodes?.().map(n => n.uci).join(',') || '';
-      const sweepKey = board.startingFen + '|' + mainlineKey;
+      // Duration is part of the scan identity. Previously the key contained
+      // only the game, so changing 400 -> 750 ms still skipped the sweep and
+      // silently served the old result on both desktop and mobile.
+      const requestedScanMs = _learnSettings.scanMs;
+      const sweepKey = learnScanKey({
+        startingFen: board.startingFen,
+        mainlineKey,
+        scanMs: requestedScanMs,
+        engineFlavor: currentFlavor,
+      });
+      const canReuseRequestedScan = canReuseLearnScan(window.__loadedGameAnalysisMeta, {
+        scanMs: requestedScanMs,
+        positions: prepTotal,
+        engineFlavor: currentFlavor,
+      });
       try {
         // Guarantee at least one clearly visible preparation frame even
         // when every position is already cached and the sweep completes
@@ -4309,8 +4324,13 @@ async function main() {
         if (window.__mistakesSweptForFen !== sweepKey) {
           const finished = await retrospectiveSweep({
             minDepth: 14,
-            movetimeMs: _learnSettings.scanMs,
+            movetimeMs: requestedScanMs,
             requireBestMove: true,
+            // A first scan, changed duration, incomplete cache, or known
+            // engine-flavor change is an explicit request for fresh work.
+            // force also prevents a deep live-analysis entry from satisfying
+            // a time-based Learn scan without actually using that time.
+            force: !canReuseRequestedScan,
             onProgress: (done, total) => {
               if (!runIsCurrent()) return;
               const status = document.getElementById('learn-prep-status');
@@ -4324,6 +4344,9 @@ async function main() {
           window.__mistakesSweptForFen = sweepKey;
         }
         const candidates = _findMistakePlies();
+        // Never leave solutions from the previous-duration scan in memory.
+        // Repopulate them from the cache produced (or exactly reused) above.
+        _verifierBest.clear();
         _hydrateLearnSolutions(candidates);
         await persistReanalysisForLoadedGame();
         if (!runIsCurrent()) return;
@@ -4647,19 +4670,20 @@ async function main() {
         const existing = fenEvalCache.get(t.fen);
         const savedMeta = window.__loadedGameAnalysisMeta;
         // A completed persisted Learn cache is authoritative regardless
-        // of the numerical depth reached by its time-based search. A
-        // 400 ms phone scan may finish below depth 18 but is still the
-        // exact result the user chose and saved. Only an explicit
-        // force=true Reanalyze should replace it; missing entries are
-        // still probed individually as a self-healing fallback.
-        const reusableSaved = !force && savedMeta?.version >= 1 &&
+        // of the numerical depth reached by its time-based search. Learn
+        // passes force=true when the requested duration differs, while an
+        // exact-duration cache can be reused even if its depth is below the
+        // nominal minimum. Missing entries are still self-healed.
+        const savedBudgetMatches = movetimeMs <= 0 ||
+          Number(savedMeta?.movetimeMs) === Number(movetimeMs);
+        const reusableSaved = !force && savedBudgetMatches && savedMeta?.version >= 1 &&
           Number(savedMeta.positions || 0) >= targets.length &&
           existing && (existing.cpWhite != null || existing.mate != null) &&
           (!requireBestMove || existing.bestUci);
-        // Learn scans reuse a sufficiently deep cached best move even when
-        // their configured budget is time-based. Explicit Reanalyze passes
-        // set force=true because the user asked for a fresh result.
-        if (reusableSaved || (!force && existing && existing.depth != null && existing.depth >= minDepth &&
+        // Depth-based work can reuse a sufficiently deep live cache. A
+        // time-based request cannot: "750 ms/move" means actually spending
+        // that budget unless an exact 750 ms persisted scan exists.
+        if (reusableSaved || (!force && movetimeMs <= 0 && existing && existing.depth != null && existing.depth >= minDepth &&
             (!requireBestMove || existing.bestUci))) {
           sweepReused++;
           done++;
@@ -4680,6 +4704,23 @@ async function main() {
           if (winner === '__timeout__') {
             console.warn('[sweep] probe timed out — stopping engine + skipping', t.fen);
             try { engine.stop(); } catch {}
+          } else {
+            // Write the completed probe result directly. The general live
+            // cache listener intentionally refuses to replace a numerically
+            // deeper entry, but a forced time-based scan must replace it even
+            // if device variance reports a slightly lower final depth.
+            const primary = winner?.lines?.[0];
+            const numericScore = Number(primary?.score);
+            if (primary?.uci && Number.isFinite(numericScore) &&
+                (primary.scoreKind === 'cp' || primary.scoreKind === 'mate')) {
+              const whiteSign = t.fen.split(' ')[1] === 'w' ? 1 : -1;
+              fenEvalCache.set(t.fen, {
+                cpWhite: primary.scoreKind === 'cp' ? whiteSign * numericScore : null,
+                mate: primary.scoreKind === 'mate' ? whiteSign * numericScore : null,
+                depth: Number(winner.depth) || minDepth,
+                bestUci: primary.uci,
+              });
+            }
           }
         }
         catch (err) { console.warn('[sweep] probe failed', t.fen, err); }
