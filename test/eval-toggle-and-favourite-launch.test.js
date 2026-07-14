@@ -29,6 +29,8 @@ test('desktop side columns scroll without moving or restructuring the board', ()
   assert.match(layout, /\.tools > \.engine-power-row \{ top:\s*0; \}/);
   assert.match(layout, /\.tools > \.ceval \{ top:\s*56px; \}/);
   assert.doesNotMatch(main, /function fitBoardSizeForSticky\(size\)/);
+  assert.match(layout, /\.uniboard \.tools::\-webkit-scrollbar \{[\s\S]*?width:\s*16px/);
+  assert.match(layout, /\.move-list-wrap > #move-list::\-webkit-scrollbar \{[\s\S]*?width:\s*12px/);
 });
 
 test('desktop notation keeps a protected internal scroller above the graph', () => {
@@ -36,6 +38,9 @@ test('desktop notation keeps a protected internal scroller above the graph', () 
   assert.match(layout, /\.move-list-wrap > #move-list \{[\s\S]*?flex:\s*0 0 clamp\(220px, 36vh, 380px\)/);
   assert.match(layout, /\.move-list-wrap > #move-list \{[\s\S]*?min-height:\s*220px[\s\S]*?overflow-y:\s*auto/);
   assert.match(html, /id="move-list"[\s\S]*?id="notation-graph-slot"/);
+  assert.match(main, /ui\.moveList\?\.addEventListener\('wheel'[\s\S]*?ui\.moveList\.scrollTop \+=/);
+  assert.match(main, /moveListWrap\?\.addEventListener\('wheel'[\s\S]*?rightTools\.scrollTop \+=/);
+  assert.match(main, /event\.target\?\.closest\?\.\('#move-list'\)/);
 });
 
 test('double-click or double-tap launches favourites with their saved side', () => {

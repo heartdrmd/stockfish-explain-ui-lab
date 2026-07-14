@@ -458,6 +458,16 @@
   color: var(--c-font-dim, rgba(255,255,255,0.55));
   margin-bottom: 6px;
 }
+.mg-order-fixed {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid rgba(78, 201, 176, .32);
+  border-radius: 4px;
+  background: rgba(78, 201, 176, .08);
+  color: #9fdfd0;
+  font-size: 12px;
+  font-weight: 700;
+}
 .mg-quick-dates { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 6px; }
 .mg-chip {
   padding: 3px 8px;

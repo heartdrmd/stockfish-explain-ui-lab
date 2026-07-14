@@ -430,7 +430,25 @@ body.nav-collapsed .site-header { min-height: 40px; padding: 6px 14px; }
     overflow-y: auto;
     overscroll-behavior-y: contain;
     scrollbar-gutter: stable;
+    scrollbar-width: auto;
+    scrollbar-color: rgba(126, 145, 166, .88) rgba(255, 255, 255, .07);
     padding-right: 4px;
+  }
+  body:not(.mobile-mode) .uniboard .tools::-webkit-scrollbar {
+    width: 16px;
+  }
+  body:not(.mobile-mode) .uniboard .tools::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, .07);
+    border-radius: 10px;
+  }
+  body:not(.mobile-mode) .uniboard .tools::-webkit-scrollbar-thumb {
+    min-height: 52px;
+    border: 3px solid var(--c-bg);
+    border-radius: 10px;
+    background: rgba(126, 145, 166, .88);
+  }
+  body:not(.mobile-mode) .uniboard .tools::-webkit-scrollbar-thumb:hover {
+    background: rgba(158, 179, 202, .98);
   }
   body.nav-collapsed:not(.mobile-mode) .uniboard .tools {
     top: 48px;
@@ -459,6 +477,21 @@ body.nav-collapsed .site-header { min-height: 40px; padding: 6px 14px; }
     max-height: clamp(220px, 36vh, 380px);
     overflow-y: auto;
     overscroll-behavior-y: contain;
+    scrollbar-width: auto;
+    scrollbar-color: rgba(104, 122, 143, .82) rgba(255, 255, 255, .05);
+  }
+  body:not(.mobile-mode) .uniboard .move-list-wrap > #move-list::-webkit-scrollbar {
+    width: 12px;
+  }
+  body:not(.mobile-mode) .uniboard .move-list-wrap > #move-list::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, .05);
+    border-radius: 8px;
+  }
+  body:not(.mobile-mode) .uniboard .move-list-wrap > #move-list::-webkit-scrollbar-thumb {
+    min-height: 40px;
+    border: 2px solid var(--c-bg);
+    border-radius: 8px;
+    background: rgba(104, 122, 143, .82);
   }
 }
 

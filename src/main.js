@@ -61,6 +61,7 @@ import { buildPracticeHintLines, upsertPracticeHint } from './practice-hint.js';
 import { buildLearnFeedbackArrows } from './learn-arrows.js';
 import { canReuseLearnScan, learnScanKey } from './learn-scan-cache.js';
 import { includeLessonPly, isUserMovePly, notationAnnotation } from './learn-annotations.js';
+import { sortGamesByPlayedAt } from './game-order.js';
 
 // Expose Chess to eval-graph's computeDivision helper — avoids a
 // circular import while still letting it replay SAN to count pieces
@@ -5054,6 +5055,7 @@ async function main() {
     const game = {
       id:          Date.now(),
       date:        today,
+      playedAt:    new Date().toISOString(),
       result:      result || '*',
       ending:      ending || '',
       mode:        mode || 'analysis',
@@ -5921,6 +5923,35 @@ async function main() {
     });
     board.dispatchEvent(new CustomEvent('nav', { detail: { path, live: true } }));
   }
+
+  // Desktop wheel ownership in the right column:
+  //   • pointer inside notation -> notation only (even at its boundaries)
+  //   • pointer below notation (graph/stats/input) -> complete tools column
+  // Native scroll chaining differs between browsers when a nested scroller
+  // is empty or already at an edge, so make the user's intended target
+  // explicit instead of relying on propagation heuristics.
+  const moveListWrap = ui.moveList?.closest('.move-list-wrap');
+  const rightTools = ui.moveList?.closest('.tools');
+  const wheelDeltaPixels = (event, viewportHeight) => {
+    if (event.deltaMode === 1) return event.deltaY * 20; // lines
+    if (event.deltaMode === 2) return event.deltaY * viewportHeight; // pages
+    return event.deltaY; // pixels / trackpad
+  };
+  ui.moveList?.addEventListener('wheel', (event) => {
+    if (event.ctrlKey || document.body.classList.contains('mobile-mode')) return;
+    event.preventDefault();
+    event.stopPropagation();
+    ui.moveList.scrollTop += wheelDeltaPixels(event, ui.moveList.clientHeight);
+  }, { passive: false });
+  moveListWrap?.addEventListener('wheel', (event) => {
+    if (event.ctrlKey || document.body.classList.contains('mobile-mode')) return;
+    if (event.target?.closest?.('#move-list')) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (rightTools) {
+      rightTools.scrollTop += wheelDeltaPixels(event, rightTools.clientHeight);
+    }
+  }, { passive: false });
 
   // Right-click context menu on a move node
   function openMoveContextMenu(e, path) {
@@ -9988,7 +10019,9 @@ async function main() {
       if (f.mode)        q.mode        = f.mode;
       if (f.opening)     q.opening     = f.opening;
       if (f.cleanliness) q.cleanliness = f.cleanliness;
-      if (f.sort)        q.sort        = f.sort;
+      // My Games is a history, not a recently-opened queue. Its one
+      // authoritative order is the immutable played_at timestamp.
+      q.sort = 'newest';
       // Result filter needs user-color awareness → translated here:
       if (f.result === 'win' || f.result === 'loss') {
         // Fall back to filtering client-side since server only knows the
@@ -10034,11 +10067,17 @@ async function main() {
     // both sources. Tag id with a prefix so the click handlers know
     // which source to read from.
     function normalizeLocalGame(g) {
+      const legacyPlayedAt = Number.isFinite(+g.id)
+        ? new Date(+g.id).toISOString()
+        : (g.date || new Date(0).toISOString());
       return {
         id:             'local-' + g.id,
         _localId:       g.id,
         _isLocal:       true,
-        played_at:      g.date || new Date(g.id).toISOString(),
+        // New local records preserve their exact finish time. Legacy
+        // records use the archive id (Date.now) rather than the old
+        // date-only string, which collapsed every same-day game to midnight.
+        played_at:      g.playedAt || legacyPlayedAt,
         result:         g.result || '*',
         opening_name:   g.opening?.name || null,
         opening_eco:    g.opening?.eco || null,
@@ -10096,8 +10135,7 @@ async function main() {
         // Subsequent pages append only the freshly-fetched cloud page.
         const merged = append
           ? cloud
-          : [...cloud, ...localAll].sort((a, b) =>
-              new Date(b.played_at).getTime() - new Date(a.played_at).getTime());
+          : sortGamesByPlayedAt([...cloud, ...localAll]);
         state.total = (res.total || 0) + localAll.length;
         state.games = append ? state.games.concat(merged) : merged;
         // Safety dedupe by row id (guards any cross-page overlap).
@@ -10108,6 +10146,9 @@ async function main() {
           if (k) seenIds.add(k);
           return true;
         });
+        // Re-sort after dedupe and after every appended server page so the
+        // complete combined local+cloud history is always newest-played first.
+        state.games = sortGamesByPlayedAt(state.games);
         renderList();
         // Guest hint: remind them signing in makes games portable.
         if (!window.__currentUser && state.games.length && !append) {
@@ -10117,7 +10158,7 @@ async function main() {
       } catch (err) {
         // Network failed — fall back to local so the user still sees something.
         const local = applyClientResultFilter(loadLocalGamesNormalized());
-        state.games = local;
+        state.games = sortGamesByPlayedAt(local);
         state.total = local.length;
         renderList();
         if (local.length) {
@@ -10289,7 +10330,7 @@ async function main() {
       state.filters.from    = fFrom.value || '';
       state.filters.to      = fTo.value   || '';
       state.filters.opening = fOpening.value.trim();
-      state.filters.sort    = fSort.value || 'newest';
+      state.filters.sort    = 'newest';
       refreshStats();
       refreshList();
     }
@@ -10567,7 +10608,7 @@ async function main() {
           qpList.innerHTML = '<div class="mg-empty" style="font-size:11px;">No games loaded yet.</div>';
           return;
         }
-        qpList.innerHTML = games.map(g => {
+        qpList.innerHTML = sortGamesByPlayedAt(games).map(g => {
           const tag = resultTag(g);
           const tagLabel = tag === 'w' ? 'W' : tag === 'l' ? 'L' : tag === 'd' ? '½' : '·';
           const opening = g.opening_name || '(unknown)';

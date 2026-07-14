@@ -1331,14 +1331,9 @@
         </div>
 
         <div class="mg-filter-group">
-          <label class="mg-filter-label" for="mg-sort">Sort</label>
-          <select id="mg-sort">
-            <option value="newest">Newest first</option>
-            <option value="oldest">Oldest first</option>
-            <option value="most_mistakes">Most mistakes</option>
-            <option value="fewest_mistakes">Fewest mistakes</option>
-            <option value="most_moves">Most moves</option>
-          </select>
+          <span class="mg-filter-label">Order</span>
+          <div class="mg-order-fixed" title="Opening or reviewing a game never moves it to the top">Newest played first</div>
+          <input id="mg-sort" type="hidden" value="newest">
         </div>
 
         <div class="mg-filter-group">

@@ -14,11 +14,11 @@ import { requireAuthOrGuest, mintGuestExportToken, verifyGuestExportToken } from
 // Allowed sort keys → SQL ORDER BY expressions. Whitelisted so no
 // arbitrary strings from query params ever reach Postgres.
 const SORT_MAP = {
-  newest:          'played_at DESC',
-  oldest:          'played_at ASC',
-  most_mistakes:   '(mistakes_count + blunders_count) DESC, played_at DESC',
-  fewest_mistakes: '(mistakes_count + blunders_count) ASC, played_at DESC',
-  most_moves:      'jsonb_array_length(COALESCE(plies, \'[]\'::jsonb)) DESC, played_at DESC',
+  newest:          'played_at DESC, id DESC',
+  oldest:          'played_at ASC, id ASC',
+  most_mistakes:   '(mistakes_count + blunders_count) DESC, played_at DESC, id DESC',
+  fewest_mistakes: '(mistakes_count + blunders_count) ASC, played_at DESC, id DESC',
+  most_moves:      'jsonb_array_length(COALESCE(plies, \'[]\'::jsonb)) DESC, played_at DESC, id DESC',
 };
 
 // Returns { ownerCol, ownerVal } — which column/value identifies this
