@@ -10,22 +10,12 @@ const [html, main, layout, panels] = await Promise.all([
 ]);
 
 test('mobile Learn has a dedicated slot immediately after the board unit', () => {
-  const boardEnd = html.indexOf('id="board-below-slot"');
+  const boardEnd = html.indexOf('</div>', html.indexOf('<div class="board-eval-wrap">'));
   const host = html.indexOf('id="learn-panel-host"');
   const tools = html.indexOf('<section class="tools">');
   assert.ok(boardEnd >= 0 && boardEnd < host && host < tools);
   assert.match(layout, /learn-panel-open \.learn-panel-host:not\(\[hidden\]\)[\s\S]*?order:\s*1/);
   assert.match(layout, /learn-panel-open\.mobile-postgame-analysis \.tools[\s\S]*?order:\s*2/);
-});
-
-test('scrollable review content stays outside the sticky board unit', () => {
-  const wrapperStart = html.indexOf('<div class="board-eval-wrap">');
-  const slot = html.indexOf('id="board-below-slot"');
-  const wrapperClose = html.lastIndexOf('</div>', slot);
-  assert.ok(wrapperStart >= 0 && wrapperStart < wrapperClose && wrapperClose < slot);
-  assert.match(layout, /grid-template-areas:[\s\S]*?"board"[\s\S]*?"board-lower"/);
-  assert.match(layout, /body\.mobile-mode \.board-eval-wrap[\s\S]*?position:\s*sticky/);
-  assert.match(layout, /body\.mobile-mode \.board-below-slot[\s\S]*?grid-area:\s*mobile-review/);
 });
 
 test('classified accuracy clicks always reopen the requested lesson', () => {

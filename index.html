@@ -471,6 +471,12 @@
           <button id="board-nav-flip"  class="nav-btn" title="Flip board (F)">⇅</button>
           <span id="board-nav-ply" class="nav-ply muted">—</span>
         </div>
+        <!-- Docking slot for the review-mode eval graph card. The live
+             graph lives at the bottom of <body> by default (floating
+             compact) and gets relocated here when the user clicks a
+             game from My Games, so the timeline sits embedded directly
+             beneath the board instead of floating in the viewport. -->
+        <div id="board-below-slot" class="board-below-slot"></div>
       </section>
 
       <div class="eval-gauge-control" id="eval-gauge-control">
@@ -483,12 +489,6 @@
                 title="Hide evaluation bar">E</button>
       </div>
     </div>
-
-    <!-- Review content must remain OUTSIDE the sticky board unit. The graph
-         still docks immediately below the board, but now scrolls normally;
-         putting it inside .board-eval-wrap made the sticky unit taller than
-         the viewport and allowed the board to release while scrolling. -->
-    <div id="board-below-slot" class="board-below-slot"></div>
 
     <!-- Mobile gives Learn its own normal-flow slot immediately after the
          board, so lessons cannot disappear inside or be covered by the

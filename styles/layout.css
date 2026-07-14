@@ -276,7 +276,6 @@ body.nav-collapsed .site-header { min-height: 40px; padding: 6px 14px; }
   grid-template-columns: 1fr;
   grid-template-areas:
     "board"
-    "board-lower"
     "tools"
     "side";
 }
@@ -317,7 +316,6 @@ body.nav-collapsed .site-header { min-height: 40px; padding: 6px 14px; }
     grid-template-columns: auto 24px minmax(280px, 1fr);
     grid-template-areas:
       "board gauge tools"
-      "board-lower gauge tools"
       "side  gauge tools";
     gap: 10px;
     padding: 16px;
@@ -347,7 +345,7 @@ body.nav-collapsed .site-header { min-height: 40px; padding: 6px 14px; }
     grid-template-columns: minmax(240px, 300px) auto 28px minmax(300px, 1fr);
     grid-template-areas:
       "side board gauge tools"
-      "side board-lower gauge tools";
+      "side board gauge tools";
     gap: 12px;
     padding: 20px;
   }
@@ -403,6 +401,16 @@ body.nav-collapsed .site-header { min-height: 40px; padding: 6px 14px; }
   }
   body.nav-collapsed:not(.mobile-mode) .uniboard .tools > .ceval {
     top: 104px;           /* 48 (collapsed header) + 56 (engine-power-row) */
+  }
+  /* A board unit taller than the usable viewport cannot obey desktop
+     position:sticky: the board-area (board + navigation) and the shorter
+     gauge control reach different sticky limits and visibly drift apart.
+     main.js marks that measured case so both elements scroll normally from
+     the same grid row. Smaller boards keep the established sticky behaviour. */
+  body:not(.mobile-mode) .uniboard.board-sticky-oversized .board-area,
+  body:not(.mobile-mode) .uniboard.board-sticky-oversized .eval-gauge-control {
+    position: relative;
+    top: auto;
   }
   /* engine-power-row needs its own bg so items scrolling underneath
      don't leak through. */
@@ -607,13 +615,6 @@ body.nav-collapsed .site-header { min-height: 40px; padding: 6px 14px; }
     align-self: center;
     box-shadow: 0 6px 10px -6px rgba(0,0,0,0.55);
   }
-  /* Graph/review content is a sibling of the sticky unit: it keeps its
-     familiar place below the board but scrolls away independently. */
-  body.mobile-mode .board-below-slot {
-    order: 0;
-    align-self: center;
-    width: min(100%, 560px);
-  }
   body.mobile-mode .board-eval-wrap .board-area {
     position: relative;
     top: auto;
@@ -814,11 +815,7 @@ body.nav-collapsed .site-header { min-height: 40px; padding: 6px 14px; }
   body.mobile-mode.mobile-postgame-analysis .uniboard {
     grid-template-areas:
       "mobile-board mobile-analysis"
-      "mobile-review mobile-analysis"
       "mobile-actions mobile-analysis";
-  }
-  body.mobile-mode .board-below-slot {
-    grid-area: mobile-review;
   }
   body.mobile-mode.mobile-postgame-analysis .tools {
     grid-area: mobile-analysis;
@@ -840,7 +837,6 @@ body.nav-collapsed .site-header { min-height: 40px; padding: 6px 14px; }
   body.mobile-mode.learn-panel-open.mobile-postgame-analysis .uniboard {
     grid-template-areas:
       "mobile-board mobile-learn"
-      "mobile-review mobile-analysis"
       "mobile-actions mobile-analysis";
   }
   body.mobile-mode.learn-panel-open .learn-panel-host:not([hidden]) {
