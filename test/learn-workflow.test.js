@@ -68,6 +68,27 @@ test('lesson sensitivity is easy to adjust on desktop, mobile, Practice, and sav
   assert.match(panels, /data-severity="small-miss"/);
 });
 
+test('Learn defaults to personal mistakes and can add computer lessons without rescanning', () => {
+  assert.match(main, /includeOpponentMistakes: new Set\(\[0, 1\]\)/);
+  assert.match(main, /includeOpponentMistakes: pick\('includeOpponentMistakes', 0\)/);
+  assert.match(main, /_openLearnSetup\(\)[\s\S]*?_setLearnSetting\('includeOpponentMistakes', 0\)/);
+  assert.match(main, /data-learn-toggle-opponent/);
+  assert.match(main, /Include computer mistakes/);
+  assert.match(main, /includeLessonPly\(i, userColor, includeOpponentMistakes\)/);
+  assert.match(main, /Computer played/);
+  assert.match(main, /Computer mistakes · \$\{computerLessons\.length\}/);
+});
+
+test('completed scans repaint notation with move-quality annotations', () => {
+  assert.match(main, /function markNotationAnalysisReady\(\)[\s\S]*?renderMoveList\(\)/);
+  assert.match(main, /notationAnalysisReadyKey === currentMainlineAnalysisKey\(\)/);
+  assert.match(main, /notationAnnotation\([\s\S]*?moverWinDrop/);
+  assert.match(main, /class="mt-annotation" data-severity=/);
+  assert.match(panels, /\.mt-annotation\[data-severity="inaccuracy"\]/);
+  assert.match(panels, /\.mt-annotation\[data-severity="mistake"\]/);
+  assert.match(panels, /\.mt-annotation\[data-severity="blunder"\]/);
+});
+
 test('Learn marks and previews the original error without replaying it', () => {
   assert.match(main, /inaccuracy:\s*\{ mark: '\?!'/);
   assert.match(main, /mistake:\s*\{ mark: '\?'/);

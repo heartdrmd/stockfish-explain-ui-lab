@@ -19,14 +19,14 @@ test('completed Learn scans persist and hydrate the full best-move cache', () =>
 
 test('saved analysis records time and reuses cached positions', () => {
   assert.match(main, /sweepReused\+\+/);
-  assert.match(main, /const reusableSaved = !force && savedBudgetMatches && savedMeta\?\.version >= 1/);
+  assert.match(main, /const reusableSaved = \(!force \|\| savedBudgetStrictlyDeeper\)/);
   assert.match(main, /!force && movetimeMs <= 0 && existing/);
   assert.match(main, /if \(reusableSaved \|\|/);
   assert.match(main, /movetimeMs:\s*lastSweepStats\.movetimeMs \|\| 0/);
   assert.match(main, /Saved Learn analysis · \$\{budget\}/);
 });
 
-test('Learn reuses only the exact requested scan duration and coverage', () => {
+test('Learn reuses equal-or-deeper scan duration with full coverage', () => {
   const saved = {
     version: 1,
     movetimeMs: 400,
@@ -47,7 +47,7 @@ test('Learn reuses only the exact requested scan duration and coverage', () => {
     scanMs: 200,
     positions: 72,
     engineFlavor: 'lite',
-  }), false);
+  }), true);
   assert.equal(canReuseLearnScan(saved, {
     scanMs: 400,
     positions: 73,
@@ -66,6 +66,22 @@ test('Learn scan identity changes with duration and engine flavor', () => {
   assert.notEqual(quick, learnScanKey({ ...base, scanMs: 750, engineFlavor: 'lite' }));
   assert.notEqual(quick, learnScanKey({ ...base, scanMs: 400, engineFlavor: 'full' }));
   assert.match(main, /force: !canReuseRequestedScan/);
+});
+
+test('a deeper saved scan wins over later shallower requests', () => {
+  const deep = {
+    version: 1,
+    movetimeMs: 1500,
+    positions: 50,
+    engineFlavor: 'lite',
+  };
+  assert.equal(canReuseLearnScan(deep, {
+    scanMs: 400,
+    positions: 50,
+    engineFlavor: 'lite',
+  }), true);
+  assert.match(main, /const savedBudgetCovers = movetimeMs <= 0 \|\|[\s\S]*?>= Number\(movetimeMs\)/);
+  assert.match(main, /force[\s\S]*?must never downgrade a[\s\S]*?deeper scan/);
 });
 
 test('clicking any classified error row opens its lesson position', () => {

@@ -60,6 +60,7 @@ import * as OpeningVariation from './opening-variation.js';
 import { buildPracticeHintLines, upsertPracticeHint } from './practice-hint.js';
 import { buildLearnFeedbackArrows } from './learn-arrows.js';
 import { canReuseLearnScan, learnScanKey } from './learn-scan-cache.js';
+import { includeLessonPly, isUserMovePly, notationAnnotation } from './learn-annotations.js';
 
 // Expose Chess to eval-graph's computeDivision helper — avoids a
 // circular import while still letting it replay SAN to count pieces
@@ -2591,6 +2592,17 @@ async function main() {
   // blunders/mistakes/inaccuracies. Compact and always-visible below
   // the board once at least one move has been played.
   let timelineTimer = 0;
+  let notationAnalysisReadyKey = null;
+  function currentMainlineAnalysisKey() {
+    const moves = board.tree?.mainlineNodes?.().map(node => node.uci).join(',') || '';
+    return `${board.startingFen}|${moves}`;
+  }
+  function markNotationAnalysisReady() {
+    notationAnalysisReadyKey = currentMainlineAnalysisKey();
+    // The scan updates cache entries, not tree nodes, so no normal move/tree
+    // event would repaint notation. Explicitly render once at completion.
+    try { renderMoveList(); } catch {}
+  }
   function scheduleTimelineRender() {
     if (timelineTimer) return;
     timelineTimer = setTimeout(() => {
@@ -3055,6 +3067,7 @@ async function main() {
     attemptMs: new Set([1000, 3000, 5000]),
     tolerancePoints: new Set([4, 6, 8]),
     lessonThresholdPoints: new Set([3, 4, 6]),
+    includeOpponentMistakes: new Set([0, 1]),
   };
   function _loadLearnSettings() {
     let raw = {};
@@ -3068,6 +3081,7 @@ async function main() {
       attemptMs: pick('attemptMs', 3000),
       tolerancePoints: pick('tolerancePoints', 4),
       lessonThresholdPoints: pick('lessonThresholdPoints', 6),
+      includeOpponentMistakes: pick('includeOpponentMistakes', 0),
     };
   }
   let _learnSettings = _loadLearnSettings();
@@ -3089,10 +3103,15 @@ async function main() {
       const select = document.getElementById(id);
       if (select && select.value !== String(value)) select.value = String(value);
     }
-    if (key === 'lessonThresholdPoints') {
+    if (key === 'lessonThresholdPoints' || key === 'includeOpponentMistakes') {
       // Sensitivity filters already-computed eval drops, so update the
       // lesson badge immediately without wasting time on another scan.
+      // The sweep already evaluates both colors; the opponent toggle only
+      // changes which completed classifications enter the lesson queue.
       try { updateLearnButton(); } catch {}
+      if (key === 'lessonThresholdPoints') {
+        try { renderMoveList(); } catch {}
+      }
     }
   }
   const learnScanSelect = document.getElementById('learn-scan-time');
@@ -3433,6 +3452,11 @@ async function main() {
           <option value="3"${_learnSettings.lessonThresholdPoints === 3 ? ' selected' : ''}>Thorough · 3+</option>
         </select>
       </label>
+      ${(_learn.reviewColor || practiceColor) ? `<button type="button"
+        class="retro-scope-toggle${_learnSettings.includeOpponentMistakes ? ' active' : ''}"
+        data-learn-toggle-opponent aria-pressed="${_learnSettings.includeOpponentMistakes ? 'true' : 'false'}"${disabled}>
+        ${_learnSettings.includeOpponentMistakes ? '✓ Computer mistakes included' : '＋ Include computer mistakes'}
+      </button>` : ''}
       <span>${state === 'preparing' ? 'Locked during this scan' : 'Applies to next scan / search'}</span>
     </div>`;
   }
@@ -3473,7 +3497,7 @@ async function main() {
     if (state === 'setup') {
       inner = `
         <p class="retro-prompt">Choose scan time and which lessons to include</p>
-        <p class="retro-played">Longer scans can find subtler errors. Sensitive and Thorough also include smaller misses below Lichess's official 6-point inaccuracy cutoff.</p>
+        <p class="retro-played">Stockfish scans both sides once. Lessons start with your mistakes; you can include the computer's mistakes without scanning again. Longer scans can find subtler errors. Sensitive and Thorough also include smaller misses below Lichess's official 6-point inaccuracy cutoff.</p>
         <div class="retro-choices">
           <button class="retro-btn retro-continue" id="learn-start">Start lesson scan ▶</button>
           <button class="retro-btn" id="learn-close-end">Cancel</button>
@@ -3482,9 +3506,10 @@ async function main() {
       const severity = _learnSeverityMeta(_learn.originalSeverity);
       const moveNumber = Math.ceil(_learn.targetPly / 2);
       const moveLabel = _learn.targetPly % 2 ? `Move ${moveNumber}` : `Move ${moveNumber}…`;
+      const actor = _learn.isOpponentLesson ? 'Computer played' : 'You played';
       inner = `
         <p class="retro-prompt">Find a better move for <strong>${color}</strong></p>
-        <p class="retro-played">${moveLabel}: You played <strong>${escapeHtml(_learn.playedSan || '?')}</strong>
+        <p class="retro-played">${moveLabel}: ${actor} <strong>${escapeHtml(_learn.playedSan || '?')}</strong>
            <span class="retro-mistake-mark" data-severity="${_learn.originalSeverity || 'mistake'}" title="${severity.label}">${severity.mark}</span>.<br>
            <span class="retro-original-hint">The red arrow shows that original move; it has <strong>not</strong> been replayed. Make a better move on the board.</span><br>
            <span style="opacity:0.6;font-size:11px;">Any reasonable move within ${_learnSettings.tolerancePoints} win-probability points of the best is accepted — you don't need the engine's exact pick.</span></p>
@@ -3546,10 +3571,18 @@ async function main() {
           ${continueBtn}
         </div>`;
     } else if (state === 'end') {
+      const userColor = _learn.reviewColor || practiceColor;
+      const computerLessons = userColor && !_learnSettings.includeOpponentMistakes
+        ? _findMistakePlies({ includeOpponentMistakes: true })
+            .filter(ply => isUserMovePly(ply, userColor) === false)
+        : [];
       inner = `
         <p class="retro-prompt">🎉 Session complete</p>
         <p class="retro-played">Worked through ${solved} of ${total} lesson${total === 1 ? '' : 's'} from this game.</p>
         <div class="retro-choices">
+          ${computerLessons.length
+            ? `<button class="retro-btn retro-continue" id="learn-computer-lessons">Computer mistakes · ${computerLessons.length}</button>`
+            : ''}
           <button class="retro-btn retro-continue" id="learn-restart">🔁 Start over</button>
           <button class="retro-btn" id="learn-close-end">Done</button>
         </div>`;
@@ -3624,6 +3657,14 @@ async function main() {
       const all = _findMistakePlies();
       if (all.length) _enterLearnMode(all[0]);
     });
+    p.querySelector('#learn-computer-lessons')?.addEventListener('click', () => {
+      _setLearnSetting('includeOpponentMistakes', 1);
+      const userColor = _learn.reviewColor || practiceColor;
+      const computerLessons = _findMistakePlies()
+        .filter(ply => isUserMovePly(ply, userColor) === false);
+      _hydrateLearnSolutions(computerLessons);
+      if (computerLessons.length) _enterLearnMode(computerLessons[0]);
+    });
     p.querySelector('#learn-restart-prep')?.addEventListener('click', () => {
       _closeLearnPanel();
       setTimeout(() => btnLearnMistakes?.click(), 0);
@@ -3631,30 +3672,39 @@ async function main() {
     p.querySelectorAll('[data-learn-setting]').forEach(select => {
       select.addEventListener('change', () => _setLearnSetting(select.dataset.learnSetting, select.value));
     });
+    p.querySelector('[data-learn-toggle-opponent]')?.addEventListener('click', () => {
+      const next = _learnSettings.includeOpponentMistakes ? 0 : 1;
+      _setLearnSetting('includeOpponentMistakes', next);
+      const all = _findMistakePlies();
+      _hydrateLearnSolutions(all);
+      // If computer lessons are switched off while one is open, move to
+      // the next eligible personal lesson instead of leaving a mismatched
+      // counter/prompt on screen.
+      if (_learn.active && _learn.targetPly && !all.includes(_learn.targetPly)) {
+        const nextPly = all.find(ply => !_learn.solvedPlies.has(ply)) ?? all[0];
+        if (nextPly != null) _enterLearnMode(nextPly);
+        else _renderLearnPanel('end');
+      } else {
+        _renderLearnPanel(state);
+      }
+    });
   }
-  function _findMistakePlies() {
+  function _findMistakePlies({
+    includeOpponentMistakes = !!_learnSettings.includeOpponentMistakes,
+  } = {}) {
     const plies = collectTimelinePlies();
     const list = [];
     // In practice mode, two filters per user request:
     //   1. Skip opening moves — user didn't play them (book / chosen line).
-    //   2. Only include USER's moves — engine moves aren't 'their'
-    //      mistakes to learn from.
+    //   2. Default to USER moves, with an explicit option to add the
+    //      computer's mistakes. The scan itself always covers both sides.
     // In analysis mode (no practiceColor), include every ply's mistake.
     const openingLen = window.__practiceOpeningPlies || 0;
     const userColor = _learn.reviewColor || practiceColor; // null for two-side analysis
     for (let i = 1; i < plies.length; i++) {
       if (_learn.ignoredPlies?.has(i)) continue;
       if (userColor && i <= openingLen) continue;           // skip opening
-      if (userColor) {
-        // Ply `i` is reached by a move played by WHITE if i is odd,
-        // by BLACK if i is even (ply 0 = start, ply 1 = after white's
-        // move). Equivalently: stmAfter = 'b' means white just moved.
-        const stmAfter = plies[i].fen.split(' ')[1] || 'w';
-        const moverWasWhite = stmAfter === 'b';
-        const moverWasUser = (userColor === 'white' &&  moverWasWhite) ||
-                             (userColor === 'black' && !moverWasWhite);
-        if (!moverWasUser) continue;                          // skip opponent moves
-      }
+      if (!includeLessonPly(i, userColor, includeOpponentMistakes)) continue;
       // Lichess mode includes every official inaccuracy (6+), mistake and
       // blunder. Sensitive/Thorough additionally include smaller coaching
       // misses without changing their official classification elsewhere.
@@ -4081,6 +4131,10 @@ async function main() {
     _learn.solutionUci = _verifierBest.get(prev.fen)?.uci || null;
     const stm = prev.fen.split(' ')[1];
     _learn.solverColor = stm === 'w' ? 'w' : 'b';
+    const knownUserColor = _learn.reviewColor || practiceColor;
+    _learn.isOpponentLesson = knownUserColor
+      ? isUserMovePly(targetPly, knownUserColor) === false
+      : false;
     // Clear any arrow from a previous mistake (the 'View solution'
     // button leaves a green best-move arrow on the board; without
     // clearing it here, the arrow persists when the user clicks
@@ -4282,6 +4336,9 @@ async function main() {
   const learnCountBadge = document.getElementById('learn-btn-count');
   function _openLearnSetup() {
     if (_learn.preparing) return;
+    // Each new lesson session starts with the user's mistakes, even if they
+    // chose to inspect the computer's mistakes at the end of the last one.
+    _setLearnSetting('includeOpponentMistakes', 0);
     _learn.runId = (_learn.runId || 0) + 1;
     _learn.userDismissed = false;
     _learn.active = false;
@@ -4323,9 +4380,8 @@ async function main() {
       if (initialPrepStatus) initialPrepStatus.textContent = `Analysing position 0 of ${prepTotal}…`;
       updateLearnButton();
       const mainlineKey = board.tree?.mainlineNodes?.().map(n => n.uci).join(',') || '';
-      // Duration is part of the scan identity. Previously the key contained
-      // only the game, so changing 400 -> 750 ms still skipped the sweep and
-      // silently served the old result on both desktop and mobile.
+      // Duration is part of the scan identity. A shallower saved scan cannot
+      // satisfy a deeper request; an equal-or-deeper saved scan can.
       const requestedScanMs = _learnSettings.scanMs;
       const sweepKey = learnScanKey({
         startingFen: board.startingFen,
@@ -4696,18 +4752,26 @@ async function main() {
         const savedMeta = window.__loadedGameAnalysisMeta;
         // A completed persisted Learn cache is authoritative regardless
         // of the numerical depth reached by its time-based search. Learn
-        // passes force=true when the requested duration differs, while an
-        // exact-duration cache can be reused even if its depth is below the
-        // nominal minimum. Missing entries are still self-healed.
-        const savedBudgetMatches = movetimeMs <= 0 ||
-          Number(savedMeta?.movetimeMs) === Number(movetimeMs);
-        const reusableSaved = !force && savedBudgetMatches && savedMeta?.version >= 1 &&
+        // passes force=true only when the requested duration is deeper than
+        // the saved work. A deeper saved scan always wins over a later
+        // shallower request. Missing entries are still self-healed.
+        const savedBudgetCovers = movetimeMs <= 0 ||
+          Number(savedMeta?.movetimeMs) >= Number(movetimeMs);
+        const savedFlavor = String(savedMeta?.engineFlavor || '').trim();
+        const activeFlavor = String(currentFlavor || '').trim();
+        const savedFlavorMatches = !savedFlavor || !activeFlavor || savedFlavor === activeFlavor;
+        const savedBudgetStrictlyDeeper = movetimeMs > 0 &&
+          Number(savedMeta?.movetimeMs) > Number(movetimeMs);
+        // `force` refreshes equal-time work, but it must never downgrade a
+        // completed deeper scan. Engine-flavor changes still force new work.
+        const reusableSaved = (!force || savedBudgetStrictlyDeeper) &&
+          savedBudgetCovers && savedFlavorMatches && savedMeta?.version >= 1 &&
           Number(savedMeta.positions || 0) >= targets.length &&
           existing && (existing.cpWhite != null || existing.mate != null) &&
           (!requireBestMove || existing.bestUci);
         // Depth-based work can reuse a sufficiently deep live cache. A
-        // time-based request cannot: "750 ms/move" means actually spending
-        // that budget unless an exact 750 ms persisted scan exists.
+        // time-based request cannot: "750 ms/move" means spending at least
+        // that budget unless an equal-or-deeper persisted scan exists.
         if (reusableSaved || (!force && movetimeMs <= 0 && existing && existing.depth != null && existing.depth >= minDepth &&
             (!requireBestMove || existing.bestUci))) {
           sweepReused++;
@@ -4769,6 +4833,11 @@ async function main() {
       sweepAbort = false;
       window.__engineMuted = wasMuted;
       try { engine.setSkill(savedSweepSkill); } catch {}
+      if (sweepCompleted) {
+        markNotationAnalysisReady();
+        scheduleAccuracyRender();
+        scheduleTimelineRender();
+      }
       // Resume live analysis (user is looking at the current position).
       if (!window.__learnOwnsEngine) {
         try { fireAnalysis(); } catch {}
@@ -5652,6 +5721,23 @@ async function main() {
   function renderMoveList() {
     const tree = board.tree;
     const currentPath = tree.currentPath;
+    const annotationByPly = new Map();
+    if (notationAnalysisReadyKey === currentMainlineAnalysisKey()) {
+      const plies = collectTimelinePlies();
+      const userColor = _learn.reviewColor || practiceColor;
+      for (let ply = 1; ply < plies.length; ply++) {
+        const annotation = notationAnnotation(
+          moverWinDrop(plies[ply - 1], plies[ply]),
+          _learnSettings.lessonThresholdPoints,
+        );
+        if (!annotation) continue;
+        const userMove = isUserMovePly(ply, userColor);
+        annotationByPly.set(ply, {
+          ...annotation,
+          owner: userMove === true ? 'Your' : userMove === false ? 'Computer' : '',
+        });
+      }
+    }
 
     const mainline = [];
     {
@@ -5681,7 +5767,12 @@ async function main() {
     }
     function mvCell(node, path) {
       const isCurrent = path === currentPath ? ' current' : '';
-      return `<td class="mt-move${isCurrent}" data-path="${path}">${boldPiece(node.san)}</td>`;
+      const annotation = annotationByPly.get(node.ply);
+      const mark = annotation
+        ? `<span class="mt-annotation" data-severity="${annotation.severity}"
+            title="${annotation.owner ? `${annotation.owner} ` : ''}${annotation.label} after completed Stockfish scan">${annotation.mark}</span>`
+        : '';
+      return `<td class="mt-move${isCurrent}" data-path="${path}">${boldPiece(node.san)}${mark}</td>`;
     }
 
     // Keep renderVariation as a no-op stub — callers exist below.
@@ -8576,6 +8667,7 @@ async function main() {
         if (uciMoves.length) {
           board.playUciMoves(uciMoves, { animate: false });
         }
+        if (savedAnalysisMeta(g.plies)) markNotationAnalysisReady();
         try { fireAnalysis(); } catch {}
         const savedLabel = savedAnalysisLabel(g.plies);
         const hintCount = Array.isArray(g.hints) ? g.hints.length : 0;
@@ -9803,6 +9895,7 @@ async function main() {
       }
     }
     if (uciMoves.length) board.playUciMoves(uciMoves, { animate: false });
+    if (savedAnalysisMeta(plies)) markNotationAnalysisReady();
     try { fireAnalysis(); } catch {}
     if (ui.narrationText) {
       const savedLabel = savedAnalysisLabel(plies);
