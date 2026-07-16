@@ -30,6 +30,17 @@ test('move-accuracy eye toggle never hides the eval bar', () => {
   assert.doesNotMatch(panels, /\.eval-gauge-control\.panels-hidden/);
 });
 
+test('desktop and mobile analysis can select one, two, or three engine lines directly', () => {
+  assert.match(html, /id="analysis-lines-control"[\s\S]*?data-analysis-lines="1"[\s\S]*?data-analysis-lines="2"[\s\S]*?data-analysis-lines="3"/);
+  assert.match(main, /stockfish-explain\.analysis-lines/);
+  assert.match(main, /applyAnalysisLineCount\(Number\(button\.dataset\.analysisLines\)\)/);
+  assert.match(main, /engine\.setMultiPV\(normalized\)[\s\S]*?fireAnalysis\(\)/);
+  assert.match(main, /function _closeLearnPanel\(\)[\s\S]*?applyAnalysisLineCount\(\+ui\.rangeMultipv\.value, \{ persist: false, restart: false \}\)[\s\S]*?fireAnalysis\(\)/);
+  assert.match(panels, /body\.mobile-mode \.analysis-lines-btn[\s\S]*?min-width:\s*38px/);
+  assert.match(panels, /body\.practice-mode:not\(\.practice-finished\) \.analysis-lines-control/);
+  assert.match(panels, /body\.learn-active \.analysis-lines-control/);
+});
+
 test('desktop side columns scroll without moving or restructuring the board', () => {
   assert.match(layout, /body:not\(\.mobile-mode\) \.uniboard \.tools \{[\s\S]*?max-height:[\s\S]*?overflow-y:\s*auto[\s\S]*?overscroll-behavior-y:\s*contain/);
   assert.match(layout, /@media \(min-width: 1260px\)[\s\S]*?body:not\(\.mobile-mode\) \.uniboard \.side \{[\s\S]*?overflow-y:\s*auto/);

@@ -1449,6 +1449,43 @@ async function main() {
 
   // ────────── Engine control <-> UI ──────────
 
+  // Direct 1/2/3-line selector for ordinary engine analysis. This mirrors
+  // the advanced MultiPV slider in ⚙ More, but stays visible beside the
+  // live PVs on desktop and mobile. Temporary Learn/hint probes may borrow
+  // MultiPV internally; they restore this chosen value when they finish.
+  const ANALYSIS_LINES_STORAGE = 'stockfish-explain.analysis-lines';
+  const analysisLineButtons = Array.from(document.querySelectorAll('[data-analysis-lines]'));
+  const syncAnalysisLineButtons = (count) => {
+    for (const button of analysisLineButtons) {
+      const active = Number(button.dataset.analysisLines) === Number(count);
+      button.classList.toggle('active', active);
+      button.setAttribute('aria-pressed', String(active));
+    }
+  };
+  const applyAnalysisLineCount = (count, { persist = true, restart = true } = {}) => {
+    const normalized = Math.max(1, Math.min(5, Number(count) || 1));
+    ui.rangeMultipv.value = String(normalized);
+    ui.multipvVal.textContent = String(normalized);
+    syncAnalysisLineButtons(normalized);
+    if (persist) {
+      try { localStorage.setItem(ANALYSIS_LINES_STORAGE, String(normalized)); } catch {}
+    }
+    engine.setMultiPV(normalized);
+    if (restart) fireAnalysis();
+  };
+  let initialAnalysisLines = Number(ui.rangeMultipv.value) || 3;
+  try {
+    const saved = Number(localStorage.getItem(ANALYSIS_LINES_STORAGE));
+    if (Number.isInteger(saved) && saved >= 1 && saved <= 5) initialAnalysisLines = saved;
+  } catch {}
+  applyAnalysisLineCount(initialAnalysisLines, { persist: false, restart: false });
+  for (const button of analysisLineButtons) {
+    button.addEventListener('click', () => {
+      if (window.__learnOwnsEngine || window.__practiceHintOwnsEngine) return;
+      applyAnalysisLineCount(Number(button.dataset.analysisLines));
+    });
+  }
+
   // Hardware concurrency — set max on thread slider. Default: 75% of
   // available cores rounded up, capped at N-1 AND at 32 (Stockfish
   // WASM thread-pool ceiling; beyond that the worker crashes without
@@ -1476,9 +1513,7 @@ async function main() {
   });
   ui.rangeMultipv.addEventListener('input', () => {
     if (window.__learnOwnsEngine || window.__practiceHintOwnsEngine) return;
-    ui.multipvVal.textContent = ui.rangeMultipv.value;
-    engine.setMultiPV(+ui.rangeMultipv.value);
-    fireAnalysis();
+    applyAnalysisLineCount(+ui.rangeMultipv.value);
   });
   ui.rangeThreads.addEventListener('input', () => {
     if (window.__learnOwnsEngine || window.__practiceHintOwnsEngine) return;
@@ -3363,6 +3398,10 @@ async function main() {
     window.__learnOwnsEngine = false;
     try { board.setInteractionLocked?.(false); } catch {}
     try { window.__setLearnEngineControls?.({ active: false, preparing: false }); } catch {}
+    // A Learn probe temporarily uses MultiPV 1 or 3. Re-assert the user's
+    // direct LINES selection before ordinary analysis resumes, even if a
+    // cancelled/timed-out probe did not reach its own restoration callback.
+    try { applyAnalysisLineCount(+ui.rangeMultipv.value, { persist: false, restart: false }); } catch {}
     try { fireAnalysis(); } catch {}
   }
   function _countMistakeTotal() {
@@ -4438,6 +4477,7 @@ async function main() {
           window.__learnOwnsEngine = false;
           document.body.classList.remove('learn-active', 'learn-phase-find');
           _renderLearnPanel('end');
+          try { applyAnalysisLineCount(+ui.rangeMultipv.value, { persist: false, restart: false }); } catch {}
           try { fireAnalysis(); } catch {}
           return;
         }
@@ -4448,6 +4488,7 @@ async function main() {
         window.__learnOwnsEngine = false;
         document.body.classList.remove('learn-active', 'learn-phase-find');
         _renderLearnPanel('prep-fail');
+        try { applyAnalysisLineCount(+ui.rangeMultipv.value, { persist: false, restart: false }); } catch {}
         try { fireAnalysis(); } catch {}
       } finally {
         if (_learn.runId !== runId) return;
@@ -11250,6 +11291,7 @@ async function main() {
 
   const PORTABLE_PREF_KEYS = [
     'stockfish-explain.arrow-mode',
+    'stockfish-explain.analysis-lines',
     'stockfish-explain.clock-style',
     'stockfish-explain.panel-hidden',
     'stockfish-explain.panels-hidden-toggle',
@@ -12717,6 +12759,7 @@ async function main() {
 
   const learnEngineControlIds = [
     'btn-lock', 'engine-power', 'btn-threat', 'btn-pause', 'btn-restart',
+    'analysis-lines-1', 'analysis-lines-2', 'analysis-lines-3',
     'select-flavor', 'range-skill', 'range-multipv', 'range-threads',
     'limit-mode', 'limit-value', 'select-hash', 'btn-clear-hash',
     'btn-preload-engines', 'btn-clear-engine-cache',

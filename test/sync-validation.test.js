@@ -7,6 +7,7 @@ test('portable preferences allow UI choices but reject device and secret state',
   const cleaned = cleanPreferences({
     'stockfish-explain.learn-settings': '{"scanMs":400}',
     'stockfish-explain.live-graph-visible': '1',
+    'stockfish-explain.analysis-lines': '3',
     'stockfish-explain.hash-mb': '512',
     'stockfish-explain.engine-flavor': 'full',
     'stockfish-explain.board-size': '740',
@@ -17,6 +18,7 @@ test('portable preferences allow UI choices but reject device and secret state',
   assert.deepEqual(cleaned, {
     'stockfish-explain.learn-settings': '{"scanMs":400}',
     'stockfish-explain.live-graph-visible': '1',
+    'stockfish-explain.analysis-lines': '3',
   });
 });
 
