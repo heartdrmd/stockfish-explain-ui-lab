@@ -10925,6 +10925,18 @@ async function main() {
       if (graph) { graph.destroy(); graph = null; }
     }
 
+    // Visibility is not layout state. A review graph that is temporarily
+    // hidden must return to its dedicated slot below the board, not be
+    // reclassified as the ordinary sidebar graph when it is shown again.
+    function restoreReviewGraphDock() {
+      if (!card.classList.contains('review-mode')) return false;
+      const boardSlot = document.getElementById('board-below-slot');
+      if (boardSlot && card.parentElement !== boardSlot) boardSlot.appendChild(card);
+      card.classList.remove('sidebar-docked');
+      document.body.classList.add('review-layout-active');
+      return true;
+    }
+
     // Helper: return the card to its floating position in <body> and
     // clear review-mode styling. Called by any toggle-off path.
     function exitReviewMode() {
@@ -10949,9 +10961,8 @@ async function main() {
         return;
       }
       if (card.hidden) {
-        exitReviewMode();
         show();
-        relocateForSidebar();
+        if (!restoreReviewGraphDock()) relocateForSidebar();
       } else hide();
     });
     closeBtn?.addEventListener('click', () => {
@@ -11007,7 +11018,7 @@ async function main() {
         }
         if (card.hidden) {
           show();
-          relocateForSidebar();
+          if (!restoreReviewGraphDock()) relocateForSidebar();
         } else {
           hide();
           restoreFloating();

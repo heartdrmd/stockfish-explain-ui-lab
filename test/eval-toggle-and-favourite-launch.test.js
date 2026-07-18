@@ -61,6 +61,12 @@ test('desktop notation keeps a protected internal scroller above the graph', () 
   assert.match(main, /event\.target\?\.closest\?\.\('#move-list'\)/);
 });
 
+test('a hidden loaded-game graph reopens below the board', () => {
+  assert.match(main, /function restoreReviewGraphDock\(\)[\s\S]*?classList\.contains\('review-mode'\)[\s\S]*?getElementById\('board-below-slot'\)[\s\S]*?boardSlot\.appendChild\(card\)/);
+  assert.match(main, /if \(card\.hidden\) \{[\s\S]*?show\(\);[\s\S]*?if \(!restoreReviewGraphDock\(\)\) relocateForSidebar\(\)/);
+  assert.doesNotMatch(main, /if \(card\.hidden\) \{\s*exitReviewMode\(\);\s*show\(\);\s*relocateForSidebar\(\)/);
+});
+
 test('double-click or double-tap launches favourites with their saved side', () => {
   assert.match(main, /double-click \/ double-tap to start/);
   assert.match(main, /const startFavouriteNow = \(key\)/);
