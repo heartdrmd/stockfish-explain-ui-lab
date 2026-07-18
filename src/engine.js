@@ -468,6 +468,20 @@ export class Engine extends EventTarget {
     this._sentOptions.set(name, String(value));
     this._send(`setoption name ${name} value ${value}`);
   }
+  // Re-send a UCI option even when our memo already contains that value.
+  //
+  // Most option writes go through _setOptionMemo(), but short-lived probes
+  // (Learn, hints, "why not?") temporarily borrow MultiPV. If a probe is
+  // cancelled between its direct worker write and its restoration callback,
+  // the JS preference and the worker can disagree: the toolbar still says
+  // "3" while Stockfish is actually producing only one PV. Reasserting the
+  // search-critical option at the idle -> search boundary makes every new
+  // analysis self-healing without sending setoption during a live search.
+  _forceOption(name, value) {
+    if (!this._sentOptions) this._sentOptions = new Map();
+    this._sentOptions.set(name, String(value));
+    this._send(`setoption name ${name} value ${value}`);
+  }
   _resetSentOptions() {
     // Called when the worker is (re)booted — engine forgets all options,
     // so our memo must also forget or we'll skip necessary setoption
@@ -759,6 +773,12 @@ export class Engine extends EventTarget {
 
   _doStart(fen, opts = {}) {
 
+    // _doStart is reached only after the prior bestmove has made the worker
+    // idle. Force the real UCI worker back to the selected MultiPV before
+    // every search; do not trust UI state or the memo alone after a temporary
+    // probe/cancel/toggle sequence.
+    this._forceOption('MultiPV', this.multipv);
+
     this.history  = [];
     this.topMoves = new Map();
     this.searching = true;
@@ -970,7 +990,7 @@ export class Engine extends EventTarget {
       if (this.searching) this.stop();
 
       const originalMultiPV = this.multipv;
-      this._send('setoption name MultiPV value 1');
+      this._forceOption('MultiPV', 1);
 
       this.topMoves = new Map();
       this.history  = [];
@@ -978,7 +998,7 @@ export class Engine extends EventTarget {
 
       const onBest = (ev) => {
         this.removeEventListener('bestmove', onBest);
-        this._send(`setoption name MultiPV value ${originalMultiPV}`);
+        this._forceOption('MultiPV', originalMultiPV);
         resolve(ev.detail);
       };
       this.addEventListener('bestmove', onBest);
