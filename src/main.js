@@ -3551,7 +3551,7 @@ async function main() {
     // Match Lichess retrospection: solved/viewed lessons ALWAYS say Next.
     // The click itself determines whether another lesson exists; only then
     // does the dedicated completion screen appear.
-    const continueBtn = `<button class="retro-btn retro-continue" id="learn-next">Next ▶</button>`;
+    const continueBtn = `<button class="retro-btn retro-continue" id="learn-next">Next mistake ▶</button>`;
 
     let inner = '';
     if (state === 'setup') {
@@ -3620,7 +3620,7 @@ async function main() {
         : '';
       inner = `${revealed}${_learnComparisonHtml()}
         <div class="retro-choices">
-          ${(_learn.gradePassed || _learn.solutionRevealed)
+          ${(_learn.attemptUci || _learn.gradePassed || _learn.solutionRevealed)
             ? continueBtn
             : '<button class="retro-btn" id="learn-retry">Try again</button><button class="retro-btn retro-continue" id="learn-give-up">Give up · reveal #1</button>'}
         </div>`;
@@ -4015,7 +4015,9 @@ async function main() {
 
       // Once the piece has visibly landed and the board has returned, show
       // the alternatives automatically for both accepted and rejected tries.
-      // A rejected try still gets a Try again button in the table.
+      // The comparison is the completed lesson state, so its single action
+      // advances to the next mistake instead of contradicting the answer
+      // with stale Try again / Give up controls.
       setTimeout(() => {
         if (_learn.active
           && _learn.attemptCompleteSeq === completionSeq
@@ -4445,6 +4447,15 @@ async function main() {
 
   async function _startLearnPreparation() {
       if (_learn.preparing) return;
+      // Cancel can return control to the panel just before Stockfish's old
+      // probe has finished removing its listener and restoring MultiPV. A
+      // restart in that tiny window used to hit retrospectiveSweep's mutex
+      // and silently leave the new lesson on "Preparing…" forever. Stop and
+      // join that cleanup before starting the newly selected time budget.
+      const priorSweepRunning = window.__isRetrospectiveSweepRunning?.() === true;
+      const priorSweepIdle = priorSweepRunning
+        ? window.__stopRetrospectiveSweep?.()
+        : Promise.resolve();
       const runId = (_learn.runId || 0) + 1;
       _learn.runId = runId;
       const runIsCurrent = () => _learn.runId === runId && _learn.active;
@@ -4464,7 +4475,11 @@ async function main() {
       try { window.__setLearnEngineControls?.({ active: true, preparing: true, done: 0, total: prepTotal }); } catch {}
       _renderLearnPanel('preparing');
       const initialPrepStatus = document.getElementById('learn-prep-status');
-      if (initialPrepStatus) initialPrepStatus.textContent = `Analysing position 0 of ${prepTotal}…`;
+      if (initialPrepStatus) {
+        initialPrepStatus.textContent = priorSweepRunning
+          ? 'Finishing the cancelled scan before restarting…'
+          : `Analysing position 0 of ${prepTotal}…`;
+      }
       updateLearnButton();
       const mainlineKey = board.tree?.mainlineNodes?.().map(n => n.uci).join(',') || '';
       // Duration is part of the scan identity. A shallower saved scan cannot
@@ -4482,6 +4497,8 @@ async function main() {
         engineFlavor: currentFlavor,
       });
       try {
+        await priorSweepIdle;
+        if (!runIsCurrent()) return;
         // Guarantee at least one clearly visible preparation frame even
         // when every position is already cached and the sweep completes
         // synchronously. On a short clean opening, instant completion used
@@ -4765,6 +4782,17 @@ async function main() {
   let sweepRunning = false;
   let sweepAbort = false;
   let lastSweepStats = null;
+  const sweepIdleWaiters = new Set();
+  const waitForRetrospectiveSweepIdle = () => {
+    if (!sweepRunning) return Promise.resolve();
+    return new Promise(resolve => sweepIdleWaiters.add(resolve));
+  };
+  const resolveRetrospectiveSweepIdle = () => {
+    for (const resolve of sweepIdleWaiters) {
+      try { resolve(); } catch {}
+    }
+    sweepIdleWaiters.clear();
+  };
   // Auto-abort ordinary background reanalysis when the user needs the
   // engine. A Learn-owned sweep is different: it snapshots its target
   // positions first, so history navigation is safe and must not cancel it.
@@ -4780,7 +4808,15 @@ async function main() {
   board.addEventListener('nav',  _abortSweepIfRunning);
   // Expose a stop hook so the 'Stop analysis' button in the reanalyze
   // UI can bail out mid-sweep if the user decides it's taking too long.
-  window.__stopRetrospectiveSweep = () => { sweepAbort = true; try { engine.stop(); } catch {} };
+  window.__isRetrospectiveSweepRunning = () => sweepRunning;
+  window.__waitForRetrospectiveSweepIdle = waitForRetrospectiveSweepIdle;
+  window.__stopRetrospectiveSweep = () => {
+    if (sweepRunning) {
+      sweepAbort = true;
+      try { engine.stop(); } catch {}
+    }
+    return waitForRetrospectiveSweepIdle();
+  };
   async function retrospectiveSweep({ minDepth = 12, movetimeMs = 0, requireBestMove = false, force = false, onProgress } = {}) {
     if (sweepRunning) return false;
     sweepRunning = true;
@@ -4921,6 +4957,9 @@ async function main() {
       if (!window.__learnOwnsEngine) {
         try { fireAnalysis(); } catch {}
       }
+      // Resolve only after engine/UI state restoration. A newly selected
+      // Learn duration can safely acquire Stockfish as soon as this settles.
+      resolveRetrospectiveSweepIdle();
     }
   }
 
@@ -9849,7 +9888,10 @@ async function main() {
     bar.className = 'notation-stats-collapse';
     bar.innerHTML = '<span style="flex:1;">📊 Stats</span><span title="Drag up/down to resize" style="cursor:ns-resize;padding:0 6px;">⇅</span><button type="button" class="btn btn-mini" title="Collapse / expand">_</button>';
     slot.insertBefore(bar, slot.firstChild);
-    const STORAGE = 'stockfish-explain.stats-slot-height';
+    // v2 intentionally resets the former compact default. Review now opens
+    // with roughly twice as much room for mistakes/Learn as for notation;
+    // any new manual resize is remembered from this larger baseline.
+    const STORAGE = 'stockfish-explain.stats-slot-height-v2';
     try {
       const saved = parseInt(localStorage.getItem(STORAGE) || '', 10);
       if (saved) slot.style.maxHeight = saved + 'px';
@@ -10852,9 +10894,11 @@ async function main() {
           // up → more stats).
           installStatsResizer(notationSlot);
           notationSlot.appendChild(statsWrap);
+          notationSlot.parentElement?.classList.add('review-stats-expanded');
         } else if ((!card.classList.contains('review-mode') || mobileReview) && statsWrap.parentElement !== card) {
           // Mobile review keeps Learn + stats in the graph card below
           // the board. Non-review restores the card's original layout.
+          notationSlot?.parentElement?.classList.remove('review-stats-expanded');
           card.appendChild(statsWrap);
         }
       } else {
@@ -10885,6 +10929,7 @@ async function main() {
     // clear review-mode styling. Called by any toggle-off path.
     function exitReviewMode() {
       card.classList.remove('review-mode');
+      document.body.classList.remove('review-layout-active');
       card._reviewGame = null;
       const graphHeading = card.querySelector('.live-graph-head strong');
       if (graphHeading) graphHeading.textContent = '📈 Evaluation timeline';
@@ -10894,6 +10939,7 @@ async function main() {
       // Return the stats panel back into the card so the compact
       // (non-review) floating layout keeps them all together.
       if (statsWrap.parentElement && statsWrap.parentElement.id === 'notation-below-slot') {
+        statsWrap.parentElement.parentElement?.classList.remove('review-stats-expanded');
         card.appendChild(statsWrap);
       }
     }
@@ -11076,6 +11122,7 @@ async function main() {
     // from My Games when the user clicks a game row.
     window.__openReviewMode = (game) => {
       card.classList.add('review-mode');
+      document.body.classList.add('review-layout-active');
       card._reviewGame = game;   // so update() can pull player names
       const graphHeading = card.querySelector('.live-graph-head strong');
       if (graphHeading) {

@@ -829,6 +829,39 @@
 .notation-below-slot .gs-side { font-size: 12px; padding: 8px 10px; margin-bottom: 6px; }
 .notation-below-slot .live-graph-cta { margin-top: 6px; }
 
+/* Use the enlarged desktop review pane for readable mistake rows and a
+   full-width Learn action instead of squeezing the CTA into a third cell. */
+body:not(.mobile-mode).review-layout-active
+.move-list-wrap.review-stats-expanded .notation-below-slot .live-graph-stats {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  align-content: start;
+}
+body:not(.mobile-mode).review-layout-active
+.move-list-wrap.review-stats-expanded .notation-below-slot .gs-side {
+  padding: 12px 14px;
+  margin-bottom: 0;
+}
+body:not(.mobile-mode).review-layout-active
+.move-list-wrap.review-stats-expanded .notation-below-slot .gs-row {
+  padding: 4px 0;
+  font-size: 13px;
+}
+body:not(.mobile-mode).review-layout-active
+.move-list-wrap.review-stats-expanded .notation-below-slot .live-graph-cta {
+  grid-column: 1 / -1;
+  margin-top: 2px;
+  padding: 12px;
+  border: 1px solid rgba(33, 150, 243, .34);
+  border-radius: 7px;
+  background: rgba(33, 150, 243, .07);
+}
+body:not(.mobile-mode).review-layout-active
+.move-list-wrap.review-stats-expanded .notation-below-slot .btn-learn-mistakes {
+  min-height: 48px;
+  font-size: 14px;
+}
+
 /* Keep enough room under the move list — at least ~8 rows of moves
    visible, even when the review stats below are populated. */
 #move-list {

@@ -2,11 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-const [html, main, layout, panels] = await Promise.all([
+const [html, main, layout, panels, myGames] = await Promise.all([
   readFile(new URL('../index.html', import.meta.url), 'utf8'),
   readFile(new URL('../src/main.js', import.meta.url), 'utf8'),
   readFile(new URL('../styles/layout.css', import.meta.url), 'utf8'),
   readFile(new URL('../styles/panels.css', import.meta.url), 'utf8'),
+  readFile(new URL('../styles/my-games.css', import.meta.url), 'utf8'),
 ]);
 
 test('mobile Learn has a dedicated slot immediately after the board unit', () => {
@@ -29,8 +30,14 @@ test('Learn shows simple lesson progress and explicit retry or give-up actions',
   assert.match(main, /id="learn-compare">Show top 3/);
   assert.match(main, /id="learn-give-up">Give up · solution/);
   assert.match(main, /learn-give-up'\)\?\.addEventListener\('click', _giveUpAndShowSolution\)/);
-  assert.match(main, /const continueBtn = `<button class="retro-btn retro-continue" id="learn-next">Next ▶<\/button>`/);
+  assert.match(main, /const continueBtn = `<button class="retro-btn retro-continue" id="learn-next">Next mistake ▶<\/button>`/);
   assert.doesNotMatch(main, /id="learn-finish"/);
+});
+
+test('a completed comparison advances with one Next mistake action', () => {
+  assert.match(main, /state === 'comparison'[\s\S]*?_learn\.attemptUci \|\| _learn\.gradePassed \|\| _learn\.solutionRevealed[\s\S]*?continueBtn/);
+  assert.match(main, /id="learn-next">Next mistake ▶/);
+  assert.match(main, /learn-next'\)\?\.addEventListener\('click', _goNextMistake\)/);
 });
 
 test('Learn exposes scan and top-three durations at launch and in the lesson panel', () => {
@@ -44,6 +51,26 @@ test('Learn exposes scan and top-three durations at launch and in the lesson pan
   assert.match(main, /id="learn-start">Start lesson scan/);
   assert.match(main, /btnLearnMistakes\.addEventListener\('click', _openLearnSetup\)/);
   assert.match(main, /learn-start'\)\?\.addEventListener\('click', _startLearnPreparation\)/);
+});
+
+test('cancelled Learn scans release Stockfish before a changed-time restart', () => {
+  assert.match(main, /const priorSweepRunning = window\.__isRetrospectiveSweepRunning\?\.\(\) === true/);
+  assert.match(main, /const priorSweepIdle = priorSweepRunning[\s\S]*?window\.__stopRetrospectiveSweep\?\.\(\)/);
+  assert.match(main, /await priorSweepIdle;[\s\S]*?if \(!runIsCurrent\(\)\) return;[\s\S]*?retrospectiveSweep\(\{/);
+  assert.match(main, /const sweepIdleWaiters = new Set\(\)/);
+  assert.match(main, /window\.__stopRetrospectiveSweep = \(\) =>[\s\S]*?return waitForRetrospectiveSweepIdle\(\)/);
+  assert.match(main, /resolveRetrospectiveSweepIdle\(\)/);
+  assert.match(main, /Finishing the cancelled scan before restarting/);
+});
+
+test('desktop loaded-game review gives Learn roughly twice notation space', () => {
+  assert.match(main, /document\.body\.classList\.add\('review-layout-active'\)/);
+  assert.match(main, /classList\.add\('review-stats-expanded'\)/);
+  assert.match(main, /stockfish-explain\.stats-slot-height-v2/);
+  assert.match(layout, /review-layout-active[\s\S]*?review-stats-expanded > #move-list[\s\S]*?22vh/);
+  assert.match(layout, /review-layout-active[\s\S]*?notation-below-slot[\s\S]*?46vh/);
+  assert.match(myGames, /review-stats-expanded[\s\S]*?live-graph-cta[\s\S]*?grid-column:\s*1 \/ -1/);
+  assert.match(myGames, /review-stats-expanded[\s\S]*?btn-learn-mistakes[\s\S]*?font-size:\s*14px/);
 });
 
 test('lesson sensitivity is easy to adjust on desktop, mobile, Practice, and saved games', () => {

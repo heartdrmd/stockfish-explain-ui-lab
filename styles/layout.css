@@ -493,6 +493,24 @@ body.nav-collapsed .site-header { min-height: 40px; padding: 6px 14px; }
     border-radius: 8px;
     background: rgba(104, 122, 143, .82);
   }
+
+  /* Loaded-game review prioritizes instruction: compact notation above,
+     roomy mistakes/accuracy/Learn below. Both keep independent scrolling.
+     22vh vs 46vh is approximately the requested one-third/two-thirds split,
+     and these proportions never apply to the dedicated mobile Learn flow. */
+  body:not(.mobile-mode).review-layout-active .uniboard
+  .move-list-wrap.review-stats-expanded > #move-list {
+    flex: 0 0 clamp(160px, 22vh, 240px);
+    min-height: 160px;
+    max-height: clamp(160px, 22vh, 240px);
+  }
+  body:not(.mobile-mode).review-layout-active .uniboard
+  .move-list-wrap.review-stats-expanded > .notation-below-slot {
+    height: clamp(320px, 46vh, 520px);
+    max-height: clamp(320px, 46vh, 520px);
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+  }
 }
 
 /* The left sidebar exists as a true left column only in the three-column
