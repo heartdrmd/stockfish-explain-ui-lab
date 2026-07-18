@@ -9501,6 +9501,21 @@ async function main() {
     const sSubmit    = document.getElementById('save-opening-submit');
     if (!btnSave || !sModal) return;
 
+    // Mobile Safari (and a few touch browsers) can emit a delayed synthetic
+    // click after the tap that opened a modal. Once the overlay is visible,
+    // that ghost click may be retargeted to the backdrop and immediately
+    // close the dialog — the user sees it appear, then "poof". Keep backdrop
+    // dismissal disarmed until the opening gesture has fully settled. Save
+    // and × remain immediate, and there is deliberately no auto-close timer.
+    let backdropDismissArmed = false;
+    let backdropArmTimer = 0;
+    const closeSaveModal = () => {
+      if (backdropArmTimer) clearTimeout(backdropArmTimer);
+      backdropArmTimer = 0;
+      backdropDismissArmed = false;
+      sModal.hidden = true;
+    };
+
     const CUSTOM_STORAGE_KEY = 'stockfish-explain.practice-custom-openings';
     const loadCustoms = () => {
       try { return JSON.parse(localStorage.getItem(CUSTOM_STORAGE_KEY) || '[]'); } catch { return []; }
@@ -9531,7 +9546,13 @@ async function main() {
       sPreview.textContent = history.map((m, i) =>
         i % 2 === 0 ? `${Math.floor(i/2)+1}.${m}` : m
       ).join(' ');
+      backdropDismissArmed = false;
+      if (backdropArmTimer) clearTimeout(backdropArmTimer);
       sModal.hidden = false;
+      backdropArmTimer = setTimeout(() => {
+        backdropArmTimer = 0;
+        if (!sModal.hidden) backdropDismissArmed = true;
+      }, 500);
       setTimeout(() => sName.focus(), 50);
     };
     btnSave.addEventListener('click', openSaveModal);
@@ -9539,8 +9560,10 @@ async function main() {
     // trigger the SAME save dialog instead of users having two
     // disconnected ways to capture a position.
     window.__openSaveAsPracticeOpening = openSaveModal;
-    sClose.addEventListener('click', () => sModal.hidden = true);
-    sModal.addEventListener('click', (e) => { if (e.target === sModal) sModal.hidden = true; });
+    sClose.addEventListener('click', closeSaveModal);
+    sModal.addEventListener('click', (e) => {
+      if (e.target === sModal && backdropDismissArmed) closeSaveModal();
+    });
 
     sSubmit.addEventListener('click', () => {
       const name = (sName.value || '').trim();
@@ -9564,7 +9587,7 @@ async function main() {
         favs[key] = side;
         localStorage.setItem(FAVS_KEY, JSON.stringify(favs));
       } catch {}
-      sModal.hidden = true;
+      closeSaveModal();
       if (ui.narrationText) {
         ui.narrationText.innerHTML =
           `✅ Saved <strong>${name}</strong> to folder <strong>${group}</strong> as <strong>${side}</strong>. ` +
