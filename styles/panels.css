@@ -2795,6 +2795,30 @@ body.mobile-mode #learn-panel .retro-btn {
 body.mobile-mode #learn-panel .retro-choices {
   flex-wrap: wrap;
 }
+.learn-comparison-key {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 10px;
+  margin: 2px 0 7px;
+  font-size: 10.5px;
+  font-weight: 700;
+}
+.learn-comparison-key span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.learn-comparison-key span::before {
+  content: '';
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  background: currentColor;
+  box-shadow: 0 0 0 1px rgba(0,0,0,.35);
+}
+.learn-key-original { color: #ff666b; }
+.learn-key-attempt { color: #f5ca4a; }
+.learn-key-engine { color: #f4f4f4; }
 .learn-comparison-scroll { overflow-x: auto; margin: 2px 0 6px; }
 .learn-comparison {
   width: 100%;
@@ -2813,11 +2837,31 @@ body.mobile-mode #learn-panel .retro-choices {
 .learn-comparison th:first-child,
 .learn-comparison td:nth-child(2) { text-align: left; }
 .learn-comparison thead th { opacity: .62; font-weight: 600; }
-.learn-row-original { background: rgba(220,53,69,.10); }
-.learn-row-attempt-pass { background: rgba(40,167,69,.15); }
-.learn-row-attempt-fail { background: rgba(255,152,0,.12); }
+.learn-comparison tbody tr {
+  box-shadow: inset 4px 0 transparent;
+}
+/* Strong, consistent row identities on both themes:
+   red = the game's original mistake, yellow = the learner's new try,
+   white = Stockfish's candidate alternatives. */
+.learn-row-original {
+  color: #ffd1d3;
+  background: rgba(225,55,62,.20);
+  box-shadow: inset 4px 0 #ff595f !important;
+}
+.learn-row-attempt,
+.learn-row-attempt-pass,
+.learn-row-attempt-fail {
+  color: #ffefad;
+  background: rgba(245,197,55,.18);
+  box-shadow: inset 4px 0 #f5c537 !important;
+}
+.learn-row-engine {
+  color: #f5f5f5;
+  background: rgba(255,255,255,.055);
+  box-shadow: inset 4px 0 rgba(255,255,255,.82) !important;
+}
 .learn-row-best {
-  color: #a9e3af;
+  color: #fff;
   font-size: 12.5px;
   font-weight: 800;
 }

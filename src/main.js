@@ -3088,6 +3088,12 @@ async function main() {
     // a mistake permanently for this session instead of re-visiting
     // on the next cycle.
     solvedPlies: new Set(),
+    // Fast-path verdicts can arrive in the same event frame as the move.
+    // Keep a cancellable hold so the learner always sees their piece land
+    // before the board returns to the lesson position.
+    attemptShownAt: 0,
+    attemptHoldTimer: 0,
+    attemptCompleteSeq: 0,
     // Set true when the user explicitly closes the panel via X.
     // While true, accuracy-pill clicks do NOT re-enter learn mode
     // (just navigate to the ply). The flag clears on:
@@ -3097,6 +3103,7 @@ async function main() {
     // while exploring the analysis on their own.
     userDismissed: false,
   };
+  const LEARN_ATTEMPT_MIN_VISIBLE_MS = 1100;
   const LEARN_SETTINGS_KEY = 'stockfish-explain.learn-settings';
   const LEARN_SETTING_VALUES = {
     scanMs: new Set([200, 400, 750, 1500]),
@@ -3378,6 +3385,9 @@ async function main() {
   }
   function _closeLearnPanel() {
     _learn.runId = (_learn.runId || 0) + 1; // invalidate every pending async continuation
+    _learn.attemptCompleteSeq++;
+    if (_learn.attemptHoldTimer) clearTimeout(_learn.attemptHoldTimer);
+    _learn.attemptHoldTimer = 0;
     if (_learn.preparing) {
       try { window.__stopRetrospectiveSweep?.(); } catch {}
     }
@@ -3453,12 +3463,22 @@ async function main() {
         <td>${deltaText}</td>
       </tr>`;
     };
-    const topRows = data.top.map((line, i) => rowHtml(i === 0 ? 'BEST MOVE' : `Engine #${i + 1}`, line, i === 0 ? 'learn-row-best' : '')).join('');
-    return `<div class="learn-comparison-scroll"><table class="learn-comparison">
+    const topRows = data.top.map((line, i) => rowHtml(
+      i === 0 ? 'BEST MOVE' : `Engine #${i + 1}`,
+      line,
+      i === 0 ? 'learn-row-engine learn-row-best' : 'learn-row-engine',
+    )).join('');
+    const tryLabel = _learn.gradePassed ? 'Your try ✓' : 'Your try ✗';
+    return `<div class="learn-comparison-key" aria-label="Comparison row colors">
+      <span class="learn-key-original">Red · original mistake</span>
+      <span class="learn-key-attempt">Yellow · your try</span>
+      <span class="learn-key-engine">White · engine choices</span>
+    </div>
+    <div class="learn-comparison-scroll"><table class="learn-comparison">
       <thead><tr><th>Result</th><th>Move</th><th>Eval (White)</th><th>Your win</th><th>vs #1</th></tr></thead>
       <tbody>
-        ${rowHtml('Original', data.original, 'learn-row-original')}
-        ${rowHtml('Your try', data.attempt, _learn.gradePassed ? 'learn-row-attempt-pass' : 'learn-row-attempt-fail')}
+        ${rowHtml('Original mistake', data.original, 'learn-row-original')}
+        ${rowHtml(tryLabel, data.attempt, `learn-row-attempt ${_learn.gradePassed ? 'learn-row-attempt-pass' : 'learn-row-attempt-fail'}`)}
         ${topRows}
       </tbody>
     </table></div>
@@ -3559,7 +3579,8 @@ async function main() {
         </div>`;
     } else if (state === 'eval') {
       inner = `
-        <p class="retro-prompt">Evaluating your move…</p>
+        <p class="retro-prompt">Your move <strong>${escapeHtml(_learn.attemptSan || _learn.attemptUci || '…')}</strong> is on the board</p>
+        <p class="retro-played" style="opacity:0.78;">Stockfish is checking it before anything moves back…</p>
         <div class="retro-progress"><div id="learn-progress-fill"></div></div>`;
     } else if (state === 'win') {
       inner = `
@@ -3582,7 +3603,7 @@ async function main() {
           <span class="retro-icon">✗</span>
           <span>Not quite</span>
         </div>
-        <p class="retro-played" style="opacity:0.8;">Try a different move, compare it with the top three, or give up to reveal the solution.</p>
+        <p class="retro-played" style="opacity:0.8;">Your try was returned to the lesson position. Try a different move, compare it with the top three, or give up to reveal the solution.</p>
         ${diffLine}
         <div class="retro-choices">
           <button class="retro-btn" id="learn-retry">Try again</button>
@@ -3971,28 +3992,44 @@ async function main() {
   }
 
   function _completeLearnAttempt(passed) {
-    _learn.gradePassed = !!passed;
-    _renderLearnPanel(passed ? 'win' : 'fail');
-    // Always retract the trial to the lesson position. A passed move is
-    // previewed in blue immediately: thick if the scan already proves it
-    // is #1, otherwise thin until the top-three comparison confirms it.
-    _drawLearnFeedbackArrows(null, { revealBest: false });
-    // A successful lesson is solved, so revealing the comparison no
-    // longer spoils a retry. Failed attempts keep it behind the explicit
-    // “Show your result + top 3” button.
-    if (passed) {
-      // Capture the lesson identity. A fast tap on “Next mistake” must not
-      // let this queued comparison run against the newly-entered position.
-      const targetPly = _learn.targetPly;
-      const attemptUci = _learn.attemptUci;
+    if (_learn.attemptHoldTimer) clearTimeout(_learn.attemptHoldTimer);
+    const completionSeq = ++_learn.attemptCompleteSeq;
+    const targetPly = _learn.targetPly;
+    const attemptUci = _learn.attemptUci;
+    const shownForMs = Math.max(0, Date.now() - (_learn.attemptShownAt || Date.now()));
+    const remainingHoldMs = Math.max(0, LEARN_ATTEMPT_MIN_VISIBLE_MS - shownForMs);
+
+    const finish = () => {
+      if (!_learn.active
+        || _learn.attemptCompleteSeq !== completionSeq
+        || _learn.targetPly !== targetPly
+        || _learn.attemptUci !== attemptUci) return;
+      _learn.attemptHoldTimer = 0;
+      _learn.gradePassed = !!passed;
+      _renderLearnPanel(passed ? 'win' : 'fail');
+      // Only after the learner has had time to see the piece land do we
+      // return to the lesson FEN. A passed move is previewed in blue; a
+      // rejected move disappears while the original red arrow remains.
+      _drawLearnFeedbackArrows(null, { revealBest: false });
+      try { board.setInteractionLocked?.(false); } catch {}
+
+      // Once the piece has visibly landed and the board has returned, show
+      // the alternatives automatically for both accepted and rejected tries.
+      // A rejected try still gets a Try again button in the table.
       setTimeout(() => {
         if (_learn.active
-          && _learn.gradePassed
+          && _learn.attemptCompleteSeq === completionSeq
           && _learn.targetPly === targetPly
           && _learn.attemptUci === attemptUci) {
           _loadLearnComparison();
         }
       }, 0);
+    };
+
+    if (remainingHoldMs > 0) {
+      _learn.attemptHoldTimer = setTimeout(finish, remainingHoldMs);
+    } else {
+      finish();
     }
   }
 
@@ -4137,6 +4174,11 @@ async function main() {
     const cur = plies[targetPly];
     const prev = plies[targetPly - 1];
     if (!prev || !cur) return;
+    _learn.attemptCompleteSeq++;
+    if (_learn.attemptHoldTimer) clearTimeout(_learn.attemptHoldTimer);
+    _learn.attemptHoldTimer = 0;
+    _learn.attemptShownAt = 0;
+    try { board.setInteractionLocked?.(false); } catch {}
     _learn.active = true;
     window.__learnOwnsEngine = true;
     // Body class lets CSS hide PV / score / engine arrows so the user
@@ -4217,7 +4259,6 @@ async function main() {
     const onMove = async (ev) => {
       if (!_learn.active) { board.removeEventListener('move', onMove); return; }
       board.removeEventListener('move', onMove);
-      _renderLearnPanel('eval');
       // Compute the user's UCI move + post-move FEN from board state.
       // The move event detail contains a chess.js move object with
       // from/to/promotion fields — turn it into a UCI string for the
@@ -4230,6 +4271,12 @@ async function main() {
       _learn.attemptUci = userUci;
       _learn.attemptSan = mv?.san || userUci || '—';
       _learn.attemptFen = postFen;
+      _learn.attemptShownAt = Date.now();
+      // The attempt remains visibly on the board while it is judged. Lock
+      // only move-making so another move cannot change the position before
+      // the verdict; ordinary history navigation remains available.
+      try { board.setInteractionLocked?.(true); } catch {}
+      _renderLearnPanel('eval');
       const cachedAttempt = fenEvalCache.get(postFen);
       _learn.attemptCpWhite = cachedAttempt?.cpWhite ?? null;
       _learn.attemptMateWhite = cachedAttempt?.mate ?? null;

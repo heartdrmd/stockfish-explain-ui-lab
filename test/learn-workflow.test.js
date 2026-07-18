@@ -104,6 +104,21 @@ test('Learn comparison and board distinguish best, accepted try, and original er
   assert.match(main, /_drawLearnFeedbackArrows\(null, \{ revealBest: false \}\)/);
 });
 
+test('Learn holds the attempted move visibly before retracting and color-keys the table', () => {
+  assert.match(main, /const LEARN_ATTEMPT_MIN_VISIBLE_MS = 1100/);
+  assert.match(main, /_learn\.attemptShownAt = Date\.now\(\)[\s\S]*?board\.setInteractionLocked\?\.\(true\)[\s\S]*?_renderLearnPanel\('eval'\)/);
+  assert.match(main, /function _completeLearnAttempt[\s\S]*?remainingHoldMs[\s\S]*?_drawLearnFeedbackArrows\(null, \{ revealBest: false \}\)[\s\S]*?setTimeout\(finish, remainingHoldMs\)/);
+  assert.match(main, /show[\s\S]*?the alternatives automatically for both accepted and rejected tries[\s\S]*?_loadLearnComparison\(\)/);
+  assert.match(main, /Your move <strong>\$\{escapeHtml\(_learn\.attemptSan/);
+  assert.match(main, /Red · original mistake[\s\S]*?Yellow · your try[\s\S]*?White · engine choices/);
+  assert.match(main, /Original mistake/);
+  assert.match(main, /learn-row-attempt/);
+  assert.match(main, /learn-row-engine/);
+  assert.match(panels, /\.learn-row-original[\s\S]*?box-shadow:\s*inset 4px 0 #ff595f/);
+  assert.match(panels, /\.learn-row-attempt[\s\S]*?box-shadow:\s*inset 4px 0 #f5c537/);
+  assert.match(panels, /\.learn-row-engine[\s\S]*?box-shadow:\s*inset 4px 0 rgba\(255,255,255,\.82\)/);
+});
+
 test('every Learn attempt remains in notation as a side variation', () => {
   assert.doesNotMatch(main, /deleteAt\(trialPath\)/);
   assert.match(main, /Keep it there permanently as a notation[\s\S]*?including unsuccessful tries/);
