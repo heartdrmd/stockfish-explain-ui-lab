@@ -689,6 +689,12 @@ body.nav-collapsed .site-header { min-height: 40px; padding: 6px 14px; }
     border-radius: 12px 12px 0 0;
     box-shadow: 0 -4px 12px rgba(0,0,0,0.4);
   }
+  /* The mobile drawer is also a height-constrained flex column. Keep the
+     engine card at its natural height so selecting 2/3 PVs cannot compress
+     them behind the next panel; the drawer itself remains scrollable. */
+  body.mobile-mode .tools > .ceval {
+    flex-shrink: 0;
+  }
   body.mobile-mode.mobile-drawer-collapsed .tools {
     max-height: 40px;
     overflow: hidden;

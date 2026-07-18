@@ -14,6 +14,7 @@ test('desktop engine panel cannot flex-shrink and clip selected PV lines', () =>
     layout,
     /body\.practice-mode:not\(\.practice-finished\):not\(\.mobile-mode\)[\s\S]*?min-height:\s*max\(200px, min\(var\(--ceval-user-min-height, 0px\), 60dvh\)\)/,
   );
+  assert.match(layout, /body\.mobile-mode \.tools > \.ceval \{[\s\S]*?flex-shrink:\s*0/);
 });
 
 test('engine analysis has one safe desktop-only persistent resize divider', () => {
@@ -22,6 +23,8 @@ test('engine analysis has one safe desktop-only persistent resize divider', () =
   assert.match(panels, /body:not\(\.mobile-mode\) \.analysis-panel-resizer/);
   assert.match(main, /stockfish-explain\.ceval-min-height/);
   assert.match(main, /setPointerCapture[\s\S]*?pointermove[\s\S]*?releasePointerCapture/);
+  assert.match(main, /moved:\s*false[\s\S]*?Math\.abs\(delta\) <= 2[\s\S]*?drag\.moved = true[\s\S]*?if \(completedDrag\.moved\)/);
+  assert.match(main, /measuredBounds:\s*drag\.measuredBounds/);
   assert.match(main, /event\.key === 'ArrowUp'[\s\S]*?event\.key === 'ArrowDown'[\s\S]*?event\.key === 'Home'/);
   assert.match(main, /--ceval-user-min-height/);
 });

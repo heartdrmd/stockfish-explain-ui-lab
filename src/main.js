@@ -1509,25 +1509,26 @@ async function main() {
       return Math.max(160, height);
     };
 
-    const bounds = () => {
-      const min = naturalHeight();
+    const bounds = (measuredMin = null) => {
+      const min = Number.isFinite(measuredMin) ? measuredMin : naturalHeight();
       const max = Math.max(min, Math.floor(window.innerHeight * 0.60));
       return { min, max };
     };
 
-    const updateAria = (height) => {
-      const { min, max } = bounds();
+    const updateAria = (height, measuredBounds = null) => {
+      const { min, max } = measuredBounds || bounds();
       handle.setAttribute('aria-valuemin', String(min));
       handle.setAttribute('aria-valuemax', String(max));
       handle.setAttribute('aria-valuenow', String(Math.round(height || panel.getBoundingClientRect().height)));
     };
 
-    const applyHeight = (height, { persist = true } = {}) => {
+    const applyHeight = (height, { persist = true, measuredBounds = null } = {}) => {
       if (!desktopActive()) return;
-      const { min, max } = bounds();
+      const limits = measuredBounds || bounds();
+      const { min, max } = limits;
       const next = Math.max(min, Math.min(max, Math.round(Number(height) || min)));
       panel.style.setProperty('--ceval-user-min-height', `${next}px`);
-      updateAria(next);
+      updateAria(next, limits);
       if (persist) {
         try { localStorage.setItem(KEY, String(next)); } catch {}
       }
@@ -1541,10 +1542,13 @@ async function main() {
 
     handle.addEventListener('pointerdown', (event) => {
       if (!desktopActive() || event.button !== 0) return;
+      const measuredBounds = bounds();
       drag = {
         pointerId: event.pointerId,
         startY: event.clientY,
         startHeight: panel.getBoundingClientRect().height,
+        measuredBounds,
+        moved: false,
       };
       handle.classList.add('dragging');
       handle.setPointerCapture?.(event.pointerId);
@@ -1552,16 +1556,32 @@ async function main() {
     });
     handle.addEventListener('pointermove', (event) => {
       if (!drag || event.pointerId !== drag.pointerId) return;
-      applyHeight(drag.startHeight + event.clientY - drag.startY, { persist: false });
+      const delta = event.clientY - drag.startY;
+      /* Ignore normal click jitter so a tap on the divider cannot create a
+         resize preference or leave a one-pixel inline height behind. */
+      if (!drag.moved && Math.abs(delta) <= 2) return;
+      drag.moved = true;
+      applyHeight(drag.startHeight + delta, {
+        persist: false,
+        measuredBounds: drag.measuredBounds,
+      });
       event.preventDefault();
     });
     const finishDrag = (event) => {
       if (!drag || (event.pointerId != null && event.pointerId !== drag.pointerId)) return;
+      const completedDrag = drag;
       drag = null;
       handle.classList.remove('dragging');
       try { handle.releasePointerCapture?.(event.pointerId); } catch {}
       const current = panel.getBoundingClientRect().height;
-      applyHeight(current, { persist: true });
+      if (completedDrag.moved) {
+        applyHeight(current, {
+          persist: true,
+          measuredBounds: completedDrag.measuredBounds,
+        });
+      } else {
+        updateAria(current, completedDrag.measuredBounds);
+      }
     };
     handle.addEventListener('pointerup', finishDrag);
     handle.addEventListener('pointercancel', finishDrag);
