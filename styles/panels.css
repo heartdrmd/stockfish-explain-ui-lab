@@ -274,6 +274,47 @@ body.mobile-mode .analysis-lines-btn {
   color: white;
 }
 
+/* Desktop-only engine/notation divider. It lives in the existing bottom
+   padding of .ceval, so adding it does not create another flex item or alter
+   the right-column order. Mobile deliberately has no resizer. */
+.analysis-panel-resizer { display: none; }
+@media (min-width: 800px), (orientation: landscape) and (min-width: 560px) {
+  body:not(.mobile-mode) .analysis-panel-resizer {
+    display: block;
+    position: absolute;
+    left: 14px;
+    right: 14px;
+    bottom: 0;
+    height: 12px;
+    cursor: ns-resize;
+    touch-action: none;
+    user-select: none;
+    z-index: 3;
+  }
+  body:not(.mobile-mode) .analysis-panel-resizer::before {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 5px;
+    width: clamp(72px, 24%, 180px);
+    height: 2px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--c-font-dim) 60%, transparent);
+    transform: translateX(-50%);
+    transition: width var(--transition), background var(--transition);
+  }
+  body:not(.mobile-mode) .analysis-panel-resizer:hover::before,
+  body:not(.mobile-mode) .analysis-panel-resizer.dragging::before,
+  body:not(.mobile-mode) .analysis-panel-resizer:focus-visible::before {
+    width: clamp(110px, 34%, 240px);
+    background: var(--c-primary);
+  }
+  body:not(.mobile-mode) .analysis-panel-resizer:focus-visible {
+    outline: none;
+    box-shadow: inset 0 -2px 0 var(--c-primary);
+  }
+}
+
 /* ==================== Narration (legacy — retained) ==================== */
 .narration {
   background: var(--c-bg);

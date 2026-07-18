@@ -388,9 +388,24 @@ body.nav-collapsed .site-header { min-height: 40px; padding: 6px 14px; }
     position: sticky;
     top: 124px;           /* 68 (header) + 56 (engine-power-row) */
     align-self: start;
+    /* .tools is a height-constrained flex scroller. `overflow:hidden` on
+       .ceval removes the flex item's automatic content minimum, so the
+       flex algorithm used to shrink this card and clip PV lines 2/3 behind
+       MOVES. Engine analysis must always reserve its natural full height. */
+    flex-shrink: 0;
+    /* Optional desktop resize preference adds breathing room but can never
+       cap natural content: min-height only grows the card. The viewport cap
+       prevents a saved large value from consuming a short window. */
+    min-height: min(var(--ceval-user-min-height, 0px), 60dvh);
     z-index: 29;          /* one below engine-power-row so power covers ceval on any overlap */
     background: var(--c-bg);
     box-shadow: 0 4px 8px -4px rgba(0,0,0,0.45);
+  }
+  /* Preserve the existing practice-mode stability floor while composing it
+     with the optional user resize preference above. The more-specific
+     desktop rule would otherwise override panels.css's 200px practice lock. */
+  body.practice-mode:not(.practice-finished):not(.mobile-mode) .uniboard .tools > .ceval {
+    min-height: max(200px, min(var(--ceval-user-min-height, 0px), 60dvh));
   }
   /* Collapsed-toolbar variant: header shrinks to 40 px, so every
      sticky slot shifts up by 20 px. */

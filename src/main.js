@@ -1486,6 +1486,105 @@ async function main() {
     });
   }
 
+  // Desktop engine/notation split. The engine card keeps natural height so
+  // selected PVs can never be clipped; dragging only adds optional breathing
+  // room above notation. Store a CSS minimum rather than a fixed height, so
+  // switching from 1 to 2/3 lines always grows automatically when necessary.
+  (() => {
+    const handle = document.getElementById('analysis-panel-resizer');
+    const panel = handle?.closest('.ceval');
+    if (!handle || !panel) return;
+    const KEY = 'stockfish-explain.ceval-min-height';
+    let drag = null;
+
+    const desktopActive = () =>
+      !document.body.classList.contains('mobile-mode') &&
+      window.matchMedia?.('(min-width: 800px), (orientation: landscape) and (min-width: 560px)').matches;
+
+    const naturalHeight = () => {
+      const saved = panel.style.getPropertyValue('--ceval-user-min-height');
+      panel.style.removeProperty('--ceval-user-min-height');
+      const height = Math.ceil(panel.getBoundingClientRect().height);
+      if (saved) panel.style.setProperty('--ceval-user-min-height', saved);
+      return Math.max(160, height);
+    };
+
+    const bounds = () => {
+      const min = naturalHeight();
+      const max = Math.max(min, Math.floor(window.innerHeight * 0.60));
+      return { min, max };
+    };
+
+    const updateAria = (height) => {
+      const { min, max } = bounds();
+      handle.setAttribute('aria-valuemin', String(min));
+      handle.setAttribute('aria-valuemax', String(max));
+      handle.setAttribute('aria-valuenow', String(Math.round(height || panel.getBoundingClientRect().height)));
+    };
+
+    const applyHeight = (height, { persist = true } = {}) => {
+      if (!desktopActive()) return;
+      const { min, max } = bounds();
+      const next = Math.max(min, Math.min(max, Math.round(Number(height) || min)));
+      panel.style.setProperty('--ceval-user-min-height', `${next}px`);
+      updateAria(next);
+      if (persist) {
+        try { localStorage.setItem(KEY, String(next)); } catch {}
+      }
+    };
+
+    const resetHeight = () => {
+      panel.style.removeProperty('--ceval-user-min-height');
+      try { localStorage.removeItem(KEY); } catch {}
+      updateAria(panel.getBoundingClientRect().height);
+    };
+
+    handle.addEventListener('pointerdown', (event) => {
+      if (!desktopActive() || event.button !== 0) return;
+      drag = {
+        pointerId: event.pointerId,
+        startY: event.clientY,
+        startHeight: panel.getBoundingClientRect().height,
+      };
+      handle.classList.add('dragging');
+      handle.setPointerCapture?.(event.pointerId);
+      event.preventDefault();
+    });
+    handle.addEventListener('pointermove', (event) => {
+      if (!drag || event.pointerId !== drag.pointerId) return;
+      applyHeight(drag.startHeight + event.clientY - drag.startY, { persist: false });
+      event.preventDefault();
+    });
+    const finishDrag = (event) => {
+      if (!drag || (event.pointerId != null && event.pointerId !== drag.pointerId)) return;
+      drag = null;
+      handle.classList.remove('dragging');
+      try { handle.releasePointerCapture?.(event.pointerId); } catch {}
+      const current = panel.getBoundingClientRect().height;
+      applyHeight(current, { persist: true });
+    };
+    handle.addEventListener('pointerup', finishDrag);
+    handle.addEventListener('pointercancel', finishDrag);
+    handle.addEventListener('dblclick', resetHeight);
+    handle.addEventListener('keydown', (event) => {
+      if (!desktopActive()) return;
+      const current = panel.getBoundingClientRect().height;
+      if (event.key === 'ArrowUp') applyHeight(current - 16);
+      else if (event.key === 'ArrowDown') applyHeight(current + 16);
+      else if (event.key === 'Home') resetHeight();
+      else return;
+      event.preventDefault();
+    });
+
+    try {
+      const saved = Number(localStorage.getItem(KEY));
+      if (Number.isFinite(saved) && saved > 0) {
+        panel.style.setProperty('--ceval-user-min-height', `${Math.round(saved)}px`);
+      }
+    } catch {}
+    requestAnimationFrame(() => updateAria(panel.getBoundingClientRect().height));
+  })();
+
   // Hardware concurrency — set max on thread slider. Default: 75% of
   // available cores rounded up, capped at N-1 AND at 32 (Stockfish
   // WASM thread-pool ceiling; beyond that the worker crashes without
