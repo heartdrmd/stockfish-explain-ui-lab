@@ -109,7 +109,16 @@ body.mobile-mode .eval-gauge-toggle {
 .ceval-top {
   display: flex;
   align-items: center;
-  gap: 14px;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+}
+
+.ceval-score-cluster {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 6px;
+  min-width: 0;
 }
 
 .pearl {
@@ -140,7 +149,8 @@ body.mobile-mode .eval-gauge-toggle {
 .ceval-meta {
   display: flex;
   flex-direction: column;
-  flex: 1;
+  flex: 1 1 140px;
+  min-width: 0;
   gap: 3px;
 }
 .meta-big {
@@ -173,25 +183,26 @@ body.mobile-mode .eval-gauge-toggle {
 .analysis-lines-control {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
-  gap: 4px;
-  margin: 0 0 7px;
+  justify-content: flex-start;
+  flex: 0 0 auto;
+  gap: 2px;
+  margin: 0;
 }
 .analysis-lines-label {
-  margin-right: 2px;
+  margin-right: 1px;
   color: var(--c-font-dim);
-  font: 700 10px/1 var(--font-mono);
-  letter-spacing: 0.08em;
+  font: 700 8px/1 var(--font-mono);
+  letter-spacing: 0.04em;
 }
 .analysis-lines-btn {
-  min-width: 30px;
-  height: 28px;
-  padding: 0 8px;
+  min-width: 24px;
+  height: 22px;
+  padding: 0 5px;
   border: 1px solid var(--c-border);
   border-radius: 5px;
   background: var(--c-bg-low);
   color: var(--c-font-dim);
-  font: 700 12px/1 var(--font-mono);
+  font: 700 10px/1 var(--font-mono);
   cursor: pointer;
   touch-action: manipulation;
 }
@@ -213,12 +224,13 @@ body.mobile-mode .eval-gauge-toggle {
 }
 body.mobile-mode .analysis-lines-control {
   justify-content: flex-start;
-  margin-bottom: 9px;
+  margin: 0;
 }
 body.mobile-mode .analysis-lines-btn {
-  min-width: 38px;
-  height: 34px;
-  font-size: 13px;
+  min-width: 34px;
+  height: 30px;
+  padding: 0 7px;
+  font-size: 11px;
 }
 
 .pv-lines {

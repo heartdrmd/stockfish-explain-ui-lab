@@ -32,11 +32,13 @@ test('move-accuracy eye toggle never hides the eval bar', () => {
 
 test('desktop and mobile analysis can select one, two, or three engine lines directly', () => {
   assert.match(html, /id="analysis-lines-control"[\s\S]*?data-analysis-lines="1"[\s\S]*?data-analysis-lines="2"[\s\S]*?data-analysis-lines="3"/);
+  assert.match(html, /class="ceval-score-cluster"[\s\S]*?id="score-pearl"[\s\S]*?id="analysis-lines-control"[\s\S]*?class="ceval-meta"/);
   assert.match(main, /stockfish-explain\.analysis-lines/);
   assert.match(main, /applyAnalysisLineCount\(Number\(button\.dataset\.analysisLines\)\)/);
   assert.match(main, /engine\.setMultiPV\(normalized\)[\s\S]*?fireAnalysis\(\)/);
   assert.match(main, /function _closeLearnPanel\(\)[\s\S]*?applyAnalysisLineCount\(\+ui\.rangeMultipv\.value, \{ persist: false, restart: false \}\)[\s\S]*?fireAnalysis\(\)/);
-  assert.match(panels, /body\.mobile-mode \.analysis-lines-btn[\s\S]*?min-width:\s*38px/);
+  assert.match(panels, /\.analysis-lines-control \{[\s\S]*?justify-content:\s*flex-start[\s\S]*?flex:\s*0 0 auto/);
+  assert.match(panels, /body\.mobile-mode \.analysis-lines-btn[\s\S]*?min-width:\s*34px/);
   assert.match(panels, /body\.practice-mode:not\(\.practice-finished\) \.analysis-lines-control/);
   assert.match(panels, /body\.learn-active \.analysis-lines-control/);
 });
