@@ -62,6 +62,7 @@ import { buildLearnFeedbackArrows } from './learn-arrows.js';
 import { canReuseLearnScan, learnScanKey } from './learn-scan-cache.js';
 import { includeLessonPly, isUserMovePly, notationAnnotation } from './learn-annotations.js';
 import { sortGamesByPlayedAt } from './game-order.js';
+import { canApplyPracticeEngineMove } from './practice-engine-guard.js';
 
 // Expose Chess to eval-graph's computeDivision helper — avoids a
 // circular import while still letting it replay SAN to count pieces
@@ -5405,6 +5406,49 @@ async function main() {
   // instead of a `let` binding, because fireAnalysis() is called from
   // bootEngine()'s post-await path (before main() reaches this line),
   // and a `let` here throws TDZ. Hoisted global avoids the dance.
+  function practiceEngineMoveGuard(launchFen, resultFen, searchToken) {
+    let boardFen = null;
+    let boardPly = null;
+    let livePly = null;
+    let isAtLive = false;
+    try {
+      boardFen = board.fen();
+      boardPly = board.chess.history().length;
+      livePly = board.tree.mainlineNodes().length;
+      isAtLive = board.isAtLive();
+    } catch {}
+    const state = {
+      launchFen,
+      resultFen,
+      boardFen,
+      searchToken,
+      currentSearchToken: practiceSearchToken,
+      isAtLive,
+      boardPly,
+      livePly,
+      practiceFinished: document.body.classList.contains('practice-finished'),
+    };
+    return { allowed: canApplyPracticeEngineMove(state), state };
+  }
+
+  function playPracticeEngineMoveIfCurrent(uci, { launchFen, resultFen, searchToken }) {
+    const guard = practiceEngineMoveGuard(launchFen, resultFen, searchToken);
+    if (!guard.allowed) {
+      console.log('[practice] engine move refused — searched position is no longer live', guard.state);
+      return false;
+    }
+    const beforeFen = board.fen();
+    board.playEngineMove(uci);
+    if (board.fen() === beforeFen) {
+      console.warn('[practice] engine move was not applied; keeping turn pending', { uci, launchFen });
+      return false;
+    }
+    // Clear recovery state only after the guarded move actually changes the
+    // board. A refused/illegal result must remain retryable on return to live.
+    window.__pendingEngineTurnFen = null;
+    return true;
+  }
+
   function fireAnalysis() {
     if (window.__fireScheduled) return;
     window.__fireScheduled = requestAnimationFrame(() => {
@@ -5537,10 +5581,11 @@ async function main() {
                 const forcedToken = ++practiceSearchToken;
                 const forcedFen   = chessNow.fen();
                 setTimeout(() => {
-                  if (practiceSearchToken !== forcedToken) return;
-                  if (document.body.classList.contains('practice-finished')) return;
-                  if (!board.isAtLive() || board.fen() !== forcedFen) return;
-                  board.playEngineMove(uci);
+                  playPracticeEngineMoveIfCurrent(uci, {
+                    launchFen: forcedFen,
+                    resultFen: forcedFen,
+                    searchToken: forcedToken,
+                  });
                 }, 150);
                 return;
               }
@@ -5628,6 +5673,7 @@ async function main() {
               // makes a move before bestmove arrives, the token
               // increments and the old listener bails out.
               const myToken = ++practiceSearchToken;
+              const launchFen = fen;
               const onBest = async (ev) => {
                 engine.removeEventListener('bestmove', onBest);
                 detachTicker();
@@ -5674,11 +5720,6 @@ async function main() {
                 }
                 document.body.classList.remove('practice-thinking');
                 if (ev.detail.best && ev.detail.best !== '(none)') {
-                  // Real move in hand — the turn is handled, so drop the
-                  // durable-recovery FEN (a synthetic stuck bestmove has
-                  // best=null and skips this block, leaving the FEN set so
-                  // recovery can replay the turn).
-                  window.__pendingEngineTurnFen = null;
                   // Opening-variation path takes precedence over the
                   // style picker. Style bias only applies AFTER the
                   // variation window is exhausted.
@@ -5696,6 +5737,27 @@ async function main() {
                     const finalUci = (result && result.uci) || ev.detail.best;
                     const didDeviate = !!(result && result.deviated);
                     const wasForced  = !!(result && result.forced);
+                    const guard = practiceEngineMoveGuard(launchFen, ev.detail.fen, myToken);
+                    if (!guard.allowed) {
+                      console.log('[practice] variation result refused — live position changed', guard.state);
+                      return;
+                    }
+                    // Capture the pre-move path before applying the move. The
+                    // persistence call is deliberately deferred until AFTER a
+                    // guarded play succeeds, so scrubbing history cannot record
+                    // a variation that never appeared in the game.
+                    let prefixMoves = '';
+                    try {
+                      prefixMoves = board.chess.history({ verbose: true })
+                        .map(m => m.from + m.to + (m.promotion || ''))
+                        .join(' ');
+                    } catch {}
+                    const played = playPracticeEngineMoveIfCurrent(finalUci, {
+                      launchFen,
+                      resultFen: ev.detail.fen,
+                      searchToken: myToken,
+                    });
+                    if (!played) return;
                     // Clock refund — if we burned the configured fork
                     // think-time on a forced position, give that time
                     // back to the engine's clock so timed games aren't
@@ -5722,18 +5784,11 @@ async function main() {
                     if (didDeviate) {
                       try { OpeningVariation.noteDeviation(); } catch {}
                       try {
-                        // Snapshot the UCI path from game-start to this
-                        // position so the report can rebuild an ECO
-                        // tree grouped by shared prefixes.
-                        const prefixMoves = board.chess.history({ verbose: true })
-                          .map(m => m.from + m.to + (m.promotion || ''))
-                          .join(' ');
                         await OpeningVariation.recordPlay(fen, finalUci, prefixMoves);
                       } catch {}
                     }
                     const tag = didDeviate ? 'DEVIATED' : (wasForced ? 'FORCED (fork refunded)' : 'best');
                     console.log('[practice] engine plays (variation fork', variationFork.forkIndex + ', ' + tag + ')', finalUci);
-                    board.playEngineMove(finalUci);
                   } else {
                     // Style-bias: pick from the engine's top candidates
                     // using a persona weighting function. Falls back to
@@ -5742,7 +5797,11 @@ async function main() {
                     const style = window.__practiceStyle || 'default';
                     const pickedUci = pickMoveByStyle(ev.detail.topMoves, style, chessNow, ev.detail.best);
                     console.log('[practice] engine plays', pickedUci, '(style:', style, ')');
-                    board.playEngineMove(pickedUci);
+                    playPracticeEngineMoveIfCurrent(pickedUci, {
+                      launchFen,
+                      resultFen: ev.detail.fen,
+                      searchToken: myToken,
+                    });
                   }
                 } else if (ev.detail.stuck) {
                   // Engine was wedged — watchdog fired a synthetic
@@ -5936,6 +5995,14 @@ async function main() {
     renderMoveList(); fireAnalysis();
   });
   board.addEventListener('nav',      () => {
+    // Navigation during an active computer turn invalidates the result even
+    // if the engine emits bestmove before the historical search is queued.
+    // Returning to live runs fireAnalysis below and receives a fresh token.
+    if (practiceColor
+      && !document.body.classList.contains('practice-finished')
+      && document.body.classList.contains('practice-thinking')) {
+      practiceSearchToken++;
+    }
     if (window.__threatMode) window.__exitThreatMode({ silent: true });
     _clearPracticeHint({ cancelSearch: true, clearResults: true, restartAnalysis: false });
     renderMoveList();
@@ -6364,6 +6431,13 @@ async function main() {
       case 'Spacebar':  // old IE name — harmless to include
         {
           e.preventDefault();
+          // This is an analysis convenience, never a Practice control. In a
+          // live game it could otherwise play a hidden/stale PV on behalf of
+          // either side and bypass the guarded computer-turn callback.
+          if (practiceColor && !document.body.classList.contains('practice-finished')) {
+            console.log('[hotkey] Space ignored during active practice');
+            break;
+          }
           // Pull the latest #1 PV from the engine. engine.topMoves is
           // a Map keyed by multipv — pv[0] of multipv=1 is the best
           // move in UCI. Falls back to history[last].best if no live
