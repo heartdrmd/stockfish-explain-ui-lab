@@ -34,10 +34,24 @@ test('Learn shows simple lesson progress and explicit retry or give-up actions',
   assert.doesNotMatch(main, /id="learn-finish"/);
 });
 
-test('a completed comparison advances with one Next mistake action', () => {
-  assert.match(main, /state === 'comparison'[\s\S]*?_learn\.attemptUci \|\| _learn\.gradePassed \|\| _learn\.solutionRevealed[\s\S]*?continueBtn/);
+test('a rejected comparison offers persistent Try again beside Next mistake', () => {
+  assert.match(main, /state === 'comparison'[\s\S]*?const canRetry = !_learn\.solutionRevealed[\s\S]*?!_learn\.gradePassed[\s\S]*?_learn\.comparison\?\.attempt/);
+  assert.match(main, /canRetry \? '<button class="retro-btn" id="learn-retry">Try again<\/button>' : ''/);
   assert.match(main, /id="learn-next">Next mistake ▶/);
   assert.match(main, /learn-next'\)\?\.addEventListener\('click', _goNextMistake\)/);
+  assert.match(main, /learn-retry'\)\?\.addEventListener\('click', _retryLearnAttempt\)/);
+  assert.match(main, /function _retryLearnAttempt\(\)[\s\S]*?_enterLearnMode\(_learn\.targetPly, \{ preserveComparison: true \}\)/);
+});
+
+test('Learn retry preserves comparison, re-arms one listener, and starts no prefetch', () => {
+  assert.match(main, /function _disarmLearnMoveHandler\(\)[\s\S]*?removeEventListener\('move', _learn\.moveHandler\)[\s\S]*?_learn\.moveHandler = null/);
+  assert.match(main, /function _goNextMistake\(\) \{[\s\S]*?_disarmLearnMoveHandler\(\)/);
+  assert.match(main, /function _enterLearnMode\(targetPly, \{ preserveComparison = false \} = \{\}\)[\s\S]*?const preservedComparison[\s\S]*?_disarmLearnMoveHandler\(\)/);
+  assert.match(main, /preserveComparison && preservedComparison\?\.top\?\.length[\s\S]*?_renderLearnPanel\('comparison'\)[\s\S]*?_drawLearnFeedbackArrows\(preservedBest/);
+  assert.match(main, /_learn\.moveHandler = onMove;[\s\S]*?board\.addEventListener\('move', onMove\)/);
+  assert.match(main, /const cacheKey = `\$\{_learn\.prevFen\}\|\$\{_learnSettings\.attemptMs\}`[\s\S]*?_learnComparisonCache\.get\(cacheKey\)/);
+  const retryBlock = main.match(/function _retryLearnAttempt\(\) \{([\s\S]*?)\n  \}/)?.[1] || '';
+  assert.doesNotMatch(retryBlock, /engine\.(?:start|stop)|probeEngine/);
 });
 
 test('Learn exposes scan and top-three durations at launch and in the lesson panel', () => {

@@ -3214,6 +3214,10 @@ async function main() {
     attemptShownAt: 0,
     attemptHoldTimer: 0,
     attemptCompleteSeq: 0,
+    // Exactly one move listener may own the current lesson. Skip/Next/Close
+    // remove it before changing lessons so old positions cannot grade a later
+    // move twice. Retry replaces it while preserving the comparison UI.
+    moveHandler: null,
     // Set true when the user explicitly closes the panel via X.
     // While true, accuracy-pill clicks do NOT re-enter learn mode
     // (just navigate to the ply). The flag clears on:
@@ -3503,11 +3507,18 @@ async function main() {
     }
     return p;
   }
+  function _disarmLearnMoveHandler() {
+    if (_learn.moveHandler) {
+      try { board.removeEventListener('move', _learn.moveHandler); } catch {}
+      _learn.moveHandler = null;
+    }
+  }
   function _closeLearnPanel() {
     _learn.runId = (_learn.runId || 0) + 1; // invalidate every pending async continuation
     _learn.attemptCompleteSeq++;
     if (_learn.attemptHoldTimer) clearTimeout(_learn.attemptHoldTimer);
     _learn.attemptHoldTimer = 0;
+    _disarmLearnMoveHandler();
     if (_learn.preparing) {
       try { window.__stopRetrospectiveSweep?.(); } catch {}
     }
@@ -3738,11 +3749,13 @@ async function main() {
       const revealed = _learn.solutionRevealed
         ? `<p class="retro-prompt">Solution revealed: <strong>${escapeHtml(_learn.bestSan || _learn.comparison?.top?.[0]?.san || '?')}</strong></p>`
         : '';
+      const canRetry = !_learn.solutionRevealed
+        && !_learn.gradePassed
+        && !!_learn.comparison?.attempt;
       inner = `${revealed}${_learnComparisonHtml()}
         <div class="retro-choices">
-          ${(_learn.attemptUci || _learn.gradePassed || _learn.solutionRevealed)
-            ? continueBtn
-            : '<button class="retro-btn" id="learn-retry">Try again</button><button class="retro-btn retro-continue" id="learn-give-up">Give up · reveal #1</button>'}
+          ${canRetry ? '<button class="retro-btn" id="learn-retry">Try again</button>' : ''}
+          ${continueBtn}
         </div>`;
     } else if (state === 'view') {
       inner = `
@@ -3831,7 +3844,7 @@ async function main() {
     p.querySelector('#learn-give-up')?.addEventListener('click', _giveUpAndShowSolution);
     p.querySelector('#learn-solution')?.addEventListener('click', _showSolution);
     p.querySelector('#learn-compare')?.addEventListener('click', _loadLearnComparison);
-    p.querySelector('#learn-retry')?.addEventListener('click', () => _enterLearnMode(_learn.targetPly));
+    p.querySelector('#learn-retry')?.addEventListener('click', _retryLearnAttempt);
     p.querySelector('#learn-restart')?.addEventListener('click', () => {
       // Reset progress (lila: retroCtrl.reset()) and restart at ply 1.
       _learn.solvedPlies = new Set();
@@ -3983,6 +3996,7 @@ async function main() {
     }
   }
   function _goNextMistake() {
+    _disarmLearnMoveHandler();
     // Mark the current ply solved so skip-or-view advances past it,
     // matching lila's retroCtrl.skip() / solveCurrent() behaviour.
     if (_learn.targetPly) _learn.solvedPlies.add(_learn.targetPly);
@@ -4109,6 +4123,14 @@ async function main() {
     const cachedBest = _verifierBest.get(_learn.prevFen);
     if (cachedBest) _revealLearnBestMove(cachedBest);
     _loadLearnComparison();
+  }
+
+  function _retryLearnAttempt() {
+    if (!_learn.active || _learn.preparing || _learn.comparing || !_learn.targetPly) return;
+    // Re-enter the SAME lesson while preserving the completed red/yellow/
+    // white table and its #1 arrow. _enterLearnMode replaces the move listener,
+    // clears only the in-progress attempt fields, and unlocks the board.
+    _enterLearnMode(_learn.targetPly, { preserveComparison: true });
   }
 
   function _completeLearnAttempt(passed) {
@@ -4290,12 +4312,15 @@ async function main() {
     // or show only one move with no comparison.
     _giveUpAndShowSolution();
   }
-  function _enterLearnMode(targetPly) {
+  function _enterLearnMode(targetPly, { preserveComparison = false } = {}) {
     const plies = collectTimelinePlies();
     if (targetPly < 1 || targetPly >= plies.length) return;
     const cur = plies[targetPly];
     const prev = plies[targetPly - 1];
     if (!prev || !cur) return;
+    const preservedComparison = preserveComparison ? _learn.comparison : null;
+    const preservedBest = preservedComparison?.top?.[0] || null;
+    _disarmLearnMoveHandler();
     _learn.attemptCompleteSeq++;
     if (_learn.attemptHoldTimer) clearTimeout(_learn.attemptHoldTimer);
     _learn.attemptHoldTimer = 0;
@@ -4319,7 +4344,7 @@ async function main() {
     _learn.attemptSan = null;
     _learn.attemptCpWhite = null;
     _learn.attemptMateWhite = null;
-    _learn.comparison = null;
+    _learn.comparison = preservedComparison;
     _learn.comparisonError = false;
     _learn.gradePassed = false;
     _learn.solutionRequested = false;
@@ -4329,9 +4354,11 @@ async function main() {
     // Clear any solution-revealed state from the previous mistake so
     // the "user already saw solution" shortcut in onMove doesn't
     // wrongly trigger on a different position's bestUci.
-    _learn.bestUci = null;
-    _learn.bestSan = null;
-    _learn.bestEvalFmt = null;
+    _learn.bestUci = preservedBest?.uci || null;
+    _learn.bestSan = preservedBest?.san || preservedBest?.uci || null;
+    _learn.bestEvalFmt = preservedBest
+      ? _formatLearnEval(preservedBest.cpWhite, preservedBest.mateWhite)
+      : null;
     _learn.solutionUci = _verifierBest.get(prev.fen)?.uci || null;
     const stm = prev.fen.split(' ')[1];
     _learn.solverColor = stm === 'w' ? 'w' : 'b';
@@ -4364,8 +4391,17 @@ async function main() {
     if (board.orientation !== lessonOrientation) {
       try { board.flipBoard(); } catch {}
     }
-    _renderLearnPanel('find');
-    _drawLearnMistakeArrow();
+    if (preserveComparison && preservedComparison?.top?.length) {
+      // Keep the completed comparison in place while the learner considers a
+      // second move. The board returns to the lesson FEN with the same answer
+      // arrows visible, and the new attempt will replace the yellow row after
+      // grading. No engine search is started here.
+      _renderLearnPanel('comparison');
+      _drawLearnFeedbackArrows(preservedBest, { revealBest: true });
+    } else {
+      _renderLearnPanel('find');
+      _drawLearnMistakeArrow();
+    }
     if (targetPly <= 20) {
       OpeningExplorer.queryOpeningExplorer(prev.fen, { moves: 12 }).then(data => {
         if (!_learn.active || _learn.targetPly !== targetPly) return;
@@ -4379,8 +4415,9 @@ async function main() {
     });
     // Listen for the user's next move on the LIVE board.
     const onMove = async (ev) => {
-      if (!_learn.active) { board.removeEventListener('move', onMove); return; }
       board.removeEventListener('move', onMove);
+      if (_learn.moveHandler === onMove) _learn.moveHandler = null;
+      if (!_learn.active) return;
       // Compute the user's UCI move + post-move FEN from board state.
       // The move event detail contains a chess.js move object with
       // from/to/promotion fields — turn it into a UCI string for the
@@ -4533,6 +4570,7 @@ async function main() {
         engine.start(postFen, { movetime: _learnSettings.attemptMs });
       }
     };
+    _learn.moveHandler = onMove;
     board.addEventListener('move', onMove);
   }
   window.__enterLearnMode = _enterLearnMode;
