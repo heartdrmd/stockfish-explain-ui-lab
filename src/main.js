@@ -6642,6 +6642,9 @@ async function main() {
     const saveFavs = (obj) => { try { localStorage.setItem(FAVS_KEY, JSON.stringify(obj)); } catch {} };
     const isFav  = (key) => !!loadFavs()[key];
     const favSide = (key) => loadFavs()[key] || null;
+    const resolveFavouritePlaySide = (side) => side === 'both'
+      ? (Math.random() < 0.5 ? 'white' : 'black')
+      : side === 'black' ? 'black' : 'white';
 
     const refreshToggleFavButton = () => {
       if (!pToggleFav) return;
@@ -6704,6 +6707,51 @@ async function main() {
       lichessGroups.sort((a, b) => a._family.localeCompare(b._family));
       return { curated: groups, lichess: lichessGroups };
     };
+
+    // Resolve every key shape that may already exist on this or another
+    // device, but do not rewrite storage yet (the stable-identity migration is
+    // intentionally deferred). Current selector keys are Group//index; older
+    // mirrors may contain Group//Name or custom://Group/Name. A miss returns
+    // null — never a different opening.
+    let practiceOpeningKeyIndexCache = null;
+    const practiceOpeningKeyIndex = () => {
+      let customSignature = '';
+      try { customSignature = localStorage.getItem('stockfish-explain.practice-custom-openings') || ''; } catch {}
+      if (practiceOpeningKeyIndexCache?.customSignature === customSignature) {
+        return practiceOpeningKeyIndexCache.index;
+      }
+      const { curated, lichess } = allGroupsForTree();
+      const index = new Map();
+      for (const group of [...curated, ...lichess]) {
+        group.items.forEach((opening, itemIndex) => {
+          const resolved = { opening, selectorKey: `${group.group}//${itemIndex}` };
+          index.set(resolved.selectorKey, resolved);
+          // First identical name wins deterministically, matching the current
+          // tree order. Duplicate custom names remain a later migration concern.
+          const nameKey = `${group.group}//${opening.name}`;
+          if (!index.has(nameKey)) index.set(nameKey, resolved);
+          if (opening?._custom) {
+            const customKey = `custom://${group.group}/${opening.name}`;
+            if (!index.has(customKey)) index.set(customKey, resolved);
+          }
+        });
+      }
+      practiceOpeningKeyIndexCache = { customSignature, index };
+      return index;
+    };
+
+    const resolvePracticeOpeningKey = (rawKey) => {
+      const key = typeof rawKey === 'string' ? rawKey : '';
+      return key ? practiceOpeningKeyIndex().get(key) || null : null;
+    };
+
+    const selectPracticeOpeningKey = (key) => {
+      const resolved = resolvePracticeOpeningKey(key);
+      if (!resolved) return null;
+      pSel.value = resolved.selectorKey;
+      return resolved;
+    };
+    window.__selectPracticeOpeningKey = selectPracticeOpeningKey;
 
     // Simple fuzzy match — tolerant of typos and partial words.
     // Returns a score 0-100; 0 = no match. Order of tests:
@@ -7041,10 +7089,11 @@ async function main() {
       const startFavouriteNow = (key) => {
         const savedSide = loadFavs()[key];
         if (!savedSide) return false;
-        const playSide = savedSide === 'both'
-          ? (Math.random() < 0.5 ? 'white' : 'black')
-          : savedSide;
-        pSel.value = key;
+        if (!selectPracticeOpeningKey(key)) {
+          alert('That saved opening is no longer available. Choose another opening or remove the stale favourite.');
+          return false;
+        }
+        const playSide = resolveFavouritePlaySide(savedSide);
         pColor.value = playSide;
         // An explicit opening launch must override a stale "use current
         // position" choice from a previous visit to Practice settings.
@@ -7637,7 +7686,9 @@ async function main() {
       // favourites at all, empty pool → caller falls back to manual
       // tree selection.
       const favs = loadFavs();
-      const favKeys = Object.keys(favs);
+      // Leave stale keys in storage for the later identity migration, but do
+      // not let one enter a random queue and silently become another opening.
+      const favKeys = Object.keys(favs).filter(key => !!resolvePracticeOpeningKey(key));
       const set = loadQueueSet();
       const checked = favKeys.filter(k => set.has(k));
       if (checked.length) return checked;     // explicit subset wins
@@ -7657,8 +7708,11 @@ async function main() {
         if (pSearch) pSearch.value = '';
         if (pFavsOnly) pFavsOnly.checked = false;
         renderTree();
-        pSel.value = pickedKey;
-        pColor.value = favs[pickedKey] || 'white';
+        if (!selectPracticeOpeningKey(pickedKey)) {
+          alert('That saved opening is no longer available. Choose another opening or remove the stale favourite.');
+          return;
+        }
+        pColor.value = resolveFavouritePlaySide(favs[pickedKey]);
         updatePMoves();
         refreshToggleFavButton();
       });
@@ -7676,8 +7730,11 @@ async function main() {
       }
       const pickedKey = pool[Math.floor(Math.random() * pool.length)];
       const favs = loadFavs();
-      pSel.value = pickedKey;
-      pColor.value = favs[pickedKey] || 'white';
+      if (!selectPracticeOpeningKey(pickedKey)) {
+        alert('That saved opening is no longer available. Choose another opening or remove the stale favourite.');
+        return;
+      }
+      pColor.value = resolveFavouritePlaySide(favs[pickedKey]);
       updatePMoves();
       window.__practiceQueueActive = true;
       // Press Start programmatically so the user doesn't have to.
@@ -7698,18 +7755,19 @@ async function main() {
       });
     }
 
-    const pickedPracticeOpening = () => {
-      const [gn, idxStr] = (pSel.value || '//0').split('//');
-      // Look in curated groups first, then Lichess synthetic groups.
-      const { curated, lichess } = allGroupsForTree();
-      const grp = curated.find(g => g.group === gn) || lichess.find(g => g.group === gn);
-      return grp ? grp.items[+idxStr] : OPENINGS[0].items[0];
-    };
+    const pickedPracticeOpening = () => resolvePracticeOpeningKey(pSel.value)?.opening || null;
     const updatePMoves = () => {
       const op = pickedPracticeOpening();
+      if (!op) {
+        pMoves.textContent = '⚠ Saved opening unavailable — choose another opening.';
+        pMoves.dataset.openingMissing = 'true';
+        return false;
+      }
+      delete pMoves.dataset.openingMissing;
       pMoves.textContent = op.moves.length
         ? op.moves.map((m, i) => (i % 2 === 0 ? `${Math.floor(i/2)+1}.${m}` : m)).join(' ')
         : '(start from move 1)';
+      return true;
     };
     pSel.addEventListener('change', () => { updatePMoves(); refreshToggleFavButton(); });
     updatePMoves();
@@ -7732,9 +7790,16 @@ async function main() {
       // modal-open path now PREFERS auto-picking a fresh random queue
       // favourite over replaying the last. Restoring opening is still
       // used by the "Replay last" button path.
-      if (restoreOpening && last.openingValue && pSel.querySelector(`option[value="${CSS.escape(last.openingValue)}"]`)) {
-        pSel.value = last.openingValue;
-        updatePMoves();
+      if (restoreOpening && last.openingValue) {
+        if (selectPracticeOpeningKey(last.openingValue)) {
+          updatePMoves();
+        } else {
+          // Do not leave the first rebuilt option selected when the saved key
+          // is stale. Replay/Start will reach the explicit missing-opening
+          // guard instead of quietly launching a different line.
+          pSel.value = '';
+          updatePMoves();
+        }
       }
       if (last.color)     pColor.value   = last.color;
       if (last.skill)     { pStren.value = String(last.skill); pStrenV.textContent = String(last.skill); }
@@ -8028,8 +8093,8 @@ async function main() {
       if (pool.length) {
         const pickedKey = pool[Math.floor(Math.random() * pool.length)];
         const favs = loadFavs();
-        pSel.value = pickedKey;
-        pColor.value = favs[pickedKey] || pColor.value || 'white';
+        selectPracticeOpeningKey(pickedKey);
+        pColor.value = resolveFavouritePlaySide(favs[pickedKey] || pColor.value);
         updatePMoves();
         applyLastSettingsToModal({ restoreOpening: false });
       } else {
@@ -8088,7 +8153,22 @@ async function main() {
           }
         } catch (err) { console.warn('[practice-start] use-current save prompt failed', err); }
       }
-      const op = pickedPracticeOpening();
+      let op = pickedPracticeOpening();
+      if (!op && !useCurrent) {
+        alert('That opening could not be found, so Practice was not started. Choose it again or remove the stale favourite.');
+        updatePMoves();
+        return;
+      }
+      // "Use current position" intentionally does not depend on the hidden
+      // opening selector. Give its saved settings an honest label instead of
+      // reviving the old first-opening fallback.
+      if (!op) {
+        op = {
+          name: pUseCurrent._match?.name || 'Current position',
+          moves: [],
+          fen: board.fen(),
+        };
+      }
       console.log('[practice-start] resolved op', { name: op?.name, movesLen: op?.moves?.length || 0, hasFen: !!op?.fen });
       const color = pColor.value;       // 'white' | 'black'
       const skill = +pStren.value;
@@ -8929,7 +9009,6 @@ async function main() {
     if (pool.length < 1) { alert('No starred openings.'); return; }
     const favs = JSON.parse(localStorage.getItem('stockfish-explain.practice-favourites') || '{}');
     const pickedKey = pool[Math.floor(Math.random() * pool.length)];
-    const pSel   = document.getElementById('practice-opening');
     const pColor = document.getElementById('practice-color');
     // Resolve side: 'white' | 'black' | 'both' — 'both' picks
     // randomly on each rotation so the user practices both sides.
@@ -8937,7 +9016,11 @@ async function main() {
     const resolvedSide = savedSide === 'both'
       ? (Math.random() < 0.5 ? 'white' : 'black')
       : savedSide;
-    if (pSel)   pSel.value   = pickedKey;
+    const selected = window.__selectPracticeOpeningKey?.(pickedKey);
+    if (!selected) {
+      alert('That saved opening is no longer available. Choose another opening or remove the stale favourite.');
+      return;
+    }
     if (pColor) pColor.value = resolvedSide;
     // Programmatically click Start — reuses the full start handler
     // including settings save, clock start, and analysis-kick.

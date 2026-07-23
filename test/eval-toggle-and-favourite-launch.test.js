@@ -77,3 +77,24 @@ test('double-click or double-tap launches favourites with their saved side', () 
   assert.match(main, /now - lastFavouriteTapAt <= 500/);
   assert.match(main, /startFavouriteNow\(leafKey\)/);
 });
+
+test('stale favourite keys are resolved tolerantly or stopped explicitly', () => {
+  assert.match(main, /index\.set\(resolved\.selectorKey, resolved\)/);
+  assert.match(main, /const nameKey = `\$\{group\.group\}\/\/\$\{opening\.name\}`/);
+  assert.match(main, /const customKey = `custom:\/\/\$\{group\.group\}\/\$\{opening\.name\}`/);
+  assert.match(main, /const pickedPracticeOpening = \(\) => resolvePracticeOpeningKey\(pSel\.value\)\?\.opening \|\| null/);
+  assert.match(main, /Object\.keys\(favs\)\.filter\(key => !!resolvePracticeOpeningKey\(key\)\)/);
+  assert.match(main, /if \(!op && !useCurrent\)[\s\S]*?Practice was not started[\s\S]*?return/);
+  assert.match(main, /pSel\.value = '';[\s\S]*?updatePMoves\(\)/);
+
+  const pickerBlock = main.slice(
+    main.indexOf('const pickedPracticeOpening = () =>'),
+    main.indexOf('// ─── Last-settings persistence', main.indexOf('const pickedPracticeOpening = () =>')),
+  );
+  assert.doesNotMatch(pickerBlock, /OPENINGS\[0\]\.items\[0\]/);
+});
+
+test('both-side favourites always resolve to a valid launch color', () => {
+  assert.match(main, /const resolveFavouritePlaySide = \(side\) => side === 'both'[\s\S]*?Math\.random\(\)[\s\S]*?'black' : 'white'/);
+  assert.match(main, /pColor\.value = resolveFavouritePlaySide\(favs\[pickedKey\]\)/);
+});
