@@ -14,7 +14,7 @@
 
 import crypto from 'node:crypto';
 import bcrypt from 'bcryptjs';
-import { query } from './db.js';
+import { query, withTransaction } from './db.js';
 
 const SESSION_COOKIE = 'sfe_sid';
 const SESSION_TTL_DAYS = 30;
@@ -150,39 +150,178 @@ export function requireAuthOrGuest(req, res, next) {
   });
 }
 
-// Claim a guest's data for a freshly authenticated user (audit A6).
-// When a guest (games/favourites/openings scoped by X-Guest-Id) signs up
-// or logs in, reassign their rows from guest_id → user_id so nothing
-// "disappears" on sign-in (previously listGames became user-scoped and
-// the guest rows were orphaned, then the local copies re-uploaded as
-// duplicates). Best-effort: failures are logged, never block the login.
-async function claimGuestData(userId, guestId) {
-  if (!userId || !guestId || !GUEST_ID_RE.test(guestId)) return;
-  // Tables with NO owner-unique constraint → straight reassign.
-  for (const tbl of ['games', 'engine_crashes', 'diagnostic_logs']) {
+async function auditGuestClaim(txQuery, {
+  userId,
+  guestHash,
+  tableName,
+  removedCollisionKeys = [],
+  claimedCount = 0,
+}) {
+  if (!removedCollisionKeys.length && !claimedCount) return;
+  await txQuery(
+    `INSERT INTO guest_claim_audit(
+       user_id, guest_id_hash, table_name, removed_collision_keys, claimed_count
+     ) VALUES($1, $2, $3, $4::jsonb, $5)`,
+    [userId, guestHash, tableName, JSON.stringify(removedCollisionKeys), claimedCount],
+  );
+}
+
+// Claim a guest's data for a freshly authenticated user (audit A6/F3).
+// Every table is handled in its own client-bound transaction so one optional
+// telemetry table cannot strand the user's games or library. For tables with
+// owner-unique keys, the authenticated account's existing row wins: delete
+// only the colliding guest copy, then reassign every remaining guest row.
+// Repeating the claim is safe — a second run simply finds no guest rows.
+//
+// `transaction` and `logger` are injectable for regression tests; production
+// callers use the real Postgres transaction helper and console.
+export async function claimGuestData(
+  userId,
+  guestId,
+  { transaction = withTransaction, logger = console } = {},
+) {
+  if (!userId || !guestId || !GUEST_ID_RE.test(guestId)) return [];
+  const guestHash = crypto.createHash('sha256').update(guestId).digest('hex');
+
+  const claims = [
+    {
+      tableName: 'games',
+      run: async txQuery => {
+        // client_game_id is the logical game identity. NULL ids are never a
+        // collision and must all be preserved. Scope the winning copy to the
+        // account being signed in — another user's row is irrelevant.
+        const removed = await txQuery(
+          `DELETE FROM games g
+            WHERE g.guest_id = $2
+              AND g.client_game_id IS NOT NULL
+              AND EXISTS (
+                SELECT 1 FROM games u
+                 WHERE u.user_id = $1
+                   AND u.client_game_id = g.client_game_id
+              )
+          RETURNING g.id, g.client_game_id`,
+          [userId, guestId],
+        );
+        const claimed = await txQuery(
+          `UPDATE games
+              SET user_id = $1, guest_id = NULL
+            WHERE guest_id = $2
+          RETURNING id`,
+          [userId, guestId],
+        );
+        const removedKeys = removed.rows.map(row => ({
+          id: row.id,
+          clientGameId: row.client_game_id,
+        }));
+        await auditGuestClaim(txQuery, {
+          userId, guestHash, tableName: 'games', removedCollisionKeys: removedKeys,
+          claimedCount: claimed.rowCount,
+        });
+        return { removed: removed.rowCount, claimed: claimed.rowCount };
+      },
+    },
+    {
+      tableName: 'favourites',
+      run: async txQuery => {
+        const removed = await txQuery(
+          `DELETE FROM favourites f
+            WHERE f.guest_id = $2
+              AND EXISTS (
+                SELECT 1 FROM favourites u
+                 WHERE u.user_id = $1
+                   AND u.opening_key = f.opening_key
+              )
+          RETURNING f.opening_key`,
+          [userId, guestId],
+        );
+        const claimed = await txQuery(
+          `UPDATE favourites
+              SET user_id = $1, guest_id = NULL
+            WHERE guest_id = $2
+          RETURNING opening_key`,
+          [userId, guestId],
+        );
+        await auditGuestClaim(txQuery, {
+          userId, guestHash, tableName: 'favourites',
+          removedCollisionKeys: removed.rows.map(row => row.opening_key),
+          claimedCount: claimed.rowCount,
+        });
+        return { removed: removed.rowCount, claimed: claimed.rowCount };
+      },
+    },
+    {
+      tableName: 'custom_openings',
+      run: async txQuery => {
+        const removed = await txQuery(
+          `DELETE FROM custom_openings c
+            WHERE c.guest_id = $2
+              AND EXISTS (
+                SELECT 1 FROM custom_openings u
+                 WHERE u.user_id = $1
+                   AND u.group_name = c.group_name
+                   AND u.opening_name = c.opening_name
+              )
+          RETURNING c.id, c.group_name, c.opening_name`,
+          [userId, guestId],
+        );
+        const claimed = await txQuery(
+          `UPDATE custom_openings
+              SET user_id = $1, guest_id = NULL
+            WHERE guest_id = $2
+          RETURNING id`,
+          [userId, guestId],
+        );
+        const removedKeys = removed.rows.map(row => ({
+          id: row.id,
+          group: row.group_name,
+          name: row.opening_name,
+        }));
+        await auditGuestClaim(txQuery, {
+          userId, guestHash, tableName: 'custom_openings', removedCollisionKeys: removedKeys,
+          claimedCount: claimed.rowCount,
+        });
+        return { removed: removed.rowCount, claimed: claimed.rowCount };
+      },
+    },
+    ...['engine_crashes', 'diagnostic_logs'].map(tableName => ({
+      tableName,
+      run: async txQuery => {
+        const claimed = await txQuery(
+          `UPDATE ${tableName}
+              SET user_id = $1, guest_id = NULL
+            WHERE guest_id = $2
+          RETURNING id`,
+          [userId, guestId],
+        );
+        await auditGuestClaim(txQuery, {
+          userId, guestHash, tableName, claimedCount: claimed.rowCount,
+        });
+        return { removed: 0, claimed: claimed.rowCount };
+      },
+    })),
+  ];
+
+  const results = [];
+  for (const claim of claims) {
     try {
-      await query(`UPDATE ${tbl} SET user_id = $1, guest_id = NULL WHERE guest_id = $2`, [userId, guestId]);
-    } catch (e) { console.warn(`[auth] claim ${tbl} failed`, e.message); }
+      const result = await transaction(claim.run);
+      results.push({ table: claim.tableName, ...result });
+      if (result.removed || result.claimed) {
+        logger.info?.('[auth] guest data claimed', {
+          table: claim.tableName,
+          removedCollisions: result.removed,
+          claimed: result.claimed,
+          guestHash: guestHash.slice(0, 12),
+        });
+      }
+    } catch (err) {
+      // Keep login available and continue to unrelated tables. The failed
+      // table rolled back completely and can be retried on the next login.
+      logger.warn?.(`[auth] claim ${claim.tableName} failed`, err.message);
+      results.push({ table: claim.tableName, error: err.message });
+    }
   }
-  // favourites + custom_openings have an owner-unique index — a guest row
-  // that collides with an existing user row would violate it on reassign.
-  // Delete the colliding guest rows first (the user's own copy wins), then
-  // reassign the rest.
-  try {
-    await query(
-      `DELETE FROM favourites f WHERE f.guest_id = $2
-         AND EXISTS (SELECT 1 FROM favourites u WHERE u.user_id = $1 AND u.opening_key = f.opening_key)`,
-      [userId, guestId]);
-    await query(`UPDATE favourites SET user_id = $1, guest_id = NULL WHERE guest_id = $2`, [userId, guestId]);
-  } catch (e) { console.warn('[auth] claim favourites failed', e.message); }
-  try {
-    await query(
-      `DELETE FROM custom_openings c WHERE c.guest_id = $2
-         AND EXISTS (SELECT 1 FROM custom_openings u
-                      WHERE u.user_id = $1 AND u.group_name = c.group_name AND u.opening_name = c.opening_name)`,
-      [userId, guestId]);
-    await query(`UPDATE custom_openings SET user_id = $1, guest_id = NULL WHERE guest_id = $2`, [userId, guestId]);
-  } catch (e) { console.warn('[auth] claim custom_openings failed', e.message); }
+  return results;
 }
 
 export function wireAuth(app) {

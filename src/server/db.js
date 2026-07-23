@@ -29,6 +29,27 @@ export async function query(sql, params = []) {
   return db.query(sql, params);
 }
 
+// Run every statement in `work` on one checked-out client. Calling
+// pool.query('BEGIN') followed by more pool.query(...) calls is not a real
+// transaction guarantee: the pool may choose a different connection for a
+// later statement. Keep this helper small so data-migration paths can be
+// atomic without exposing the raw client outside this module.
+export async function withTransaction(work) {
+  if (!db) throw new Error('DATABASE_URL not configured — DB queries are disabled');
+  const client = await db.connect();
+  try {
+    await client.query('BEGIN');
+    const result = await work((sql, params = []) => client.query(sql, params));
+    await client.query('COMMIT');
+    return result;
+  } catch (err) {
+    try { await client.query('ROLLBACK'); } catch {}
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
 // ─── Migrations ────────────────────────────────────────────────────
 // Each migration is { name, sql }. Names must be unique + stable —
 // they're stored in the _migrations table to prevent re-runs.
@@ -360,6 +381,26 @@ const migrations = [
         ADD COLUMN IF NOT EXISTS hints JSONB NOT NULL DEFAULT '[]'::jsonb;
     `,
   },
+  {
+    // Durable, non-secret audit trail for guest -> account claims. We keep a
+    // SHA-256 digest of the guest token rather than the bearer token itself,
+    // plus the identifiers of guest rows removed because the authenticated
+    // account already had the same logical record.
+    name: '017_guest_claim_audit',
+    sql: `
+      CREATE TABLE IF NOT EXISTS guest_claim_audit (
+        id                         BIGSERIAL PRIMARY KEY,
+        user_id                    INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        guest_id_hash              TEXT NOT NULL,
+        table_name                 TEXT NOT NULL,
+        removed_collision_keys     JSONB NOT NULL DEFAULT '[]'::jsonb,
+        claimed_count              INT NOT NULL DEFAULT 0,
+        created_at                 TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_guest_claim_audit_user_when
+        ON guest_claim_audit(user_id, created_at DESC);
+    `,
+  },
 ];
 
 export async function runMigrations() {
@@ -378,13 +419,12 @@ export async function runMigrations() {
   for (const m of migrations) {
     if (applied.has(m.name)) continue;
     console.log(`[db] applying migration ${m.name}`);
-    await db.query('BEGIN');
     try {
-      await db.query(m.sql);
-      await db.query('INSERT INTO _migrations(name) VALUES ($1)', [m.name]);
-      await db.query('COMMIT');
+      await withTransaction(async txQuery => {
+        await txQuery(m.sql);
+        await txQuery('INSERT INTO _migrations(name) VALUES ($1)', [m.name]);
+      });
     } catch (err) {
-      await db.query('ROLLBACK');
       throw new Error(`Migration ${m.name} failed: ${err.message}`);
     }
   }
