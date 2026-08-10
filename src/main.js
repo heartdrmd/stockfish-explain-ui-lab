@@ -3479,6 +3479,22 @@ async function main() {
     (_povWin(color, afterCp, afterMate) - _povWin(color, beforeCp, beforeMate)) / 2;
   const _learnComparisonCache = new Map();
   function _positionLearnPanel(p) {
+    // Explore is ordinary live analysis with a reversible Learn lease. Keep
+    // the lesson available without covering the engine: the full panel
+    // becomes one small, fixed Resume bar in the lower-right corner. It must
+    // live under <body> even on mobile; rendering the compact bar in the
+    // mobile Learn slot would still consume the analysis workspace.
+    if (p.classList.contains('learn-panel-minimized')) {
+      const mobileHost = document.getElementById('learn-panel-host');
+      if (p.parentElement !== document.body) document.body.appendChild(p);
+      if (mobileHost) mobileHost.hidden = true;
+      p.style.left = '';
+      p.style.top = '';
+      p.style.right = '';
+      p.style.bottom = '';
+      p.style.width = '';
+      return;
+    }
     // Anchor the panel to the top-right corner of the board rather
     // than the viewport. Closer to the action, easier to read while
     // looking at the position. Falls back to top-right of viewport
@@ -3719,6 +3735,8 @@ async function main() {
     // userDismissed before its first render.
     if (_learn.userDismissed) return;
     const p = _ensureLearnPanel();
+    p.classList.toggle('learn-panel-minimized', state === 'explore');
+    _positionLearnPanel(p);
     // Phase-specific body class so CSS can hide chessground arrows
     // while the user is in the FIND phase (don't peek the engine's
     // green best-move arrow). All other phases ('eval', 'win',
@@ -3820,25 +3838,6 @@ async function main() {
           ${canRetry ? '<button class="retro-btn" id="learn-retry">Try again</button>' : ''}
           ${continueBtn}
         </div>`;
-    } else if (state === 'explore') {
-      const selected = _learn.exploreSelection;
-      const selectedEval = selected
-        ? _formatLearnEval(selected.cpWhite, selected.mateWhite)
-        : '—';
-      const cachedLine = selected?.lineLength > 1
-        ? `The first ${selected.lineLength} plies of Stockfish's cached line are available with the forward button.`
-        : 'This row contains one move; Stockfish is now calculating the continuation live.';
-      inner = `
-        <div class="learn-explore-status" role="status">
-          <span class="learn-explore-kicker">LIVE EXPLORATION</span>
-          <p class="retro-prompt">${escapeHtml(selected?.label || 'Selected move')}: <strong>${escapeHtml(selected?.san || selected?.uci || '—')}</strong></p>
-          <p class="retro-played">Starting evaluation: <strong>${selectedEval}</strong> · White POV</p>
-          <p class="retro-played">${cachedLine}</p>
-        </div>
-        <p class="retro-played learn-explore-help">Play either side and use ◀/▶ to examine variations. These moves stay in notation as side variations; the original game and lesson result are unchanged.</p>
-        <div class="retro-choices">
-          <button class="retro-btn retro-continue learn-back-to-lesson" id="learn-back-to-lesson">← Back to lesson ${idx} of ${total}</button>
-        </div>`;
     } else if (state === 'view') {
       inner = `
         <p class="retro-prompt">Best was <strong>${_learn.bestSan || '?'}</strong></p>
@@ -3917,7 +3916,28 @@ async function main() {
           <button class="retro-btn" id="learn-close-end">Close</button>
         </div>`;
     }
-    p.innerHTML = titleBar + _learnTimingControlsHtml(state) + `<div class="retro-body">${inner}</div>`;
+    if (state === 'explore') {
+      const selected = _learn.exploreSelection;
+      const selectedMove = selected?.san || selected?.uci || 'variation';
+      const lessonProgress = idx > 0 && total > 0
+        ? `LESSON ${idx} OF ${total}`
+        : 'LESSON ACTIVE';
+      p.innerHTML = `<div class="learn-resume-bar" role="group" aria-label="Learn from mistakes is minimized">
+        <button type="button" class="learn-resume-main" id="learn-back-to-lesson"
+          title="Return to the lesson from ${escapeHtml(selectedMove)}">
+          <span class="learn-resume-icon" aria-hidden="true">🎓</span>
+          <span class="learn-resume-copy">
+            <span class="learn-resume-kicker">${lessonProgress}</span>
+            <strong>Resume lesson</strong>
+          </span>
+          <span class="learn-resume-arrow" aria-hidden="true">↩</span>
+        </button>
+        <button type="button" class="learn-resume-close" id="learn-close"
+          aria-label="Close Learn from mistakes" title="Close lesson">×</button>
+      </div>`;
+    } else {
+      p.innerHTML = titleBar + _learnTimingControlsHtml(state) + `<div class="retro-body">${inner}</div>`;
+    }
     p.querySelector('#learn-close')?.addEventListener('click', _closeLearnPanel);
     p.querySelector('#learn-close-end')?.addEventListener('click', _closeLearnPanel);
     p.querySelector('#learn-start')?.addEventListener('click', _startLearnPreparation);

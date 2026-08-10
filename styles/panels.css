@@ -2879,6 +2879,97 @@ body.mobile-mode #learn-panel .retro-btn {
 body.mobile-mode #learn-panel .retro-choices {
   flex-wrap: wrap;
 }
+
+/* Live Explore keeps the lesson reversible without covering Stockfish's
+   score/PV panel. Only this sub-mode collapses; normal Learn remains exactly
+   where it was. The bar is intentionally small enough to avoid masking the
+   board or analysis controls on desktop and phone. */
+#learn-panel.learn-panel-minimized,
+body.mobile-mode #learn-panel.learn-panel-minimized {
+  position: fixed !important;
+  inset: auto max(12px, env(safe-area-inset-right, 0px))
+    max(12px, env(safe-area-inset-bottom, 0px)) auto !important;
+  z-index: 10020 !important;
+  width: min(310px, calc(100vw - 24px)) !important;
+  min-width: 0 !important;
+  max-width: calc(100vw - 24px) !important;
+  max-height: none !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 7px !important;
+  background: transparent !important;
+  box-shadow: 0 8px 26px rgba(0, 0, 0, .48) !important;
+  overflow: hidden !important;
+}
+.learn-resume-bar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 44px;
+  min-height: 52px;
+  color: #fff;
+  background: linear-gradient(180deg, #3893e8 0%, #2676bf 100%);
+  border: 1px solid #1d5f9d;
+  border-radius: inherit;
+}
+.learn-resume-main,
+.learn-resume-close {
+  min-height: 52px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.learn-resume-main {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  padding: 7px 10px 7px 12px;
+  text-align: left;
+}
+.learn-resume-main:hover,
+.learn-resume-main:focus-visible,
+.learn-resume-close:hover,
+.learn-resume-close:focus-visible {
+  background: rgba(255, 255, 255, .13);
+  outline: 2px solid rgba(255, 255, 255, .82);
+  outline-offset: -2px;
+}
+.learn-resume-icon { font-size: 20px; line-height: 1; }
+.learn-resume-copy {
+  display: grid;
+  min-width: 0;
+  line-height: 1.08;
+}
+.learn-resume-copy strong {
+  font-size: 14px;
+  letter-spacing: .01em;
+}
+.learn-resume-kicker {
+  margin-bottom: 3px;
+  color: rgba(255, 255, 255, .78);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .075em;
+}
+.learn-resume-arrow {
+  margin-left: auto;
+  font-size: 17px;
+  opacity: .9;
+}
+.learn-resume-close {
+  width: 44px;
+  padding: 0;
+  border-left: 1px solid rgba(255, 255, 255, .2);
+  font-size: 22px;
+  line-height: 1;
+}
+@media (max-width: 640px) {
+  #learn-panel.learn-panel-minimized,
+  body.mobile-mode #learn-panel.learn-panel-minimized {
+    width: min(280px, calc(100vw - 24px)) !important;
+  }
+}
 .learn-comparison-key {
   display: flex;
   flex-wrap: wrap;
@@ -2985,28 +3076,6 @@ body.mobile-mode #learn-panel .retro-choices {
   font-weight: 800;
   letter-spacing: .025em;
   text-transform: uppercase;
-}
-.learn-explore-status {
-  padding: 10px;
-  border: 1px solid rgba(56, 147, 232, .55);
-  border-radius: 4px;
-  background: rgba(56, 147, 232, .12);
-}
-.learn-explore-kicker {
-  display: block;
-  margin-bottom: 6px;
-  color: #8bc7ff;
-  font-size: 10px;
-  font-weight: 900;
-  letter-spacing: .08em;
-}
-.learn-explore-help {
-  margin-top: 10px !important;
-  line-height: 1.4;
-}
-.learn-back-to-lesson {
-  min-height: 44px;
-  font-size: 13px !important;
 }
 body.learn-exploring .engine-power.lesson-owned {
   background: linear-gradient(180deg, #278a59 0%, #17623e 100%);

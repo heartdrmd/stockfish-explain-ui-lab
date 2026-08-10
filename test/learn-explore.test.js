@@ -69,6 +69,16 @@ test('Explore uses path-aware navigation and restores before rearming grading', 
   assert.match(main, /id="learn-back-to-lesson"/);
 });
 
+test('Explore minimizes Learn to a fixed Resume bar without losing Close or Back', () => {
+  assert.match(main, /classList\.toggle\('learn-panel-minimized', state === 'explore'\)/);
+  assert.match(main, /state === 'explore'[\s\S]*?class="learn-resume-bar"[\s\S]*?id="learn-back-to-lesson"[\s\S]*?Resume lesson/);
+  assert.match(main, /idx > 0 && total > 0[\s\S]*?'LESSON ACTIVE'/);
+  assert.match(main, /class="learn-resume-close" id="learn-close"/);
+  assert.match(main, /classList\.contains\('learn-panel-minimized'\)[\s\S]*?document\.body\.appendChild\(p\)[\s\S]*?mobileHost\.hidden = true/);
+  assert.match(panels, /#learn-panel\.learn-panel-minimized[\s\S]*?position:\s*fixed !important[\s\S]*?safe-area-inset-bottom[\s\S]*?width:\s*min\(310px/);
+  assert.match(panels, /\.learn-resume-bar[\s\S]*?linear-gradient\(180deg, #3893e8/);
+});
+
 test('closing during Explore releases the temporary lease without invoking Back', () => {
   assert.match(main, /if \(_learn\.exploring\) _exitLearnExploration\(\{ restoreLesson: false \}\)/);
   assert.match(main, /document\.body\.classList\.remove\('learn-active', 'learn-phase-find', 'learn-preparing', 'learn-exploring'\)/);
