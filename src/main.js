@@ -59,6 +59,7 @@ import * as MoveTime from './movetime.js';
 import * as OpeningVariation from './opening-variation.js';
 import { buildPracticeHintLines, upsertPracticeHint } from './practice-hint.js';
 import { buildLearnFeedbackArrows } from './learn-arrows.js';
+import { buildLearnExploreUciLine, isLearnExploreUci } from './learn-explore.js';
 import { canReuseLearnScan, learnScanKey } from './learn-scan-cache.js';
 import { includeLessonPly, isUserMovePly, notationAnnotation } from './learn-annotations.js';
 import { sortGamesByPlayedAt } from './game-order.js';
@@ -3218,6 +3219,13 @@ async function main() {
     // remove it before changing lessons so old positions cannot grade a later
     // move twice. Retry replaces it while preserving the comparison UI.
     moveHandler: null,
+    // Comparison rows can temporarily open a normal-analysis view on the
+    // existing board. This is a reversible sub-mode: the lesson itself
+    // remains active, and Back restores the exact pre-mistake state.
+    exploring: false,
+    exploreSessionId: 0,
+    exploreReturn: null,
+    exploreSelection: null,
     // Set true when the user explicitly closes the panel via X.
     // While true, accuracy-pill clicks do NOT re-enter learn mode
     // (just navigate to the ply). The flag clears on:
@@ -3227,6 +3235,7 @@ async function main() {
     // while exploring the analysis on their own.
     userDismissed: false,
   };
+  window.__learnExploring = false;
   const LEARN_ATTEMPT_MIN_VISIBLE_MS = 1100;
   const LEARN_SETTINGS_KEY = 'stockfish-explain.learn-settings';
   const LEARN_SETTING_VALUES = {
@@ -3514,6 +3523,9 @@ async function main() {
     }
   }
   function _closeLearnPanel() {
+    // Closing from Explore keeps the currently inspected board position,
+    // but must release its temporary engine/mute/input lease first.
+    if (_learn.exploring) _exitLearnExploration({ restoreLesson: false });
     _learn.runId = (_learn.runId || 0) + 1; // invalidate every pending async continuation
     _learn.attemptCompleteSeq++;
     if (_learn.attemptHoldTimer) clearTimeout(_learn.attemptHoldTimer);
@@ -3524,7 +3536,7 @@ async function main() {
     }
     _learn.active = false;
     _learn.userDismissed = true;   // suppresses pill-click auto-enter
-    document.body.classList.remove('learn-active', 'learn-phase-find', 'learn-preparing');
+    document.body.classList.remove('learn-active', 'learn-phase-find', 'learn-preparing', 'learn-exploring');
     document.body.classList.remove('learn-panel-open');
     if (_learn.panel) { _learn.panel.remove(); _learn.panel = null; }
     const host = document.getElementById('learn-panel-host');
@@ -3536,6 +3548,10 @@ async function main() {
     _learn.arrowFen = null;
     _learn.openingUcis = new Set();
     _learn.preparing = false;
+    _learn.exploring = false;
+    _learn.exploreReturn = null;
+    _learn.exploreSelection = null;
+    window.__learnExploring = false;
     window.__learnOwnsEngine = false;
     try { board.setInteractionLocked?.(false); } catch {}
     try { window.__setLearnEngineControls?.({ active: false, preparing: false }); } catch {}
@@ -3582,19 +3598,30 @@ async function main() {
     const data = _learn.comparison;
     if (!data?.top?.length) return '<p class="retro-played">No comparison data returned.</p>';
     const best = data.top[0];
-    const rowHtml = (label, row, css = '') => {
+    const rowHtml = (key, label, row, css = '') => {
       if (!row) return '';
       const delta = _comparisonDelta(row, best);
       const deltaText = delta == null ? '—' : Math.abs(delta) < 0.05 ? 'Best' : `${delta.toFixed(1)} pts`;
+      const moveText = row.san || row.uci || '—';
+      const moveCell = isLearnExploreUci(row.uci)
+        ? `<button type="button" class="learn-explore-move"
+             data-learn-explore="${escapeHtml(key)}"
+             aria-label="Explore ${escapeHtml(label)} ${escapeHtml(moveText)} on the board"
+             title="Open this move in live analysis">
+             <span class="learn-explore-san">${escapeHtml(moveText)}</span>
+             <span class="learn-explore-affordance" aria-hidden="true">Analyse ↗</span>
+           </button>`
+        : escapeHtml(moveText);
       return `<tr class="${css}">
         <th>${escapeHtml(label)}</th>
-        <td>${escapeHtml(row.san || row.uci || '—')}</td>
+        <td>${moveCell}</td>
         <td>${_formatLearnEval(row.cpWhite, row.mateWhite)}</td>
         <td>${_formatLearnWin(row.cpWhite, row.mateWhite)}</td>
         <td>${deltaText}</td>
       </tr>`;
     };
     const topRows = data.top.map((line, i) => rowHtml(
+      `top-${i}`,
       i === 0 ? 'BEST MOVE' : `Engine #${i + 1}`,
       line,
       i === 0 ? 'learn-row-engine learn-row-best' : 'learn-row-engine',
@@ -3608,16 +3635,16 @@ async function main() {
     <div class="learn-comparison-scroll"><table class="learn-comparison">
       <thead><tr><th>Result</th><th>Move</th><th>Eval (White)</th><th>Your win</th><th>vs #1</th></tr></thead>
       <tbody>
-        ${rowHtml('Original mistake', data.original, 'learn-row-original')}
-        ${rowHtml(tryLabel, data.attempt, `learn-row-attempt ${_learn.gradePassed ? 'learn-row-attempt-pass' : 'learn-row-attempt-fail'}`)}
+        ${rowHtml('original', 'Original mistake', data.original, 'learn-row-original')}
+        ${rowHtml('attempt', tryLabel, data.attempt, `learn-row-attempt ${_learn.gradePassed ? 'learn-row-attempt-pass' : 'learn-row-attempt-fail'}`)}
         ${topRows}
       </tbody>
     </table></div>
-    <p class="retro-played" style="opacity:.68;font-size:11px;margin-top:7px;">Eval is always White POV, matching the main engine. “Your win” and “pts” are relative to the side solving this lesson.</p>`;
+    <p class="retro-played" style="opacity:.68;font-size:11px;margin-top:7px;">Tap any move to explore it with live analysis. Eval is always White POV, matching the main engine. “Your win” and “pts” are relative to the side solving this lesson.</p>`;
   }
 
   function _learnTimingControlsHtml(state) {
-    if (state === 'end') return '';
+    if (state === 'end' || state === 'explore') return '';
     const busy = state === 'preparing' || state === 'eval' || state === 'comparing';
     const disabled = busy ? ' disabled' : '';
     return `<div class="retro-timing" aria-label="Lesson analysis duration">
@@ -3669,6 +3696,8 @@ async function main() {
     const solved = _solvedCount();
     const counterText = state === 'preparing'
       ? 'Scanning…'
+      : state === 'explore'
+        ? `${idx}/${total} · Explore`
       : state === 'setup'
         ? 'Ready'
       : state === 'end'
@@ -3756,6 +3785,25 @@ async function main() {
         <div class="retro-choices">
           ${canRetry ? '<button class="retro-btn" id="learn-retry">Try again</button>' : ''}
           ${continueBtn}
+        </div>`;
+    } else if (state === 'explore') {
+      const selected = _learn.exploreSelection;
+      const selectedEval = selected
+        ? _formatLearnEval(selected.cpWhite, selected.mateWhite)
+        : '—';
+      const cachedLine = selected?.lineLength > 1
+        ? `The first ${selected.lineLength} plies of Stockfish's cached line are available with the forward button.`
+        : 'This row contains one move; Stockfish is now calculating the continuation live.';
+      inner = `
+        <div class="learn-explore-status" role="status">
+          <span class="learn-explore-kicker">LIVE EXPLORATION</span>
+          <p class="retro-prompt">${escapeHtml(selected?.label || 'Selected move')}: <strong>${escapeHtml(selected?.san || selected?.uci || '—')}</strong></p>
+          <p class="retro-played">Starting evaluation: <strong>${selectedEval}</strong> · White POV</p>
+          <p class="retro-played">${cachedLine}</p>
+        </div>
+        <p class="retro-played learn-explore-help">Play either side and use ◀/▶ to examine variations. These moves stay in notation as side variations; the original game and lesson result are unchanged.</p>
+        <div class="retro-choices">
+          <button class="retro-btn retro-continue learn-back-to-lesson" id="learn-back-to-lesson">← Back to lesson ${idx} of ${total}</button>
         </div>`;
     } else if (state === 'view') {
       inner = `
@@ -3845,6 +3893,12 @@ async function main() {
     p.querySelector('#learn-solution')?.addEventListener('click', _showSolution);
     p.querySelector('#learn-compare')?.addEventListener('click', _loadLearnComparison);
     p.querySelector('#learn-retry')?.addEventListener('click', _retryLearnAttempt);
+    p.querySelector('#learn-back-to-lesson')?.addEventListener('click', () => {
+      _exitLearnExploration({ restoreLesson: true });
+    });
+    p.querySelectorAll('[data-learn-explore]').forEach(button => {
+      button.addEventListener('click', () => _enterLearnExploration(button.dataset.learnExplore));
+    });
     p.querySelector('#learn-restart')?.addEventListener('click', () => {
       // Reset progress (lila: retroCtrl.reset()) and restart at ply 1.
       _learn.solvedPlies = new Set();
@@ -4025,7 +4079,191 @@ async function main() {
       cpWhite: line.scoreKind === 'mate' ? null : whiteScore,
       mateWhite: line.scoreKind === 'mate' ? whiteScore : null,
       pvSan: line.pvSan || '',
+      pvUci: Array.isArray(line.pvUci) ? line.pvUci.slice(0, 8) : [],
     };
+  }
+
+  function _learnComparisonEntry(key) {
+    const data = _learn.comparison;
+    if (!data) return null;
+    if (key === 'original' && data.original) {
+      return { key, label: 'Original mistake', row: data.original };
+    }
+    if (key === 'attempt' && data.attempt) {
+      return { key, label: 'Your try', row: data.attempt };
+    }
+    const topMatch = /^top-(\d+)$/.exec(String(key || ''));
+    if (topMatch) {
+      const index = Number(topMatch[1]);
+      const row = data.top?.[index];
+      if (row) {
+        return {
+          key,
+          label: index === 0 ? 'Best move' : `Engine #${index + 1}`,
+          row,
+        };
+      }
+    }
+    return null;
+  }
+
+  function _enterLearnExploration(key) {
+    if (!_learn.active
+      || _learn.preparing
+      || _learn.comparing
+      || _learn.exploring
+      || !_learn.prevFen
+      || !_learn.targetPly) return false;
+
+    const entry = _learnComparisonEntry(key);
+    if (!entry || !isLearnExploreUci(entry.row?.uci)) return false;
+    const parentPath = _mainlinePathAtPly(_learn.targetPly - 1);
+    if (parentPath == null) return false;
+    const uciLine = buildLearnExploreUciLine(_learn.prevFen, entry.row);
+    if (!uciLine.length) return false;
+
+    // Seed the selected move (and a cached engine PV when available) as a
+    // side variation. addUciLine is UCI-idempotent, so revisiting the same
+    // row never duplicates notation.
+    const finalPath = board.tree?.addUciLine?.(uciLine, parentPath);
+    const parent = board.tree?.nodeAtPath?.(parentPath);
+    const selectedNode = parent?.children?.find(child => child.uci === uciLine[0]);
+    const selectedPath = selectedNode ? parentPath + selectedNode.id : null;
+    if (!selectedPath || !board.tree?.nodeAtPath?.(selectedPath)) return false;
+    board.dispatchEvent(new CustomEvent('tree-changed', {
+      detail: {
+        source: 'learn-explore',
+        path: finalPath || selectedPath,
+        selectedPath,
+      },
+    }));
+
+    const priorMoveHandler = _learn.moveHandler;
+    _learn.exploreReturn = {
+      targetPly: _learn.targetPly,
+      lessonPath: parentPath,
+      comparison: _learn.comparison,
+      orientation: board.orientation,
+      playerColor: board.playerColor,
+      interactionLocked: !!board.interactionLocked,
+      engineMuted: window.__engineMuted === true,
+      moveHandler: priorMoveHandler,
+      scrollX: window.scrollX,
+      scrollY: window.scrollY,
+    };
+    _learn.exploreSelection = {
+      key: entry.key,
+      label: entry.label,
+      san: entry.row.san || entry.row.uci,
+      uci: entry.row.uci,
+      cpWhite: entry.row.cpWhite ?? null,
+      mateWhite: entry.row.mateWhite ?? null,
+      lineLength: uciLine.length,
+    };
+
+    // Invalidate every pending Learn continuation before ordinary analysis
+    // receives engine events or board moves.
+    _learn.runId = (_learn.runId || 0) + 1;
+    _learn.compareSeq = (_learn.compareSeq || 0) + 1;
+    _learn.attemptCompleteSeq++;
+    if (_learn.attemptHoldTimer) clearTimeout(_learn.attemptHoldTimer);
+    _learn.attemptHoldTimer = 0;
+    _disarmLearnMoveHandler();
+    _learn.exploring = true;
+    _learn.exploreSessionId++;
+    window.__learnExploring = true;
+
+    // Freeze outgoing Learn output while Stockfish stops, then navigate.
+    // The nav listener starts a fresh visible analysis search only because
+    // the scoped exploration lease is now active; saved pause/lock settings
+    // themselves remain untouched.
+    window.__engineMuted = true;
+    try { engine.stop(); } catch {}
+    try { board.drawArrows?.([]); } catch {}
+    _clearLearnMistakeArrow();
+    _learn.arrowFen = null;
+    document.body.classList.remove('learn-phase-find');
+    document.body.classList.add('learn-exploring');
+    board.playerColor = 'both';
+    try { board.setInteractionLocked?.(false); } catch {}
+    try { applyAnalysisLineCount(+ui.rangeMultipv.value, { persist: false, restart: false }); } catch {}
+    try { window.__setLearnEngineControls?.({ active: true, preparing: false, exploring: true }); } catch {}
+    _renderLearnPanel('explore');
+
+    const navigated = board.goToPath?.(selectedPath);
+    if (!navigated) {
+      _exitLearnExploration({ restoreLesson: true });
+      return false;
+    }
+    window.__engineMuted = false;
+    try { syncDisplayedEvalToFen(board.fen(), { force: true }); } catch {}
+    console.log('[learn-explore] entered', {
+      key,
+      selected: entry.row.uci,
+      lineLength: uciLine.length,
+      selectedPath,
+    });
+    return true;
+  }
+
+  function _exitLearnExploration({ restoreLesson = true } = {}) {
+    if (!_learn.exploring) return false;
+    const saved = _learn.exploreReturn;
+    const savedSelection = _learn.exploreSelection;
+    _learn.exploreSessionId++;
+
+    // Mute before stop: Stockfish emits a final bestmove while winding down.
+    // FEN guards already reject it, and this gate prevents even a one-frame
+    // repaint while the lesson position is being restored.
+    window.__engineMuted = true;
+    try { engine.stop(); } catch {}
+    _learn.exploring = false;
+    window.__learnExploring = false;
+    document.body.classList.remove('learn-exploring');
+
+    if (saved) {
+      board.playerColor = saved.playerColor || 'both';
+      if (restoreLesson) {
+        try { board.setInteractionLocked?.(false); } catch {}
+        if (board.orientation !== saved.orientation) {
+          try { board.flipBoard(); } catch {}
+        }
+        const restored = board.goToPath?.(saved.lessonPath);
+        if (!restored && board.goToPly) board.goToPly(saved.targetPly - 1);
+        try { board.setInteractionLocked?.(saved.interactionLocked); } catch {}
+      } else {
+        try { board.setInteractionLocked?.(saved.interactionLocked); } catch {}
+      }
+      window.__engineMuted = saved.engineMuted;
+    }
+
+    _learn.exploreReturn = null;
+    _learn.exploreSelection = null;
+
+    if (restoreLesson && saved && _learn.active && !_learn.userDismissed) {
+      _learn.comparison = saved.comparison;
+      try { window.__setLearnEngineControls?.({ active: true, preparing: false, exploring: false }); } catch {}
+      _renderLearnPanel('comparison');
+      _drawLearnFeedbackArrows(_learn.comparison?.top?.[0] || null, { revealBest: true });
+
+      // A comparison may have been left on screen by "Try again", in which
+      // case its original grader was armed. Restore it only after the exact
+      // pre-mistake path and FEN are back, so no exploration move can ever
+      // be graded retroactively.
+      if (saved.moveHandler && !_learn.moveHandler && board.fen() === _learn.prevFen) {
+        _learn.moveHandler = saved.moveHandler;
+        board.addEventListener('move', saved.moveHandler);
+      }
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => window.scrollTo(saved.scrollX, saved.scrollY));
+      });
+    }
+
+    console.log('[learn-explore] exited', {
+      restoreLesson,
+      selected: savedSelection?.uci || null,
+    });
+    return true;
   }
 
   async function _loadLearnComparison() {
@@ -4313,6 +4551,7 @@ async function main() {
     _giveUpAndShowSolution();
   }
   function _enterLearnMode(targetPly, { preserveComparison = false } = {}) {
+    if (_learn.exploring) _exitLearnExploration({ restoreLesson: false });
     const plies = collectTimelinePlies();
     if (targetPly < 1 || targetPly >= plies.length) return;
     const cur = plies[targetPly];
@@ -4327,7 +4566,13 @@ async function main() {
     _learn.attemptShownAt = 0;
     try { board.setInteractionLocked?.(false); } catch {}
     _learn.active = true;
+    _learn.exploring = false;
+    window.__learnExploring = false;
     window.__learnOwnsEngine = true;
+    // Accuracy-pill shortcuts can enter a lesson without first running the
+    // setup/preparation screen. Assert the same control ownership here so
+    // every entry path locks competing engine actions consistently.
+    try { window.__setLearnEngineControls?.({ active: true, preparing: false, exploring: false }); } catch {}
     // Body class lets CSS hide PV / score / engine arrows so the user
     // can't peek the answer before they've tried.
     document.body.classList.add('learn-active');
@@ -4583,14 +4828,19 @@ async function main() {
   const learnCountBadge = document.getElementById('learn-btn-count');
   function _openLearnSetup() {
     if (_learn.preparing) return;
+    if (_learn.exploring) _exitLearnExploration({ restoreLesson: false });
     // Each new lesson session starts with the user's mistakes, even if they
     // chose to inspect the computer's mistakes at the end of the last one.
     _setLearnSetting('includeOpponentMistakes', 0);
     _learn.runId = (_learn.runId || 0) + 1;
     _learn.userDismissed = false;
     _learn.active = false;
+    _learn.exploring = false;
+    _learn.exploreReturn = null;
+    _learn.exploreSelection = null;
+    window.__learnExploring = false;
     window.__learnOwnsEngine = false;
-    document.body.classList.remove('learn-active', 'learn-phase-find', 'learn-preparing');
+    document.body.classList.remove('learn-active', 'learn-phase-find', 'learn-preparing', 'learn-exploring');
     _clearLearnMistakeArrow();
     try { if (board.drawArrows) board.drawArrows([]); } catch {}
     _learn.arrowFen = null;
@@ -4626,6 +4876,8 @@ async function main() {
       _learn.ignoredPlies = new Set();
       _learn.active = true;
       _learn.preparing = true;
+      _learn.exploring = false;
+      window.__learnExploring = false;
       window.__learnOwnsEngine = true;
       document.body.classList.add('learn-active', 'learn-preparing');
       try { board.setInteractionLocked?.(true); } catch {}
@@ -5503,7 +5755,10 @@ async function main() {
     // Learn and the explicit practice-hint search each temporarily own the
     // single browser engine. Navigation and move events still repaint the
     // UI, but must not start a competing search or consume their bestmove.
-    if (window.__learnOwnsEngine || window.__practiceHintOwnsEngine) return;
+    // Explore is an explicit scoped exception: Learn keeps variation safety
+    // while the ordinary visible-analysis loop temporarily runs.
+    if ((window.__learnOwnsEngine && !window.__learnExploring)
+      || window.__practiceHintOwnsEngine) return;
 
     // Root-cause guard for practice-start ghost-bestmove: during SAN
     // replay of an opening (and similar bulk move loads), every move
@@ -5562,7 +5817,7 @@ async function main() {
         }
       } else {
         engine.stop();
-        if (!paused && !locked) {
+        if ((!paused && !locked) || window.__learnExploring) {
           // Practice mode: engine search is ONLY used to find its own
           // move. On the user's turn we leave the engine idle so no
           // analysis leaks to the user. The `practice-thinking` class
@@ -6044,6 +6299,14 @@ async function main() {
     if (window.__threatMode) window.__exitThreatMode({ silent: true });
     _clearPracticeHint({ cancelSearch: true, clearResults: true, restartAnalysis: false });
     renderMoveList();
+    // Explore is a scoped visible-analysis lease inside Learn. Route every
+    // variation navigation through the normal analysis loop while leaving
+    // the user's persisted pause/lock settings untouched. Ordinary Learn
+    // navigation remains silent so it cannot compete with lesson probes.
+    if (window.__learnExploring) {
+      fireAnalysis();
+      return;
+    }
     // When returning to live, run the normal game loop (which lets the engine
     // auto-play if it's its turn). When reviewing history, just analyse.
     if (board.isAtLive()) {
@@ -6054,7 +6317,10 @@ async function main() {
       engine.stop();
       // Respect the locked/paused state — scrolling through history
       // must not revive a manually-stopped engine.
-      if (engineReady && !locked && !paused) engine.start(fen, searchLimits());
+      if (engineReady
+        && !window.__learnOwnsEngine
+        && !locked
+        && !paused) engine.start(fen, searchLimits());
     }
   });
 
@@ -6501,8 +6767,17 @@ async function main() {
         }
         break;
       case 'Escape':
-        // Esc — close any open floating card or help overlay
-        document.getElementById('kbd-help')?.remove();
+        // Higher-priority overlays close first. Otherwise Escape is the
+        // keyboard equivalent of the persistent Back-to-Lesson button.
+        // stopImmediatePropagation prevents the separate My Games Escape
+        // listener from closing an unrelated panel in the same keypress.
+        if (document.getElementById('kbd-help')) {
+          document.getElementById('kbd-help')?.remove();
+        } else if (window.__learnExploring) {
+          _exitLearnExploration({ restoreLesson: true });
+          e.preventDefault();
+          e.stopImmediatePropagation();
+        }
         break;
       case 'D':
         // Shift+D — toggle board-input path logging (in narration area)
@@ -13232,7 +13507,13 @@ async function main() {
   // Learn owns the single Stockfish worker. Engine controls stay locked for
   // the whole lesson; board-mutating controls are locked only during its
   // preparation sweep. History navigation and Cancel remain available.
-  window.__setLearnEngineControls = ({ active = false, preparing = false, done = 0, total = 0 } = {}) => {
+  window.__setLearnEngineControls = ({
+    active = false,
+    preparing = false,
+    exploring = false,
+    done = 0,
+    total = 0,
+  } = {}) => {
     setTemporaryDisabled(learnEngineControlIds, 'learn-engine', active);
     setTemporaryDisabled(learnPrepMutationIds, 'learn-prep', preparing);
     const label = powerBtn?.querySelector('.engine-power-label');
@@ -13241,14 +13522,22 @@ async function main() {
       powerBtn?.classList.remove('off');
       powerBtn?.classList.add('lesson-owned');
       if (label) {
-        label.textContent = preparing
+        label.textContent = exploring
+          ? 'EXPLORE · ENGINE ON'
+          : preparing
           ? `LESSON SCAN${total ? ` · ${done}/${total}` : ''}`
           : 'LESSON MODE';
       }
-      if (sub) sub.textContent = 'Cancel or close the lesson to release engine';
+      if (sub) {
+        sub.textContent = exploring
+          ? 'Live analysis · use Back to return to the lesson'
+          : 'Cancel or close the lesson to release engine';
+      }
       if (btnLock) {
-        btnLock.textContent = '🔒 Lesson engine';
-        btnLock.title = 'Learn from Mistakes currently controls Stockfish. Use Cancel in the lesson panel.';
+        btnLock.textContent = exploring ? '🔎 Exploring' : '🔒 Lesson engine';
+        btnLock.title = exploring
+          ? 'Live analysis is temporarily active. Use Back to return to the lesson.'
+          : 'Learn from Mistakes currently controls Stockfish. Use Cancel in the lesson panel.';
       }
     } else {
       powerBtn?.classList.remove('lesson-owned');
@@ -13312,8 +13601,13 @@ async function main() {
     if (window.__learnOwnsEngine) {
       powerBtn.classList.remove('off');
       powerBtn.classList.add('lesson-owned');
-      if (label && !label.textContent.startsWith('LESSON')) label.textContent = 'LESSON MODE';
-      if (sub) sub.textContent = 'Cancel or close the lesson to release engine';
+      if (window.__learnExploring) {
+        if (label) label.textContent = 'EXPLORE · ENGINE ON';
+        if (sub) sub.textContent = 'Live analysis · use Back to return to the lesson';
+      } else {
+        if (label && !label.textContent.startsWith('LESSON')) label.textContent = 'LESSON MODE';
+        if (sub) sub.textContent = 'Cancel or close the lesson to release engine';
+      }
       return;
     }
     powerBtn.classList.remove('lesson-owned');

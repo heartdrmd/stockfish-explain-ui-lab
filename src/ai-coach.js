@@ -171,6 +171,10 @@ export async function probeEngine(engine, fen, depth = 18, multipv = 5, movetime
         scoreKind: t.scoreKind,
         score: t.score,           // from side-to-move POV
         pvSan: pvSan.join(' '),
+        // Learn exploration can seed this exact cached continuation into
+        // the variation tree without lossy SAN parsing. Keep the same
+        // eight-ply cap as pvSan.
+        pvUci: (t.pv || []).slice(0, 8),
       };
     });
     return { lines, depth: result.history?.[result.history.length-1]?.depth || depth };

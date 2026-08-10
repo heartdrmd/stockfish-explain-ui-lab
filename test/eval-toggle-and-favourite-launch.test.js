@@ -40,7 +40,7 @@ test('desktop and mobile analysis can select one, two, or three engine lines dir
   assert.match(panels, /\.analysis-lines-control \{[\s\S]*?justify-content:\s*flex-start[\s\S]*?flex:\s*0 0 auto/);
   assert.match(panels, /body\.mobile-mode \.analysis-lines-btn[\s\S]*?min-width:\s*34px/);
   assert.match(panels, /body\.practice-mode:not\(\.practice-finished\) \.analysis-lines-control/);
-  assert.match(panels, /body\.learn-active \.analysis-lines-control/);
+  assert.match(panels, /body\.learn-active:not\(\.learn-exploring\) \.analysis-lines-control/);
 });
 
 test('desktop side columns scroll without moving or restructuring the board', () => {

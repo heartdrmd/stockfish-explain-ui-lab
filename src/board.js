@@ -445,6 +445,19 @@ export class BoardController extends EventTarget {
       detail: { path: newPath, ply: this.viewPly, live: atLivePath },
     }));
   }
+
+  /**
+   * Public, tree-aware navigation used by analysis features that already
+   * hold a durable variation path. Unlike the legacy main.js helper, this
+   * preserves viewPly/livePath truth so a move played afterward branches
+   * from the position actually shown.
+   */
+  goToPath(path) {
+    if (typeof path !== 'string' || !this.tree.nodeAtPath(path)) return false;
+    this._navigateTo(path);
+    return true;
+  }
+
   forward()   {
     const node = this.tree.nodeAtPath(this.tree.currentPath);
     if (!node || !node.children.length) return;

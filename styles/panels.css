@@ -2051,13 +2051,13 @@ body.practice-mode:not(.practice-finished) .analysis-lines-control,
    peek the answer in the score / PV / eval-bar while thinking. The
    green best-move arrow on the board is also hidden — solver should
    work it out themselves before clicking 'View solution'. */
-body.learn-active .pv-lines,
-body.learn-active #pv-lines,
-body.learn-active .pearl,
-body.learn-active .meta-big,
-body.learn-active .meta-nps,
-body.learn-active .ceval-bar,
-body.learn-active .analysis-lines-control {
+body.learn-active:not(.learn-exploring) .pv-lines,
+body.learn-active:not(.learn-exploring) #pv-lines,
+body.learn-active:not(.learn-exploring) .pearl,
+body.learn-active:not(.learn-exploring) .meta-big,
+body.learn-active:not(.learn-exploring) .meta-nps,
+body.learn-active:not(.learn-exploring) .ceval-bar,
+body.learn-active:not(.learn-exploring) .analysis-lines-control {
   visibility: hidden;
 }
 /* Hide chessground's drawn arrows (lines and shapes) while learn
@@ -2921,6 +2921,67 @@ body.mobile-mode #learn-panel .retro-choices {
 .learn-row-best td:nth-child(2) {
   font-size: 13.5px;
   letter-spacing: .01em;
+}
+.learn-explore-move {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 7px;
+  width: 100%;
+  min-height: 32px;
+  margin: -4px -5px;
+  padding: 4px 5px;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: inherit;
+  text-align: left;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.learn-explore-move:hover,
+.learn-explore-move:focus-visible {
+  border-color: rgba(56, 147, 232, .78);
+  background: rgba(56, 147, 232, .20);
+  outline: none;
+}
+.learn-explore-san { font-weight: 800; }
+.learn-explore-affordance {
+  color: #8bc7ff;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .025em;
+  text-transform: uppercase;
+}
+.learn-explore-status {
+  padding: 10px;
+  border: 1px solid rgba(56, 147, 232, .55);
+  border-radius: 4px;
+  background: rgba(56, 147, 232, .12);
+}
+.learn-explore-kicker {
+  display: block;
+  margin-bottom: 6px;
+  color: #8bc7ff;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: .08em;
+}
+.learn-explore-help {
+  margin-top: 10px !important;
+  line-height: 1.4;
+}
+.learn-back-to-lesson {
+  min-height: 44px;
+  font-size: 13px !important;
+}
+body.learn-exploring .engine-power.lesson-owned {
+  background: linear-gradient(180deg, #278a59 0%, #17623e 100%);
+}
+body.mobile-mode .learn-explore-move {
+  min-height: 44px;
 }
 .learn-mistake-arrow {
   position: absolute;
