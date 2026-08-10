@@ -7,6 +7,7 @@ import { requireAuth } from './auth.js';
 
 const PORTABLE_PREF_KEYS = new Set([
   'stockfish-explain.arrow-mode',
+  'stockfish-explain.arrow-last-mode',
   'stockfish-explain.analysis-lines',
   'stockfish-explain.clock-style',
   'stockfish-explain.panel-hidden',

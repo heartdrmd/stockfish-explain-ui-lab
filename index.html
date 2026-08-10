@@ -258,12 +258,13 @@
       <label for="select-arrow-mode">Best-move arrows on board</label>
       <select id="select-arrow-mode">
         <option value="off" selected>Off (default) — no arrows on the board</option>
+        <option value="lichess">On — Lichess dynamic (recommended)</option>
         <option value="thin">On — thin (top 3 candidates)</option>
         <option value="normal">On — normal (top 3 candidates)</option>
         <option value="thick">On — thick (top 3 candidates)</option>
         <option value="maneuver">On — maneuver (best PV, next 3 moves chained)</option>
       </select>
-      <small class="muted">Candidate modes overlay the engine's top 3 candidate moves (green = best, blue = 2nd, grey = 3rd). Maneuver mode (lila-style) chains the first 3 moves of the principal variation so you can see the plan, not just the next move.</small>
+      <small class="muted">Lichess dynamic uses pale blue for the best move and pale grey alternatives whose thickness reflects how close they are to #1. Clearly inferior alternatives are hidden. Legacy fixed-size and maneuver choices remain available.</small>
     </div>
 
     <div class="setting">
@@ -488,6 +489,9 @@
         <button type="button" id="eval-gauge-toggle" class="eval-gauge-toggle"
                 aria-label="Hide evaluation bar" aria-pressed="true"
                 title="Hide evaluation bar">E</button>
+        <button type="button" id="engine-arrows-toggle" class="eval-gauge-toggle engine-arrows-toggle"
+                aria-label="Show engine moves on board" aria-pressed="false"
+                title="Show engine moves on board">↗+</button>
       </div>
     </div>
 

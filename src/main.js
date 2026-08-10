@@ -1766,21 +1766,61 @@ async function main() {
   }
 
   // Arrow overlay setting — persisted. Default: OFF. Read by explain.js via
-  // window.__arrowMode; changes take effect on next engine update.
+  // window.__arrowMode; changes take effect on next engine update. The tiny
+  // button below the E gauge toggle changes visibility only and remembers the
+  // user's most recent non-off style.
   const ARROW_STORAGE = 'stockfish-explain.arrow-mode';
-  const savedArrowMode = localStorage.getItem(ARROW_STORAGE) || 'off';
+  const ARROW_LAST_STORAGE = 'stockfish-explain.arrow-last-mode';
+  const validArrowModes = new Set(['off', 'lichess', 'thin', 'normal', 'thick', 'maneuver']);
+  const rawSavedArrowMode = localStorage.getItem(ARROW_STORAGE) || 'off';
+  const savedArrowMode = validArrowModes.has(rawSavedArrowMode) ? rawSavedArrowMode : 'off';
   window.__arrowMode = savedArrowMode;
+  const arrowToggle = document.getElementById('engine-arrows-toggle');
+  const updateArrowToggle = () => {
+    if (!arrowToggle) return;
+    const enabled = window.__arrowMode !== 'off';
+    arrowToggle.setAttribute('aria-pressed', String(enabled));
+    arrowToggle.setAttribute('aria-label', enabled
+      ? 'Hide engine moves on board'
+      : 'Show engine moves on board');
+    arrowToggle.title = enabled
+      ? 'Hide live engine move arrows'
+      : 'Show live engine move arrows';
+    arrowToggle.textContent = enabled ? '↗' : '↗+';
+  };
+  const applyArrowMode = (mode, { restart = true } = {}) => {
+    // Learn and Practice Hint temporarily own the single Stockfish worker.
+    // Never let a presentation-only toggle restart or interrupt their search.
+    if (window.__learnOwnsEngine || window.__practiceHintOwnsEngine) return;
+    const value = validArrowModes.has(mode) ? mode : 'off';
+    window.__arrowMode = value;
+    localStorage.setItem(ARROW_STORAGE, value);
+    if (value !== 'off') localStorage.setItem(ARROW_LAST_STORAGE, value);
+    if (ui.selectArrowMode) ui.selectArrowMode.value = value;
+    updateArrowToggle();
+    // Engine-arrow visibility never removes Learn feedback arrows.
+    if (value === 'off'
+      && !document.body.classList.contains('learn-active')
+      && board?.drawArrows) board.drawArrows([]);
+    if (restart) fireAnalysis();
+  };
   if (ui.selectArrowMode) {
     ui.selectArrowMode.value = savedArrowMode;
     ui.selectArrowMode.addEventListener('change', () => {
-      const v = ui.selectArrowMode.value;
-      window.__arrowMode = v;
-      localStorage.setItem(ARROW_STORAGE, v);
-      // Clear any currently-drawn arrows immediately if turned off
-      if (v === 'off' && board && board.drawArrows) board.drawArrows([]);
-      fireAnalysis();
+      applyArrowMode(ui.selectArrowMode.value);
     });
   }
+  updateArrowToggle();
+  arrowToggle?.addEventListener('click', () => {
+    if (window.__arrowMode !== 'off') {
+      applyArrowMode('off');
+      return;
+    }
+    const saved = localStorage.getItem(ARROW_LAST_STORAGE);
+    applyArrowMode(saved && saved !== 'off' && validArrowModes.has(saved)
+      ? saved
+      : 'lichess');
+  });
 
   ui.selectFlavor.addEventListener('change', async () => {
     if (window.__learnOwnsEngine || window.__practiceHintOwnsEngine) return;
@@ -12137,6 +12177,7 @@ async function main() {
 
   const PORTABLE_PREF_KEYS = [
     'stockfish-explain.arrow-mode',
+    'stockfish-explain.arrow-last-mode',
     'stockfish-explain.analysis-lines',
     'stockfish-explain.clock-style',
     'stockfish-explain.panel-hidden',
@@ -13605,6 +13646,7 @@ async function main() {
 
   const learnEngineControlIds = [
     'btn-lock', 'engine-power', 'btn-threat', 'btn-pause', 'btn-restart',
+    'engine-arrows-toggle', 'select-arrow-mode',
     'analysis-lines-1', 'analysis-lines-2', 'analysis-lines-3',
     'select-flavor', 'range-skill', 'range-multipv', 'range-threads',
     'limit-mode', 'limit-value', 'select-hash', 'btn-clear-hash',

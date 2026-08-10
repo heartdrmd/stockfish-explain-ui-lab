@@ -23,6 +23,17 @@ test('eval bar has an independent persistent toggle without resizing the board',
   assert.match(main, /boardUnitHeight > usableHeight/);
 });
 
+test('engine arrows have an independent quick toggle directly below E', () => {
+  assert.match(html, /id="eval-gauge-toggle"[\s\S]*?id="engine-arrows-toggle"/);
+  assert.match(html, /id="select-arrow-mode"[\s\S]*?value="lichess"/);
+  assert.match(main, /stockfish-explain\.arrow-last-mode/);
+  assert.match(main, /engine-arrows-toggle[\s\S]*?applyArrowMode/);
+  assert.match(main, /applyArrowMode[\s\S]*?__learnOwnsEngine \|\| window\.__practiceHintOwnsEngine/);
+  assert.match(main, /learnEngineControlIds[\s\S]*?'engine-arrows-toggle', 'select-arrow-mode'/);
+  assert.match(main, /value === 'off'[\s\S]*?!document\.body\.classList\.contains\('learn-active'\)/);
+  assert.match(panels, /engine-arrows-toggle\[aria-pressed="true"\]/);
+});
+
 test('move-accuracy eye toggle never hides the eval bar', () => {
   assert.match(html, /id="nav-hide-panels"[^>]*title="Hide move accuracy colors"/);
   assert.match(main, /btn\.title = hidden \? 'Show move accuracy colors' : 'Hide move accuracy colors'/);

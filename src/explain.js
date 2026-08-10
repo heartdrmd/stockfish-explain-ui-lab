@@ -3,6 +3,7 @@
 
 import { Chess } from '../vendor/chess.js/chess.js';
 import * as Narr from './narrate.js';
+import { buildLichessCandidateArrows } from './engine-arrows.js';
 
 export class Explainer {
   constructor({ engine, board, ui }) {
@@ -125,6 +126,12 @@ export class Explainer {
     if (mode === 'off') {
       // Clear any arrows that were drawn earlier under a different setting
       this.board.drawArrows([]);
+    } else if (mode === 'lichess') {
+      // Match lila's local-engine hierarchy: pale blue for #1; pale grey
+      // alternatives whose width shrinks with their winning-chance deficit.
+      // Candidates 20+ points behind #1 are omitted instead of cluttering
+      // the board with a misleadingly competitive arrow.
+      this.board.drawArrows(buildLichessCandidateArrows(topMoves, 3));
     } else if (mode === 'maneuver' && best && best.pv && best.pv.length) {
       // lila-style maneuver arrows — chain the first 3 moves of the
       // principal variation so the user sees the engine's plan, not

@@ -128,7 +128,8 @@ test('Learn marks and previews the original error without replaying it', () => {
   assert.match(main, /board\.goToPly\(targetPly - 1\)[\s\S]*?_drawLearnMistakeArrow\(\)/);
   assert.match(main, /id = 'learn-mistake-arrow'/);
   assert.match(main, /The red arrow shows that original move; it has <strong>not<\/strong> been replayed/);
-  assert.match(panels, /\.learn-mistake-arrow line[\s\S]*?stroke:\s*#882020[\s\S]*?stroke-width:\s*1\.5625[\s\S]*?opacity:\s*\.28/);
+  assert.match(panels, /\.learn-mistake-arrow line[\s\S]*?stroke:\s*#882020[\s\S]*?stroke-width:\s*1\.5625[\s\S]*?opacity:\s*\.38/);
+  assert.match(panels, /\.learn-mistake-arrow marker path[\s\S]*?opacity:\s*\.48/);
 });
 
 test('View solution and Give up both reveal the best move through top-three comparison', () => {

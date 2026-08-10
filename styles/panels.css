@@ -46,6 +46,11 @@
   opacity: 0.88;
   color: var(--c-accent);
 }
+.engine-arrows-toggle[aria-pressed="true"] {
+  opacity: 0.95;
+  color: #7aa7ff;
+  border-color: color-mix(in srgb, #7aa7ff 70%, var(--c-border));
+}
 body.mobile-mode .eval-gauge-toggle {
   width: 26px;
   min-height: 26px;
@@ -3091,18 +3096,24 @@ body.mobile-mode .learn-explore-move {
   height: 100%;
   pointer-events: none;
   overflow: visible;
-  /* Lichess autoShape.ts uses Chessground paleRed at lineWidth 8.
-     Chessground's #882020 × .4 brush, combined with this site's .7
-     cg-shapes layer, is an effective .28 opacity. Match that exactly. */
+  /* Lichess autoShape.ts uses Chessground paleRed at lineWidth 8. This
+     dedicated overlay stays close to that subtle treatment while lifting
+     the arrowhead slightly for legibility on phone-sized boards. */
   filter: none;
 }
 .learn-mistake-arrow line {
   stroke: #882020;
   stroke-width: 1.5625;
   stroke-linecap: round;
-  opacity: .28;
+  /* Keep the original move subordinate to the answer, but no longer so
+     faint that its shaft disappears against dark squares. */
+  opacity: .38;
 }
-.learn-mistake-arrow marker path { fill: #882020; opacity: .28; }
+.learn-mistake-arrow marker path {
+  fill: #882020;
+  /* A touch stronger than the shaft so the direction remains readable. */
+  opacity: .48;
+}
 .retro-mistake-mark {
   display: inline-flex;
   align-items: center;
