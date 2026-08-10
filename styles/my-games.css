@@ -817,6 +817,16 @@
 }
 .board-below-slot:empty { display: none; }
 
+/* The saved-game Learn action must never be buried beneath the stats
+   scroller. Desktop places it directly below notation in this dedicated
+   slot; mobile deliberately keeps the same action below the board. */
+.review-learn-slot {
+  width: 100%;
+  flex: 0 0 auto;
+  margin-top: 8px;
+}
+.review-learn-slot:empty { display: none; }
+
 /* Slot under the move notation on the right — review-mode stats panels
    get moved here when a My Games game is loaded. */
 .notation-below-slot {
@@ -827,7 +837,14 @@
 }
 .notation-below-slot:empty { display: none; }
 .notation-below-slot .gs-side { font-size: 12px; padding: 8px 10px; margin-bottom: 6px; }
-.notation-below-slot .live-graph-cta { margin-top: 6px; }
+.gs-analysis-state {
+  margin: 1px 0 5px;
+  color: rgba(255, 255, 255, .58);
+  font-size: 10px;
+  line-height: 1.25;
+}
+.gs-side[data-analysis-state="partial"] .gs-analysis-state { color: #dcdcaa; }
+.gs-side[data-analysis-state="none"] .gs-n { color: rgba(255, 255, 255, .45); }
 
 /* Use the enlarged desktop review pane for readable mistake rows and a
    full-width Learn action instead of squeezing the CTA into a third cell. */
@@ -848,17 +865,17 @@ body:not(.mobile-mode).review-layout-active
   font-size: 13px;
 }
 body:not(.mobile-mode).review-layout-active
-.move-list-wrap.review-stats-expanded .notation-below-slot .live-graph-cta {
-  grid-column: 1 / -1;
-  margin-top: 2px;
-  padding: 12px;
+.move-list-wrap.review-stats-expanded .review-learn-slot .live-graph-cta {
+  margin-top: 0;
+  gap: 6px;
+  padding: 10px;
   border: 1px solid rgba(33, 150, 243, .34);
   border-radius: 7px;
   background: rgba(33, 150, 243, .07);
 }
 body:not(.mobile-mode).review-layout-active
-.move-list-wrap.review-stats-expanded .notation-below-slot .btn-learn-mistakes {
-  min-height: 48px;
+.move-list-wrap.review-stats-expanded .review-learn-slot .btn-learn-mistakes {
+  min-height: 44px;
   font-size: 14px;
 }
 
@@ -952,6 +969,13 @@ body:not(.mobile-mode).review-layout-active
   gap: 8px;
   justify-content: center;
 }
+.review-analysis-status {
+  color: rgba(255, 255, 255, .72);
+  font-size: 11px;
+  line-height: 1.35;
+}
+.review-analysis-status[data-analysis-state="none"] { color: #dcdcaa; }
+.review-analysis-status[data-analysis-state="partial"] { color: #ffd166; }
 .live-graph-cta .btn-learn-mistakes {
   font-size: 13px;
   padding: 10px 14px;

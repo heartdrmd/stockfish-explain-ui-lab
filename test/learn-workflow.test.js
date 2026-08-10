@@ -77,14 +77,17 @@ test('cancelled Learn scans release Stockfish before a changed-time restart', ()
   assert.match(main, /Finishing the cancelled scan before restarting/);
 });
 
-test('desktop loaded-game review gives Learn roughly twice notation space', () => {
+test('desktop loaded-game review keeps Learn fixed below notation and stats independently scrollable', () => {
   assert.match(main, /document\.body\.classList\.add\('review-layout-active'\)/);
   assert.match(main, /classList\.add\('review-stats-expanded'\)/);
   assert.match(main, /stockfish-explain\.stats-slot-height-v2/);
-  assert.match(layout, /review-layout-active[\s\S]*?review-stats-expanded > #move-list[\s\S]*?22vh/);
+  assert.ok(html.indexOf('id="move-list"') < html.indexOf('id="review-learn-slot"'));
+  assert.ok(html.indexOf('id="review-learn-slot"') < html.indexOf('id="notation-below-slot"'));
+  assert.match(layout, /review-layout-active[\s\S]*?review-stats-expanded > #move-list[\s\S]*?14vh/);
   assert.match(layout, /review-layout-active[\s\S]*?notation-below-slot[\s\S]*?46vh/);
-  assert.match(myGames, /review-stats-expanded[\s\S]*?live-graph-cta[\s\S]*?grid-column:\s*1 \/ -1/);
-  assert.match(myGames, /review-stats-expanded[\s\S]*?btn-learn-mistakes[\s\S]*?font-size:\s*14px/);
+  assert.match(myGames, /review-learn-slot[\s\S]*?flex:\s*0 0 auto/);
+  assert.match(myGames, /review-stats-expanded[\s\S]*?review-learn-slot \.live-graph-cta/);
+  assert.match(myGames, /review-stats-expanded[\s\S]*?review-learn-slot \.btn-learn-mistakes[\s\S]*?font-size:\s*14px/);
 });
 
 test('lesson sensitivity is easy to adjust on desktop, mobile, Practice, and saved games', () => {

@@ -691,6 +691,16 @@
           </div>
         </div>
         <div id="move-list" class="tview2-column"></div>
+        <!-- Desktop saved-game review keeps its primary Learn action in
+             a dedicated, non-scrolling slot immediately below notation.
+             Mobile continues to host the same controls in the graph card
+             below the board. -->
+        <div id="review-learn-slot" class="review-learn-slot" aria-live="polite"></div>
+        <!-- Docking slot for review-mode stats panels. When a game is
+             loaded from My Games, the per-side accuracy/mistakes/
+             blunders panels get moved here. The primary Learn action
+             remains outside this independently scrolling region. -->
+        <div id="notation-below-slot" class="notation-below-slot"></div>
         <!-- The existing live graph docks inline BELOW notation. Keeping
              the same element/slot preserves its canvas, click navigation,
              and review-mode transitions without a second graph instance. -->
@@ -698,12 +708,6 @@
         <input id="kbd-move" class="kbd-move" type="text"
                placeholder="Type a move: e4, Nf3, O-O… then ⏎"
                autocomplete="off" spellcheck="false">
-        <!-- Docking slot for review-mode stats panels. When a game is
-             loaded from My Games, the per-side accuracy/mistakes/
-             blunders panels + Learn/Reanalyze CTA column get moved
-             here, directly under the move list — where a Lichess
-             user would expect to see them. Empty when no game loaded. -->
-        <div id="notation-below-slot" class="notation-below-slot"></div>
       </div>
 
       <input id="depth-input" type="hidden" value="18">

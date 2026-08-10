@@ -35,6 +35,7 @@ export function computeGameStats(plies) {
   const empty = () => ({
     moves: 0, inaccuracies: 0, mistakes: 0, blunders: 0,
     acpl: 0, accuracy: 0,
+    totalMoves: 0, evaluatedMoves: 0,
     _sumLoss: 0, _sumAcc: 0,
   });
   const white = empty();
@@ -44,8 +45,11 @@ export function computeGameStats(plies) {
     mistake:    { white: [], black: [] },
     blunder:    { white: [], black: [] },
   };
-  if (!Array.isArray(plies) || plies.length < 2) {
-    return { white: finalise(white), black: finalise(black), byKind };
+  if (!Array.isArray(plies) || plies.length === 0) {
+    return {
+      white: finalise(white), black: finalise(black), byKind,
+      coverage: { state: 'none', evaluatedMoves: 0, totalMoves: 0 },
+    };
   }
   // ACPL cap: clamp per-move loss to 1000 cp so a single blow-up in a
   // lost position doesn't dominate the average (industry-standard cap —
@@ -57,6 +61,11 @@ export function computeGameStats(plies) {
       : plies[i - 1];
     const after = plies[i];
     const mover = moverColor(after, i);
+    const bucket = mover === 'white' ? white : black;
+    bucket.totalMoves++;
+    const beforeHasEval = i === 0 || before?.cpWhite != null || before?.mate != null;
+    const afterHasEval = after?.cpWhite != null || after?.mate != null;
+    if (beforeHasEval && afterHasEval) bucket.evaluatedMoves++;
     // Shared classifier (audit A5) — same sigmoid/thresholds as the pills,
     // Mistake Bank, and PGN. moverWinDrop returns null for unevaluated
     // plies and for terminal mate:0, so those are skipped (A3 + A11 — a
@@ -76,10 +85,8 @@ export function computeGameStats(plies) {
       const cpBefore = (before.cpWhite ?? 0) * sign;
       const cpAfter  = (after.cpWhite  ?? 0) * sign;
       const cpl = Math.max(0, Math.min(ACPL_CAP_CP, cpBefore - cpAfter));
-      const b = mover === 'white' ? white : black;
-      b._sumLoss += cpl;
+      bucket._sumLoss += cpl;
     }
-    const bucket = mover === 'white' ? white : black;
     bucket.moves++;
     bucket._sumAcc += (acc == null ? 100 : acc);
     const plyNum = i + 1;
@@ -87,15 +94,36 @@ export function computeGameStats(plies) {
     else if (kind === 'mistake')    { bucket.mistakes++;     byKind.mistake[mover].push(plyNum); }
     else if (kind === 'inaccuracy') { bucket.inaccuracies++; byKind.inaccuracy[mover].push(plyNum); }
   }
-  return { white: finalise(white), black: finalise(black), byKind };
+  const whiteStats = finalise(white);
+  const blackStats = finalise(black);
+  const evaluatedMoves = whiteStats.evaluatedMoves + blackStats.evaluatedMoves;
+  const totalMoves = whiteStats.totalMoves + blackStats.totalMoves;
+  const state = evaluatedMoves === 0 ? 'none'
+    : evaluatedMoves < totalMoves ? 'partial'
+    : 'complete';
+  return {
+    white: whiteStats,
+    black: blackStats,
+    byKind,
+    coverage: { state, evaluatedMoves, totalMoves },
+  };
 }
 
 function finalise(b) {
+  const state = b.evaluatedMoves === 0 ? 'none'
+    : b.evaluatedMoves < b.totalMoves ? 'partial'
+    : 'complete';
   if (b.moves === 0) {
-    return { moves: 0, inaccuracies: 0, mistakes: 0, blunders: 0, acpl: 0, accuracy: 0 };
+    return {
+      moves: 0, totalMoves: b.totalMoves, evaluatedMoves: b.evaluatedMoves, analysisState: state,
+      inaccuracies: 0, mistakes: 0, blunders: 0, acpl: 0, accuracy: 0,
+    };
   }
   return {
     moves:         b.moves,
+    totalMoves:    b.totalMoves,
+    evaluatedMoves: b.evaluatedMoves,
+    analysisState: state,
     inaccuracies:  b.inaccuracies,
     mistakes:      b.mistakes,
     blunders:      b.blunders,
@@ -113,29 +141,36 @@ function finalise(b) {
 export function renderStatsPanel({ side, name, stats, isUser, byKind }) {
   const dot = side === 'white' ? '●' : '○';
   const klass = isUser ? 'gs-side gs-side-user' : 'gs-side';
+  const complete = stats.analysisState === 'complete';
   const acc = stats.accuracy;
   const accColor = acc >= 90 ? '#4ec9b0' : acc >= 75 ? '#9cdcfe' : acc >= 60 ? '#dcdcaa' : '#f48771';
   const kindRow = (n, label, kind, kindKey) => {
     const plies = (byKind && byKind[kindKey] && byKind[kindKey][side]) || [];
-    const clickable = plies.length > 0;
+    const clickable = complete && plies.length > 0;
     const cls = `gs-row gs-${kind}${clickable ? ' gs-clickable' : ''}`;
     const dataAttrs = clickable
       ? ` data-side="${side}" data-kind="${kindKey}" data-plies="${plies.join(',')}" title="Click to try a better move at each ${label.toLowerCase()}"`
       : '';
-    return `<div class="${cls}"${dataAttrs}><span class="gs-n">${n}</span><span class="gs-label">${label}</span></div>`;
+    return `<div class="${cls}"${dataAttrs}><span class="gs-n">${complete ? n : '—'}</span><span class="gs-label">${label}</span></div>`;
   };
+  const coverageLabel = complete
+    ? `Analyzed · ${stats.evaluatedMoves} move${stats.evaluatedMoves === 1 ? '' : 's'}`
+    : stats.analysisState === 'partial'
+      ? `Partial analysis · ${stats.evaluatedMoves}/${stats.totalMoves} moves`
+      : stats.totalMoves > 0 ? 'Not analyzed yet' : 'No moves';
   return `
-    <div class="${klass}" data-side="${side}">
+    <div class="${klass}" data-side="${side}" data-analysis-state="${stats.analysisState}">
       <div class="gs-head"><span class="gs-dot">${dot}</span><strong>${escapeHtml(name || (side === 'white' ? 'White' : 'Black'))}</strong></div>
+      <div class="gs-analysis-state">${coverageLabel}</div>
       ${kindRow(stats.inaccuracies, 'Inaccuracies', 'inacc', 'inaccuracy')}
       ${kindRow(stats.mistakes,     'Mistakes',     'mist',  'mistake')}
       ${kindRow(stats.blunders,     'Blunders',     'blun',  'blunder')}
       <div class="gs-row gs-acpl">
-        <span class="gs-n">${stats.acpl}</span>
+        <span class="gs-n">${complete ? stats.acpl : '—'}</span>
         <span class="gs-label">Average centipawn loss</span>
       </div>
       <div class="gs-row gs-acc">
-        <span class="gs-n" style="color:${accColor}">${stats.accuracy}%</span>
+        <span class="gs-n"${complete ? ` style="color:${accColor}"` : ''}>${complete ? `${stats.accuracy}%` : '—'}</span>
         <span class="gs-label">Accuracy</span>
       </div>
     </div>`;

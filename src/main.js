@@ -5556,7 +5556,10 @@ async function main() {
 
   async function persistReanalysisForLoadedGame() {
     const priorMeta = window.__loadedGameAnalysisMeta || null;
-    const freshMeta = lastSweepStats?.completed && lastSweepStats.probed > 0
+    // A completed scan is save-worthy even when every position came from
+    // the validated eval cache (probed === 0). Reuse is still a real Learn
+    // run and must stamp the chosen duration/date and refresh the review.
+    const freshMeta = lastSweepStats?.completed && lastSweepStats.total > 0
       ? {
           version: 1,
           analyzedAt: new Date().toISOString(),
@@ -5585,6 +5588,12 @@ async function main() {
       }
     }
     window.__loadedGameAnalysisMeta = freshMeta;
+    // A Learn/Reanalyze run changes the saved evaluations that power the
+    // review statistics. Refresh the already-open workspace explicitly so
+    // inaccuracies, mistakes, blunders, ACPL, accuracy, and the saved-at
+    // label update together instead of waiting for an unrelated move or
+    // engine event.
+    try { window.__refreshLoadedGameReview?.({ plies }); } catch {}
     return true;
   }
 
@@ -11570,6 +11579,7 @@ async function main() {
     const closeBtn  = document.getElementById('live-graph-close');
     const canvas    = document.getElementById('live-eval-graph');
     const statsWrap = document.getElementById('live-graph-stats');
+    const reviewLearnSlot = document.getElementById('review-learn-slot');
     if (!btn || !card || !canvas) return;
 
     const STORAGE_KEY = 'stockfish-explain.live-graph-visible';
@@ -11591,15 +11601,61 @@ async function main() {
         const n = cur.children[0];
         if (!n || !n.fen) break;
         const ev = fenEvalCache.get(n.fen) || {};
-        out.push({ san: n.san, cpWhite: ev.cpWhite ?? null, mate: ev.mate ?? null });
+        out.push({ san: n.san, fen: n.fen, cpWhite: ev.cpWhite ?? null, mate: ev.mate ?? null });
         cur = n;
       }
       return out;
     }
 
+    function findReviewCta() {
+      return reviewLearnSlot?.querySelector('.live-graph-cta')
+        || statsWrap.querySelector('.live-graph-cta');
+    }
+
+    function placeReviewCta(cta) {
+      if (!cta || !card.classList.contains('review-mode')) return;
+      if (document.body.classList.contains('mobile-mode')) {
+        // Preserve the established phone layout: Learn immediately below
+        // the board/graph, before the two side-stat panels.
+        statsWrap.prepend(cta);
+      } else if (reviewLearnSlot && cta.parentElement !== reviewLearnSlot) {
+        // Desktop: primary action is outside the independently scrolling
+        // stats pane, so normal zoom can never bury it.
+        reviewLearnSlot.appendChild(cta);
+      }
+    }
+
+    function syncReviewCtaStatus(cta, stats) {
+      const status = cta?.querySelector('.review-analysis-status');
+      if (!status || !stats?.coverage) return;
+      const { state, evaluatedMoves, totalMoves } = stats.coverage;
+      const savedLabel = state === 'complete'
+        ? savedAnalysisLabel(card._reviewGame?.plies)
+        : '';
+      status.dataset.analysisState = state;
+      status.textContent = state === 'none'
+        ? 'Not analyzed yet · Learn will scan this game'
+        : state === 'partial'
+          ? `Partial analysis · ${evaluatedMoves}/${totalMoves} moves`
+          : savedLabel || `Analyzed · ${totalMoves} moves`;
+    }
+
+    function refreshReviewHeading() {
+      const graphHeading = card.querySelector('.live-graph-head strong');
+      if (!graphHeading) return;
+      const savedLabel = savedAnalysisLabel(card._reviewGame?.plies);
+      graphHeading.textContent = `📈 Evaluation timeline${savedLabel ? ` · ${savedLabel}` : ''}`;
+    }
+
     function update() {
       if (card.hidden) return;
       const plies = pliesFromBoard();
+      const stats = computeGameStats(plies);
+      const reviewCta = findReviewCta();
+      if (reviewCta && card.classList.contains('review-mode')) {
+        placeReviewCta(reviewCta);
+        syncReviewCtaStatus(reviewCta, stats);
+      }
       if (!graph) graph = new EvalGraph(canvas, { onClickPly: (ply) => {
         try { board.goToPly?.(ply); } catch {}
       }});
@@ -11608,8 +11664,7 @@ async function main() {
       // either viewPly or the current mainline length depending on state.
       const viewPly = typeof board.viewPly === 'number' ? board.viewPly : plies.length;
       graph.setCurrentPly(viewPly);
-      if (plies.length >= 2) {
-        const stats = computeGameStats(plies);
+      if (plies.length >= 1) {
         // Player-name resolution: in REVIEW mode we have the loaded
         // game stashed on card._reviewGame; pull white/black names
         // from there (so we don't label both sides 'Stockfish' when
@@ -11645,7 +11700,7 @@ async function main() {
         // Keep the review actions alive across graph refreshes. Engine
         // bestmove/navigation events call update() repeatedly; replacing
         // the stats HTML used to delete the archived-game Learn button.
-        const existingReviewCta = statsWrap.querySelector('.live-graph-cta');
+        const existingReviewCta = findReviewCta();
         statsWrap.innerHTML = [
           renderStatsPanel({ side: 'white', name: whiteName, stats: stats.white, isUser: userSideForReview === 'white', byKind: stats.byKind }),
           renderStatsPanel({ side: 'black', name: blackName, stats: stats.black, isUser: userSideForReview === 'black', byKind: stats.byKind }),
@@ -11653,10 +11708,8 @@ async function main() {
         ].join('');
         if (existingReviewCta && card.classList.contains('review-mode')) {
           statsWrap.querySelector('.gs-reanalyze-wrap')?.remove();
-          // On phones the important action comes immediately below the
-          // graph; desktop keeps it after the two side-stat panels.
-          if (document.body.classList.contains('mobile-mode')) statsWrap.prepend(existingReviewCta);
-          else statsWrap.appendChild(existingReviewCta);
+          placeReviewCta(existingReviewCta);
+          syncReviewCtaStatus(existingReviewCta, stats);
         }
         // Live panel: cycling acts on the CURRENT mainline directly,
         // no game-load step needed.
@@ -11726,6 +11779,7 @@ async function main() {
     // Helper: return the card to its floating position in <body> and
     // clear review-mode styling. Called by any toggle-off path.
     function exitReviewMode() {
+      findReviewCta()?.remove();
       card.classList.remove('review-mode');
       document.body.classList.remove('review-layout-active');
       card._reviewGame = null;
@@ -11766,6 +11820,9 @@ async function main() {
       requestAnimationFrame(() => { rafPending = false; update(); });
     }
     board.addEventListener('move', requestUpdate);
+    // applyMobile runs earlier on resize, so this repaint also moves the
+    // one CTA between its desktop and phone hosts after rotation/resizing.
+    window.addEventListener('resize', requestUpdate);
     // bestmove fires at the end of each search — by then the eval
     // cache has the final cp/mate for the analysed FEN. Refresh the
     // curve so the newest point lands in the right place.
@@ -11921,11 +11978,7 @@ async function main() {
       card.classList.add('review-mode');
       document.body.classList.add('review-layout-active');
       card._reviewGame = game;   // so update() can pull player names
-      const graphHeading = card.querySelector('.live-graph-head strong');
-      if (graphHeading) {
-        const savedLabel = savedAnalysisLabel(game?.plies);
-        graphHeading.textContent = `📈 Evaluation timeline${savedLabel ? ` · ${savedLabel}` : ''}`;
-      }
+      refreshReviewHeading();
       // Dock the card into the slot below the board so the timeline
       // is embedded in the page flow (user feedback).
       const slot = document.getElementById('board-below-slot');
@@ -11968,17 +12021,22 @@ async function main() {
           card._movetimeChart = MoveTime.render(mtCanvas);
         }
       } catch (err) { console.warn('[movetime] render failed', err); }
-      // Append the CTA column to the stats grid so it sits next to the
-      // two gs-side panels. Rebuilt on every call so it points at the
-      // currently-loaded game.
+      // Build the saved-game controls. Desktop places them in the fixed
+      // slot beneath notation; mobile keeps them in the graph card below
+      // the board. Rebuilt on each load for the current game.
       setTimeout(() => {
         // By now update() has rendered the stats panels. Find the
         // trailing reanalyze-wrap and replace it with a proper CTA col.
         const oldReanWrap = statsWrap.querySelector('.gs-reanalyze-wrap');
         if (oldReanWrap) oldReanWrap.remove();
+        // A second saved game may be opened without closing the first.
+        // Keep exactly one CTA, wired to the newly loaded review.
+        reviewLearnSlot?.querySelector('.live-graph-cta')?.remove();
+        statsWrap.querySelector('.live-graph-cta')?.remove();
         const cta = document.createElement('div');
         cta.className = 'live-graph-cta';
         cta.innerHTML = `
+          <div class="review-analysis-status" data-analysis-state="none">Checking saved analysis…</div>
           <button class="btn btn-learn-mistakes" data-cta="learn">▶ LEARN FROM YOUR MISTAKES</button>
           <div class="gs-reanalyze-row">
             <label class="muted" style="font-size:10px;">Time per move:
@@ -11995,8 +12053,8 @@ async function main() {
             <button class="gs-reanalyze-stop"      data-cta="stop" hidden>⏹ Stop</button>
           </div>
           <span class="gs-reanalyze-status"></span>`;
-        if (document.body.classList.contains('mobile-mode')) statsWrap.prepend(cta);
-        else statsWrap.appendChild(cta);
+        placeReviewCta(cta);
+        syncReviewCtaStatus(cta, computeGameStats(pliesFromBoard()));
         // Wire CTA
         cta.querySelector('[data-cta="learn"]').addEventListener('click', () => {
           const btn = document.getElementById('btn-learn-mistakes');
@@ -12024,7 +12082,10 @@ async function main() {
                 else st.textContent = ` ${d}/${t} (~${Math.round(movetimeMs / 1000)}s/move)`;
               },
             });
-            if (st) st.textContent = finished ? ' ✓ done' : ' ⏹ stopped';
+            if (finished) {
+              const persisted = await persistReanalysisForLoadedGame();
+              if (st) st.textContent = persisted ? ' ✓ saved' : ' ✓ done · save failed';
+            } else if (st) st.textContent = ' ⏹ stopped';
             update();   // re-render stats with fresh eval cache
           } catch (err) {
             if (st) st.textContent = ' ✗ failed';
@@ -12038,6 +12099,11 @@ async function main() {
           try { window.__stopRetrospectiveSweep?.(); } catch {}
         });
       }, 120);
+    };
+    window.__refreshLoadedGameReview = ({ plies } = {}) => {
+      if (card._reviewGame && Array.isArray(plies)) card._reviewGame.plies = plies;
+      refreshReviewHeading();
+      update();
     };
     // Clicking the × button also exits review mode.
     closeBtn?.addEventListener('click', () => { card.classList.remove('review-mode'); });

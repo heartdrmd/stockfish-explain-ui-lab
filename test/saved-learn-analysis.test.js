@@ -23,7 +23,15 @@ test('saved analysis records time and reuses cached positions', () => {
   assert.match(main, /!force && movetimeMs <= 0 && existing/);
   assert.match(main, /if \(reusableSaved \|\|/);
   assert.match(main, /movetimeMs:\s*lastSweepStats\.movetimeMs \|\| 0/);
+  assert.match(main, /lastSweepStats\?\.completed && lastSweepStats\.total > 0/);
+  assert.doesNotMatch(main, /lastSweepStats\?\.completed && lastSweepStats\.probed > 0/);
   assert.match(main, /Saved Learn analysis · \$\{budget\}/);
+});
+
+test('completed Learn explicitly refreshes the loaded review with saved plies', () => {
+  assert.match(main, /window\.__refreshLoadedGameReview\?\.\(\{ plies \}\)/);
+  assert.match(main, /window\.__refreshLoadedGameReview = \(\{ plies \} = \{\}\) =>/);
+  assert.match(main, /card\._reviewGame\.plies = plies[\s\S]*?refreshReviewHeading\(\)[\s\S]*?update\(\)/);
 });
 
 test('Learn reuses equal-or-deeper scan duration with full coverage', () => {
