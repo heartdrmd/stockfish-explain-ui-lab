@@ -1019,7 +1019,7 @@ async function main() {
         0,
         isFirstLichessBoot
           ? `Loading WASM + neural network. First-time setup — only happens once.`
-          : `Loading from browser cache.`
+          : `Loading neural network (browser cache is used when available).`
       );
 
       const onBootProgress = (ev) => {
@@ -1046,7 +1046,7 @@ async function main() {
         // fetch-start or progress: render a bar with bytes + percent.
         const pct = d.total ? Math.min(100, Math.round((d.received / d.total) * 100)) : 0;
         renderBar(
-          `Downloading <strong>${lbl}</strong> ${fmt(d.received)}` +
+          `Loading <strong>${lbl}</strong> ${fmt(d.received)}` +
             (d.total ? ` / ${fmt(d.total)} (${pct}%)` : ' …'),
           pct,
           isFirstLichessBoot
@@ -1295,6 +1295,7 @@ async function main() {
   let practiceHintRunId   = 0;
   let practiceHintHistory = [];
   window.__practiceHintOwnsEngine = false;
+  window.__practiceStarting = false;
   let paused              = false;
   let locked              = localStorage.getItem('stockfish-explain.engine-locked') === '1';
   window.__engineMuted    = locked;
@@ -1446,6 +1447,16 @@ async function main() {
       } else {
         window.__pendingFlavorSwitch = null;
       }
+    }
+  }
+
+  async function waitForActiveEngineRecovery(timeoutMs = 120_000) {
+    const deadline = Date.now() + timeoutMs;
+    while (window.__engineRecovering && Date.now() < deadline) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    if (window.__engineRecovering || !engineReady || !engine?.ready) {
+      throw new Error('Engine recovery did not finish successfully.');
     }
   }
 
@@ -2694,6 +2705,16 @@ async function main() {
           if (addRes) tree.currentPath = addRes.path;
         } catch (err) { console.warn('[draft] tree.addNode failed for', san, err); }
       }
+      // The replay above advances tree.currentPath directly instead of going
+      // through BoardController.playEngineMove/_onUserMove, so it must also
+      // advance the board's durable live cursor. Without this, isAtLive()
+      // remains false after reload: an unfinished Practice game falls into
+      // free-analysis mode and starts Stockfish on what is actually the
+      // user's turn. The next Practice action then has to interrupt that
+      // accidental search—the lifecycle race this restore is meant to avoid.
+      board.livePath = tree.currentPath;
+      board.viewPly = null;
+      board._historicalChess = null;
       // Hard re-render
       board.cg.set({ fen: board.chess.fen(), turnColor: board.chess.turn() === 'w' ? 'white' : 'black' });
       if (draft.orientation && draft.orientation !== board.orientation) board.flipBoard();
@@ -2739,9 +2760,12 @@ async function main() {
       clearDraft();
     }
   }
-  // Restore on first paint, after the main() setup has finished
-  // populating board + UI.
-  setTimeout(maybeRestoreDraft, 150);
+  // Draft restore is deliberately invoked at the END of main(), immediately
+  // before the first analysis flush. It used to run from a 150 ms timer:
+  // free analysis could begin first, then the timer restored an unfinished
+  // Practice game and stopped that brand-new infinite search. On the Lichess
+  // full worker, a stop only a few milliseconds after `go infinite` can fail
+  // to produce bestmove and force a needless 108 MB engine rebuild.
 
   // ─── Eval timeline (#1) ─────────────────────────────────────────
   // Throttled SVG re-render whenever the game state or cached evals
@@ -5740,6 +5764,10 @@ async function main() {
   }
 
   function fireAnalysis() {
+    if (window.__practiceStarting) {
+      console.log('[analysis] suppressed during atomic Practice transition');
+      return;
+    }
     if (window.__fireScheduled) return;
     window.__fireScheduled = requestAnimationFrame(() => {
       window.__fireScheduled = 0;
@@ -5747,6 +5775,9 @@ async function main() {
     });
   }
   function _fireAnalysisNow() {
+    // Defense in depth for a frame that was queued immediately before the
+    // transition flag was raised. The Practice handler normally cancels it.
+    if (window.__practiceStarting) return;
     // If main() hasn't finished declaring all its state yet, defer.
     // Flushed once at the end of main(). Prevents TDZ crashes when
     // bootEngine's post-await fireAnalysis() races the rest of main().
@@ -8390,6 +8421,10 @@ async function main() {
     });
 
     pStart.addEventListener('click', async () => {
+      if (window.__practiceStarting) {
+        console.log('[practice-start] duplicate click ignored while transition is active');
+        return;
+      }
       const useCurrent = pUseCurrent.checked;
       // Diagnostic — snapshot the selector state at Start-click time.
       // User reported on a fresh PC that picking an opening then
@@ -8467,11 +8502,56 @@ async function main() {
       window.__practiceStyle = style;
       refreshReplayButton();
 
+      // ── Atomic free-analysis → Practice transition ────────────────
+      // UCI stop is asynchronous: Stockfish is not idle until the old
+      // search returns its matching bestmove. Keep the board read-only and
+      // suppress every analysis restart until that boundary is confirmed.
+      // If the boundary cannot be reached promptly, rebuild the engine while
+      // the same lock remains active, then create the Practice position.
+      const previousBoardInteractionLocked = !!board.interactionLocked;
+      const startButtonLabel = pStart.innerHTML;
+      let practiceStarted = false;
+      window.__practiceStarting = true;
+      pStart.disabled = true;
+      pStart.setAttribute('aria-busy', 'true');
+      pStart.textContent = 'PREPARING ENGINE…';
+      try { board.setInteractionLocked?.(true); } catch {}
+      if (window.__fireScheduled) {
+        try { cancelAnimationFrame(window.__fireScheduled); } catch {}
+        window.__fireScheduled = 0;
+      }
+      ui.narrationText.innerHTML = '⏳ Preparing Practice — safely stopping the previous analysis…';
+
+      try {
+
       // A new practice session gets a fresh hint history even when it
       // starts from the current board (that path intentionally skips
       // board.newGame(), whose listener normally performs this reset).
       _clearPracticeHint({ cancelSearch: true, clearResults: true, restartAnalysis: false });
       practiceHintHistory = [];
+
+      const transitionEngine = engine;
+      const idleResult = typeof transitionEngine?.quiesce === 'function'
+        ? await transitionEngine.quiesce({ timeoutMs: 4_000, discardPending: true })
+        : { ok: false, status: 'quiesce-unavailable' };
+      console.log('[practice-start] engine quiescence result', idleResult);
+      if (!idleResult.ok) {
+        const recoveryFlavor = ui.selectFlavor.value || currentFlavor;
+        console.warn('[practice-start] old analysis did not reach idle — recovering before board reset', {
+          status: idleResult.status,
+          flavor: recoveryFlavor,
+        });
+        ui.narrationText.innerHTML =
+          `⏳ Previous analysis did not stop cleanly. Restarting <strong>${recoveryFlavor}</strong> once before Practice…`;
+        if (window.__engineRecovering) {
+          await waitForActiveEngineRecovery();
+        } else {
+          await switchEngineFlavor(recoveryFlavor);
+        }
+        if (!engineReady || !engine?.ready) {
+          await waitForActiveEngineRecovery();
+        }
+      }
 
       if (useCurrent) {
         // Keep the current board position as-is — don't newGame / reset.
@@ -8505,7 +8585,7 @@ async function main() {
         board.playerColor = color;
         // Backup signal for the off-turn defense in board.js _onUserMove.
         try { document.body.dataset.practiceColor = color; } catch {}
-        board.newGame();
+        board.newGame({ force: true });
         try { clearDraft(); } catch {}
         try { if (typeof fenEvalCache !== 'undefined') fenEvalCache.clear(); } catch {}
         // Clear any stale analysis-mode 'archived' marker so the new
@@ -8548,7 +8628,7 @@ async function main() {
           window.__practiceReplayInProgress = true;
           try {
             const played = playOpening(op.moves);
-            if (played) board.playUciMoves(played.uciMoves, { animate: false });
+            if (played) board.playUciMoves(played.uciMoves, { animate: false, force: true });
           } finally {
             window.__practiceReplayInProgress = false;
           }
@@ -8677,6 +8757,25 @@ async function main() {
 
       // Explicit move-list re-render to match the fresh tree state.
       try { renderMoveList(); } catch {}
+
+      practiceStarted = true;
+      } catch (err) {
+        console.error('[practice-start] atomic transition failed', err);
+        pModal.hidden = false;
+        ui.narrationText.innerHTML =
+          `❌ Practice could not start safely: ${escapeHtml(err?.message || String(err))}. ` +
+          `Your saved opening and settings were not removed; try Start again.`;
+      } finally {
+        window.__practiceStarting = false;
+        pStart.disabled = false;
+        pStart.removeAttribute('aria-busy');
+        pStart.innerHTML = startButtonLabel;
+        try {
+          board.setInteractionLocked?.(practiceStarted ? false : previousBoardInteractionLocked);
+        } catch {}
+      }
+
+      if (!practiceStarted) return;
 
       // Kick the loop — if it's engine's turn first, it plays immediately.
       // User-reported bug: practicing as White with an opening that ends
@@ -14519,7 +14618,14 @@ async function main() {
   renderDissection(board.fen());
   wireTabs();
 
-  // All main() state is now declared — safe to run fireAnalysis.
+  // Finish restoring any fresh game draft BEFORE allowing the first engine
+  // request. Board events raised by restore simply set pendingFireAnalysis
+  // while mainInitDone is false, so startup still emits exactly one search
+  // for the final board + mode (or none when it is the user's Practice turn).
+  maybeRestoreDraft();
+
+  // All main() state is now declared and the final board mode is known — safe
+  // to run the one coalesced initial analysis.
   mainInitDone = true;
   if (pendingFireAnalysis) {
     pendingFireAnalysis = false;

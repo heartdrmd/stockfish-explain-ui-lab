@@ -185,6 +185,32 @@ export class Engine extends EventTarget {
 
     this.history    = [];
     this.topMoves   = new Map();
+
+    // Search-lifecycle state is initialized here (rather than lazily in the
+    // first search) so transitions and tests can reason about one consistent
+    // shape. A worker rebuild creates a new Engine in main.js, but keeping the
+    // wrapper internally complete also makes same-instance teardown safe.
+    this._pendingRequest = null;
+    this._pendingGos = 0;
+    this._pendingOpts = null;
+    this._bestmoveAwaited = false;
+    this._currentSearchIsInfinite = false;
+    this._searchId = 0;
+    this._workerGeneration = 0;
+    this._quiescing = false;
+    this._quiescePromise = null;
+    this._livenessProbe = null;
+    this._stallTimer = 0;
+    this._healthCheckId = 0;
+    this._watchdogId = 0;
+    this._stopHonorId = 0;
+    this._stopHonorId2 = 0;
+
+    // Overridable in focused unit tests; production keeps the conservative
+    // 30 s quiet window and a short, non-destructive liveness challenge.
+    this._infiniteStallMs = 30_000;
+    this._boundedStallMs = 6_000;
+    this._livenessTimeoutMs = 2_000;
   }
 
   async boot({ flavor = 'auto' } = {}) {
@@ -239,6 +265,10 @@ export class Engine extends EventTarget {
       this.worker = workerOpts
         ? new Worker(this.scriptPath, workerOpts)
         : new Worker(this.scriptPath);
+      this._workerGeneration++;
+      this._crashed = false;
+      this._quiescing = false;
+      this._quiescePromise = null;
     } catch (err) {
       console.error('Engine worker failed to start:', err);
       throw err;
@@ -430,6 +460,7 @@ export class Engine extends EventTarget {
 
   /** Tear down the worker — for switching engine flavor. */
   terminate() {
+    const terminatedSearchId = this._searchId || 0;
     this.stop();
     // Cancel any pending timers so they don't fire AFTER the worker
     // is gone (would either be a no-op or could surface a synthetic-
@@ -437,6 +468,7 @@ export class Engine extends EventTarget {
     if (this._watchdogId)    { clearTimeout(this._watchdogId);    this._watchdogId = 0; }
     if (this._healthCheckId) { clearTimeout(this._healthCheckId); this._healthCheckId = 0; }
     if (this._stallTimer)    { clearTimeout(this._stallTimer);    this._stallTimer = 0; }
+    this._cancelLivenessProbe(false);
     this._clearStopHonor();
     this._bestmoveAwaited = false;
     // Now that stop() doesn't clear searching itself, terminate() must
@@ -449,6 +481,10 @@ export class Engine extends EventTarget {
     this._pendingGos = 0;
     if (this.worker) { this.worker.terminate(); this.worker = null; }
     this.ready = false;
+    this._quiescing = false;
+    this.dispatchEvent(new CustomEvent('engine-terminated', {
+      detail: { searchId: terminatedSearchId, generation: this._workerGeneration },
+    }));
   }
 
   // Option setters: NEVER send setoption while a search is in flight.
@@ -650,7 +686,18 @@ export class Engine extends EventTarget {
   start(fen, opts = {}) {
     if (!this.ready) {
       console.log('[engine] start() ignored — engine not ready yet');
-      return;
+      return false;
+    }
+    // A mode transition (notably free analysis → Practice) needs a real idle
+    // boundary. While quiesce() owns that boundary, no late board/nav callback
+    // may enqueue a successor search behind the one being stopped. The caller
+    // explicitly starts the one desired search after the transition completes.
+    if (this._quiescing) {
+      console.log('[engine] start() suppressed during quiescence', {
+        searchId: this._searchId,
+        targetFen: String(fen || '').slice(0, 30) + '…',
+      });
+      return false;
     }
     // ── SINGLE-FLIGHT POLICY (per GPT consultation) ────────────────
     // Stockfish.js (nmrugg distribution) does NOT queue `position`
@@ -681,10 +728,116 @@ export class Engine extends EventTarget {
       // Tell the engine to wrap up so its bestmove fires soon.
       // _pendingGos is NOT bumped here — there's no new `go` yet.
       this._send('stop');
-      return;
+      return true;
     }
     this._pendingGos = (this._pendingGos || 0) + 1;
     this._doStart(fen, opts);
+    return true;
+  }
+
+  /**
+   * Stop the current search and wait for Stockfish to prove it is idle.
+   *
+   * This is deliberately stronger than stop(): UCI `stop` is only a request;
+   * the engine remains busy until its matching bestmove arrives. During the
+   * wait, start() calls are suppressed and obsolete queued analysis can be
+   * discarded so the bestmove handler cannot immediately launch a successor.
+   *
+   * The method never destroys a worker itself. A timeout/stuck/termination
+   * result lets the owning UI transition run the existing single recovery
+   * path while its board remains read-only.
+   */
+  quiesce({ timeoutMs = 4_000, discardPending = true } = {}) {
+    if (this._quiescePromise) return this._quiescePromise;
+
+    const capturedSearchId = this._searchId || 0;
+    const capturedGeneration = this._workerGeneration || 0;
+    const capturedWorker = this.worker;
+    this._quiescing = true;
+
+    if (discardPending && this._pendingRequest) {
+      console.log('[engine] quiesce discarded obsolete queued search', {
+        searchId: capturedSearchId,
+        targetFen: String(this._pendingRequest.fen || '').slice(0, 30) + '…',
+      });
+      this._pendingRequest = null;
+    }
+
+    // No live search means the desired invariant already holds. A booting
+    // worker can also be idle here; Practice's ready listener handles it later.
+    if (!capturedWorker || !this.searching || !this._bestmoveAwaited) {
+      this._quiescing = false;
+      return Promise.resolve({
+        ok: true,
+        status: 'idle',
+        searchId: capturedSearchId,
+        generation: capturedGeneration,
+      });
+    }
+
+    const boundedTimeout = Math.max(1, Number(timeoutMs) || 4_000);
+    const pending = new Promise((resolve) => {
+      let settled = false;
+      let timer = 0;
+
+      const cleanup = () => {
+        if (timer) clearTimeout(timer);
+        this.removeEventListener('bestmove', onBestmove);
+        this.removeEventListener('engine-terminated', onTerminated);
+      };
+      const finish = (result) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        const payload = {
+          searchId: capturedSearchId,
+          generation: capturedGeneration,
+          ...result,
+        };
+        // Keep start() suppressed until the entire bestmove dispatch stack has
+        // completed. A listener registered after ours must not synchronously
+        // launch a successor in the tiny interval before the awaiting caller
+        // resumes its transition.
+        queueMicrotask(() => {
+          this._quiescing = false;
+          resolve(payload);
+        });
+      };
+      const onBestmove = (ev) => {
+        if ((ev.detail?.searchId ?? capturedSearchId) !== capturedSearchId) return;
+        if (ev.detail?.stuck) {
+          finish({ ok: false, status: 'stuck' });
+          return;
+        }
+        // _handleLine sets both flags false before dispatching bestmove.
+        if (!this.searching && !this._bestmoveAwaited && !this._pendingRequest) {
+          finish({ ok: true, status: 'idle' });
+        }
+      };
+      const onTerminated = (ev) => {
+        if ((ev.detail?.generation ?? capturedGeneration) !== capturedGeneration) return;
+        finish({ ok: false, status: 'terminated' });
+      };
+
+      this.addEventListener('bestmove', onBestmove);
+      this.addEventListener('engine-terminated', onTerminated);
+      timer = setTimeout(() => {
+        console.error('[engine] quiesce timed out waiting for confirmed idle', {
+          searchId: capturedSearchId,
+          generation: capturedGeneration,
+          timeoutMs: boundedTimeout,
+          ...this._diagnosticState(),
+        });
+        finish({ ok: false, status: 'timeout' });
+      }, boundedTimeout);
+
+      this.stop();
+    });
+
+    this._quiescePromise = pending.finally(() => {
+      if (this._quiescePromise) this._quiescePromise = null;
+    });
+    return this._quiescePromise;
   }
 
   // Internal: dispatch a synthetic stuck-bestmove so the UI unfreezes
@@ -764,6 +917,12 @@ export class Engine extends EventTarget {
   _drainPendingRequest() {
     if (!this._pendingRequest) return;
     if (this.searching) return;   // shouldn't happen, defensive
+    if (this._quiescing) {
+      console.log('[engine] pending search held during quiescence', {
+        searchId: this._searchId,
+      });
+      return;
+    }
     const { fen, opts } = this._pendingRequest;
     this._pendingRequest = null;
     console.log('[engine] draining pending request', { fen: fen.slice(0, 30) + '…', opts });
@@ -925,6 +1084,103 @@ export class Engine extends EventTarget {
     this._send(bits.join(' '));
   }
 
+  _diagnosticState() {
+    return {
+      searching: !!this.searching,
+      bestmoveAwaited: !!this._bestmoveAwaited,
+      pendingGos: this._pendingGos || 0,
+      hasPendingRequest: !!this._pendingRequest,
+      currentSearchIsInfinite: !!this._currentSearchIsInfinite,
+      stopRequested: !!this.stopRequested,
+      quiescing: !!this._quiescing,
+      workerAlive: !!this.worker,
+      lastInfoAgeMs: this._lastInfoAt ? Date.now() - this._lastInfoAt : null,
+    };
+  }
+
+  _cancelLivenessProbe(result = false) {
+    try { this._livenessProbe?.finish?.(result); } catch {}
+    this._livenessProbe = null;
+  }
+
+  /** Non-destructive worker liveness challenge. UCI requires readyok even
+   * while calculating; attach before sending so a fast reply cannot race us. */
+  _probeLiveness(timeoutMs = this._livenessTimeoutMs) {
+    const worker = this.worker;
+    const generation = this._workerGeneration;
+    if (!worker) return Promise.resolve(false);
+    if (this._livenessProbe?.worker === worker) return this._livenessProbe.promise;
+
+    let record;
+    const promise = new Promise((resolve) => {
+      let settled = false;
+      const onMessage = (ev) => {
+        const line = typeof ev.data === 'string' ? ev.data.trim() : '';
+        if (line === 'readyok') finish(true);
+      };
+      const timer = setTimeout(() => finish(false), Math.max(1, Number(timeoutMs) || 2_000));
+      const finish = (responsive) => {
+        if (settled) return;
+        settled = true;
+        record.done = true;
+        clearTimeout(timer);
+        try { worker.removeEventListener('message', onMessage); } catch {}
+        if (this._livenessProbe === record) this._livenessProbe = null;
+        resolve(!!responsive && this.worker === worker && this._workerGeneration === generation);
+      };
+      record = { worker, generation, finish, promise: null, done: false };
+      worker.addEventListener('message', onMessage);
+      try { this._send('isready'); } catch { finish(false); }
+    });
+    record.promise = promise;
+    this._livenessProbe = record.done ? null : record;
+    return promise;
+  }
+
+  _armStallWatchdog(searchId) {
+    if (this._stallTimer) clearTimeout(this._stallTimer);
+    const infinite = !!this._currentSearchIsInfinite;
+    const stallMs = infinite ? this._infiniteStallMs : this._boundedStallMs;
+    this._stallTimer = setTimeout(async () => {
+      this._stallTimer = 0;
+      if (this._searchId !== searchId || !this._bestmoveAwaited) return;
+      // stop() has its own bounded acknowledgement watchdog. Do not let a
+      // quiet-analysis timer race that deliberate transition.
+      if (this.stopRequested) return;
+
+      if (infinite) {
+        console.warn(`[engine] infinite analysis quiet for ${stallMs/1000}s — probing liveness`, {
+          searchId,
+          infoReceived: this._infoReceived,
+          ...this._diagnosticState(),
+        });
+        const responsive = await this._probeLiveness(this._livenessTimeoutMs);
+        if (this._searchId !== searchId || !this._bestmoveAwaited || this.stopRequested) return;
+        if (responsive) {
+          console.log('[engine] quiet infinite analysis answered readyok — keeping worker', {
+            searchId,
+            ...this._diagnosticState(),
+          });
+          this._armStallWatchdog(searchId);
+          return;
+        }
+      }
+
+      const failure = infinite ? ' and liveness failed' : '';
+      console.error(`[engine] STALL: no info for ${stallMs/1000}s${failure} — declaring wedged`, {
+        searchId,
+        infoReceived: this._infoReceived,
+        infinite,
+        ...this._diagnosticState(),
+      });
+      this._fireStuckSynthetic(
+        infinite
+          ? `stalled — no info ${stallMs/1000}s; liveness failed`
+          : `stalled — no info ${stallMs/1000}s`,
+      );
+    }, stallMs);
+  }
+
   _clearStopHonor() {
     if (this._stopHonorId)  { clearTimeout(this._stopHonorId);  this._stopHonorId  = 0; }
     if (this._stopHonorId2) { clearTimeout(this._stopHonorId2); this._stopHonorId2 = 0; }
@@ -940,6 +1196,7 @@ export class Engine extends EventTarget {
         searchId: this._searchId,
         infoReceivedSoFar: this._infoReceived,
         infoDispatchedSoFar: this._infoDispatched,
+        ...this._diagnosticState(),
       });
       this.stopRequested = true;
       // ── STOP-HONOR WATCHDOG (fix for 2026-07-04 permanent hang) ────
@@ -958,12 +1215,18 @@ export class Engine extends EventTarget {
         this._stopHonorId = setTimeout(() => {
           this._stopHonorId = 0;
           if (this._searchId !== myId || !this._bestmoveAwaited) return;
-          console.warn('[engine] stop not honored within grace — re-sending stop', { searchId: myId });
+          console.warn('[engine] stop not honored within grace — re-sending stop', {
+            searchId: myId,
+            ...this._diagnosticState(),
+          });
           try { this._send('stop'); } catch {}
           this._stopHonorId2 = setTimeout(() => {
             this._stopHonorId2 = 0;
             if (this._searchId !== myId || !this._bestmoveAwaited) return;
-            console.error('[engine] stop STILL not honored — forcing synthetic bestmove', { searchId: myId });
+            console.error('[engine] stop STILL not honored — forcing synthetic bestmove', {
+              searchId: myId,
+              ...this._diagnosticState(),
+            });
             this._fireStuckSynthetic('stop not honored');
           }, 2500);
         }, 3000);
@@ -983,29 +1246,37 @@ export class Engine extends EventTarget {
     // protocol order.
   }
 
-  /** Analyse one specific move. Used for the "why not X?" feature. */
-  analyseMove(fen, uciMove, depth = 14) {
-    return new Promise((resolve) => {
-      if (!this.ready) return resolve(null);
-      if (this.searching) this.stop();
+  /** Analyse one specific move. Used for the "why not X?" feature.
+   * Route through start() so an existing search is stopped, flushed and
+   * suppressed by the same single-flight machinery as every other consumer. */
+  async analyseMove(fen, uciMove, depth = 14) {
+    if (!this.ready) return null;
+    const originalMultiPV = this.multipv;
+    this.setMultiPV(1);
+    try {
+      return await new Promise((resolve) => {
+        let settled = false;
+        const cleanup = () => {
+          this.removeEventListener('bestmove', onBest);
+          this.removeEventListener('engine-terminated', onTerminated);
+        };
+        const finish = (value) => {
+          if (settled) return;
+          settled = true;
+          cleanup();
+          resolve(value);
+        };
+        const onBest = (ev) => finish(ev.detail?.stuck ? null : ev.detail);
+        const onTerminated = () => finish(null);
+        this.addEventListener('bestmove', onBest);
+        this.addEventListener('engine-terminated', onTerminated);
 
-      const originalMultiPV = this.multipv;
-      this._forceOption('MultiPV', 1);
-
-      this.topMoves = new Map();
-      this.history  = [];
-      this.searching = true;
-
-      const onBest = (ev) => {
-        this.removeEventListener('bestmove', onBest);
-        this._forceOption('MultiPV', originalMultiPV);
-        resolve(ev.detail);
-      };
-      this.addEventListener('bestmove', onBest);
-
-      this._send(`position fen ${fen}`);
-      this._send(`go depth ${depth} searchmoves ${uciMove}`);
-    });
+        const started = this.start(fen, { depth, searchmoves: [uciMove] });
+        if (!started) finish(null);
+      });
+    } finally {
+      this.setMultiPV(originalMultiPV);
+    }
   }
 
   _handleLine(line) {
@@ -1058,17 +1329,7 @@ export class Engine extends EventTarget {
       //     wedge causes false-positive recovery churn (kill + reboot
       //     a healthy engine right before the user's first practice
       //     move). Use a 30 s window for infinite searches instead.
-      if (this._stallTimer) clearTimeout(this._stallTimer);
-      const stallMs = this._currentSearchIsInfinite ? 30_000 : 6_000;
-      this._stallTimer = setTimeout(() => {
-        if (!this._bestmoveAwaited) return;
-        console.error(`[engine] STALL: no info for ${stallMs/1000}s during search — declaring wedged`, {
-          searchId: this._searchId,
-          infoReceived: this._infoReceived,
-          infinite: this._currentSearchIsInfinite,
-        });
-        this._fireStuckSynthetic(`stalled — no info ${stallMs/1000}s`);
-      }, stallMs);
+      this._armStallWatchdog(this._searchId);
       if (this.stopRequested) {
         this._infoDropped = (this._infoDropped || 0) + 1;
         return;

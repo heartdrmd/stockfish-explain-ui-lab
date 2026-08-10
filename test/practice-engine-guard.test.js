@@ -49,3 +49,45 @@ test('every automatic practice play site uses the guarded apply helper', async (
   assert.match(main, /board\.addEventListener\('nav'[\s\S]*?practiceSearchToken\+\+/);
   assert.match(main, /Space ignored during active practice/);
 });
+
+test('Practice start reaches a confirmed idle boundary before changing the board', async () => {
+  const main = await readFile(new URL('../src/main.js', import.meta.url), 'utf8');
+  const board = await readFile(new URL('../src/board.js', import.meta.url), 'utf8');
+  const startBlock = main.match(
+    /pStart\.addEventListener\('click', async \(\) => \{[\s\S]*?\n\s*\}\);\n\s*\}/,
+  )?.[0] || '';
+
+  assert.match(startBlock, /window\.__practiceStarting = true/);
+  assert.match(startBlock, /board\.setInteractionLocked\?\.\(true\)/);
+  assert.match(startBlock, /cancelAnimationFrame\(window\.__fireScheduled\)/);
+  assert.match(startBlock, /await transitionEngine\.quiesce\(\{ timeoutMs: 4_000, discardPending: true \}\)/);
+  assert.match(startBlock, /board\.newGame\(\{ force: true \}\)/);
+  assert.match(startBlock, /board\.playUciMoves\(played\.uciMoves, \{ animate: false, force: true \}\)/);
+  assert.match(startBlock, /if \(!idleResult\.ok\)[\s\S]*?await switchEngineFlavor\(recoveryFlavor\)/);
+  assert.match(startBlock, /finally \{[\s\S]*?window\.__practiceStarting = false[\s\S]*?setInteractionLocked/);
+  assert.match(startBlock, /if \(!practiceStarted\) return;[\s\S]*?fireAnalysis\(\)/);
+  assert.match(main, /function fireAnalysis\(\) \{[\s\S]*?if \(window\.__practiceStarting\)/);
+  assert.match(main, /function _fireAnalysisNow\(\) \{[\s\S]*?if \(window\.__practiceStarting\) return/);
+  assert.match(board, /newGame\(\{ force = false \} = \{\}\)[\s\S]*?interactionLocked && !force/);
+  assert.match(board, /playUciMoves\(uciList, \{ animate = true, force = false \} = \{\}\)[\s\S]*?interactionLocked && !force/);
+});
+
+test('repeat engine boots use truthful loading language instead of claiming a download', async () => {
+  const main = await readFile(new URL('../src/main.js', import.meta.url), 'utf8');
+  assert.match(main, /Loading neural network \(browser cache is used when available\)/);
+  assert.match(main, /`Loading <strong>\$\{lbl\}<\/strong> \$\{fmt\(d\.received\)\}`/);
+  assert.doesNotMatch(main, /`Downloading <strong>\$\{lbl\}/);
+});
+
+test('a saved Practice draft is restored before the first analysis is allowed to start', async () => {
+  const main = await readFile(new URL('../src/main.js', import.meta.url), 'utf8');
+  assert.doesNotMatch(main, /setTimeout\(maybeRestoreDraft,\s*150\)/);
+  assert.match(
+    main,
+    /board\.livePath = tree\.currentPath;[\s\S]*?board\.viewPly = null;[\s\S]*?board\._historicalChess = null/,
+  );
+  assert.match(
+    main,
+    /maybeRestoreDraft\(\);[\s\S]*?mainInitDone = true;[\s\S]*?if \(pendingFireAnalysis\)/,
+  );
+});

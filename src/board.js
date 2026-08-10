@@ -885,8 +885,11 @@ export class BoardController extends EventTarget {
     }));
   }
 
-  newGame() {
-    if (this.interactionLocked) return false;
+  newGame({ force = false } = {}) {
+    // `force` is reserved for atomic application-owned transitions (for
+    // example, Practice setup). The visible board remains interaction-locked
+    // to the user while trusted setup code replaces its position.
+    if (this.interactionLocked && !force) return false;
     this._clearTargetFirst();   // audit B5
     this.chess.reset();
     this.startingFen = this.chess.fen();   // back to standard start
@@ -950,8 +953,8 @@ export class BoardController extends EventTarget {
    * when loading a whole game (60+ plies) — avoids the "animation storm"
    * of playing 70 moves in sequence.
    */
-  playUciMoves(uciList, { animate = true } = {}) {
-    if (this.interactionLocked) return false;
+  playUciMoves(uciList, { animate = true, force = false } = {}) {
+    if (this.interactionLocked && !force) return false;
     if (!this.isAtLive()) this.toEnd();
     if (!uciList || !uciList.length) return false;
 
