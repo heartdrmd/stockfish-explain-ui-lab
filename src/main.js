@@ -956,10 +956,20 @@ async function main() {
 
   let engine = new Engine();
   let engineReady = false;
+  const PAID_AI_BUTTON_IDS = [
+    'combined-ai-btn',
+    'position-ai-btn',
+    'coach-ai-btn',
+    'tactics-ai-btn',
+  ];
 
-  // Wire the AI buttons NOW, before engine boot, so they respond to clicks
-  // from the moment the page is interactive. Each handler internally checks
-  // if the engine is ready and shows a helpful message otherwise.
+  // Paid AI has a separate server-enforced master lock. Restore its truthful
+  // cookie state and wire the explicit unlock/relock control before exposing
+  // any Coach / Position / Tactics action.
+  await wirePaidAILockEarly();
+
+  // Wire the AI buttons before engine boot. They remain physically disabled
+  // while the paid-AI master lock is closed.
   wireAiButtonsEarly();
 
   async function bootEngine(flavor, tried = new Set()) {
@@ -14067,6 +14077,123 @@ async function main() {
   // ────────── Coach tab (heuristic rendering — needs engine's history) ──────────
   setupCoach();
 
+  function syncPaidAIControls() {
+    const unlocked = AICoach.isPaidAIUnlocked();
+    const lockBtn = document.getElementById('global-ai-spend-lock');
+    if (lockBtn) {
+      lockBtn.textContent = unlocked ? '🔓 PAID AI ON' : '🔒 PAID AI OFF';
+      lockBtn.classList.toggle('is-unlocked', unlocked);
+      lockBtn.classList.toggle('is-locked', !unlocked);
+      lockBtn.title = unlocked
+        ? 'Paid AI is unlocked. Click to relock immediately.'
+        : 'Paid AI is locked. Click and enter the separate password to unlock it.';
+      lockBtn.setAttribute('aria-pressed', unlocked ? 'true' : 'false');
+    }
+    for (const id of PAID_AI_BUTTON_IDS) {
+      const btn = document.getElementById(id);
+      if (!btn) continue;
+      const busy = btn.dataset.aiBusy === '1';
+      btn.disabled = !unlocked || busy;
+      btn.dataset.aiSpendLocked = unlocked ? '0' : '1';
+      btn.setAttribute('aria-disabled', btn.disabled ? 'true' : 'false');
+      btn.title = unlocked
+        ? 'This action sends paid Anthropic request(s).'
+        : 'Paid AI is locked. Use PAID AI OFF in the top-right toolbar to unlock.';
+    }
+    document.querySelectorAll('[data-ai-spend-notice]').forEach(note => {
+      note.classList.toggle('is-unlocked', unlocked);
+      note.innerHTML = unlocked
+        ? '🔓 <strong>Paid AI is unlocked.</strong> Each analysis may incur Anthropic charges. Click <strong>PAID AI ON</strong> in the top-right toolbar to relock.'
+        : '🔒 <strong>Paid AI is off.</strong> Use <strong>PAID AI OFF</strong> in the top-right toolbar and enter the separate password. No paid AI request can leave the server while locked.';
+    });
+  }
+
+  function setPaidAIButtonBusy(btn, busy) {
+    if (btn) btn.dataset.aiBusy = busy ? '1' : '0';
+    syncPaidAIControls();
+  }
+
+  function renderPaidAILocked(outputEl) {
+    if (!outputEl) return;
+    outputEl.hidden = false;
+    outputEl.innerHTML = `<div class="ai-status-msg warn">
+      🔒 <strong>Paid AI is locked.</strong><br>
+      Use <strong>PAID AI OFF</strong> in the top-right toolbar and enter the separate password. Nothing was sent and there is no charge.
+    </div>`;
+  }
+
+  async function wirePaidAILockEarly() {
+    const lockBtn = document.getElementById('global-ai-spend-lock');
+    const modal = document.getElementById('ai-spend-modal');
+    const input = document.getElementById('ai-spend-password');
+    const status = document.getElementById('ai-spend-status');
+    const unlockBtn = document.getElementById('ai-spend-unlock');
+    const cancelBtn = document.getElementById('ai-spend-cancel');
+
+    // Fail closed while checking the server cookie. The module defaults to
+    // locked, so even a failed status request cannot make the controls hot.
+    await AICoach.refreshPaidAILock();
+    syncPaidAIControls();
+
+    const closeModal = () => {
+      if (modal) modal.hidden = true;
+      if (input) input.value = '';
+      if (status) status.textContent = '';
+    };
+    const openModal = () => {
+      if (!modal) return;
+      if (status) status.textContent = '';
+      if (input) input.value = '';
+      modal.hidden = false;
+      setTimeout(() => input?.focus(), 30);
+    };
+
+    lockBtn?.addEventListener('click', async () => {
+      if (!AICoach.isPaidAIUnlocked()) {
+        openModal();
+        return;
+      }
+      lockBtn.disabled = true;
+      try {
+        await AICoach.lockPaidAI();
+        await AICoach.refreshPaidAILock();
+      } catch (err) {
+        console.error('[ai-spend-lock] relock failed', err);
+        alert(`Could not confirm the server relock: ${err.message}`);
+      } finally {
+        lockBtn.disabled = false;
+        syncPaidAIControls();
+      }
+    });
+
+    const submitUnlock = async () => {
+      const password = input?.value || '';
+      if (!password) {
+        if (status) status.textContent = '⚠ Enter the paid-AI password.';
+        return;
+      }
+      if (unlockBtn) unlockBtn.disabled = true;
+      if (status) status.textContent = 'Checking with the server…';
+      try {
+        await AICoach.unlockPaidAI(password);
+        closeModal();
+        syncPaidAIControls();
+      } catch (err) {
+        if (status) status.textContent = `✗ ${err.message}`;
+        syncPaidAIControls();
+      } finally {
+        if (unlockBtn) unlockBtn.disabled = false;
+      }
+    };
+    unlockBtn?.addEventListener('click', submitUnlock);
+    input?.addEventListener('keydown', e => {
+      if (e.key === 'Enter') submitUnlock();
+      if (e.key === 'Escape') closeModal();
+    });
+    cancelBtn?.addEventListener('click', closeModal);
+    modal?.addEventListener('click', e => { if (e.target === modal) closeModal(); });
+  }
+
   function wireAiButtonsEarly() {
     const coachBtn = document.getElementById('coach-ai-btn');
     const posBtn   = document.getElementById('position-ai-btn');
@@ -14084,17 +14211,23 @@ async function main() {
     const combinedBtn = document.getElementById('combined-ai-btn');
     if (combinedBtn) {
       combinedBtn.addEventListener('click', async () => {
-        combinedBtn.disabled = true;
+        if (!AICoach.isPaidAIUnlocked()) {
+          renderPaidAILocked(posOut);
+          renderPaidAILocked(coachOut);
+          return;
+        }
+        setPaidAIButtonBusy(combinedBtn, true);
         try {
           await Promise.all([
             askAI('position', posOut,   posBtn),
             askAI('general',  coachOut, coachBtn),
           ]);
         } finally {
-          combinedBtn.disabled = false;
+          setPaidAIButtonBusy(combinedBtn, false);
         }
       });
     }
+    syncPaidAIControls();
     console.log('[ai] tab buttons wired — coach:', !!coachBtn, 'position:', !!posBtn, 'tactics:', !!tacBtn, 'combined:', !!combinedBtn);
   }
 
@@ -14102,6 +14235,11 @@ async function main() {
   // Lives at main() scope so it has closure over board + engine + ui.
   async function askAI(mode, outputEl, btnEl) {
     console.log('[ai]', mode, 'button clicked');
+    if (!AICoach.isPaidAIUnlocked()) {
+      renderPaidAILocked(outputEl);
+      syncPaidAIControls();
+      return;
+    }
     if (!AICoach.hasApiKey()) {
       outputEl.hidden = false;
       outputEl.innerHTML = `<div class="ai-status-msg warn">
@@ -14131,7 +14269,7 @@ async function main() {
       ⏳ <strong>Working…</strong><br>
       Cycle 1/${maxCycles} — Stockfish searching for <em>${mode}</em> analysis.
     </div>`;
-    btnEl.disabled = true;
+    setPaidAIButtonBusy(btnEl, true);
     // Remember the user's pause/lock state and also the engine-mute
     // flag so we can restore them afterwards. The probe needs the
     // engine responding normally, so we clear the mute for the duration
@@ -14307,7 +14445,7 @@ async function main() {
         } catch (err) {
           // Hard gate errors (premium / site-lock) always bubble up —
           // caller unwraps them to user-friendly handlers.
-          if (err.message === 'PREMIUM_REQUIRED' || err.message === 'SITE_LOCKED') throw err;
+          if (err.message === 'PREMIUM_REQUIRED' || err.message === 'SITE_LOCKED' || err.message === 'AI_SPEND_LOCKED') throw err;
           if (cycle === 1) throw err; // nothing to salvage — bubble
           failureWarning = `AI call failed on cycle ${cycle} (${err.message}). Showing cycles 1–${cycle - 1}.`;
           console.warn('[askAI] askCoach failed on cycle', cycle, err);
@@ -14416,7 +14554,11 @@ async function main() {
     } catch (err) {
       // Gate errors get a friendly handler that re-opens the password modal
       // instead of a scary red error.
-      if (err.message === 'PREMIUM_REQUIRED' && window.__requestPremiumUnlock) {
+      if (err.message === 'AI_SPEND_LOCKED') {
+        await AICoach.refreshPaidAILock();
+        syncPaidAIControls();
+        renderPaidAILocked(outputEl);
+      } else if (err.message === 'PREMIUM_REQUIRED' && window.__requestPremiumUnlock) {
         outputEl.innerHTML = `<p class="muted">⭐ This model needs premium unlock. Opening the password modal…</p>`;
         const res = await window.__requestPremiumUnlock();
         if (res && res.tier === 'premium') {
@@ -14442,7 +14584,7 @@ async function main() {
         outputEl.innerHTML = `<p style="color:var(--c-bad)"><strong>Error:</strong> ${err.message}</p>`;
       }
     } finally {
-      btnEl.disabled = false;
+      setPaidAIButtonBusy(btnEl, false);
       // Restore the engine-mute flag to what the user had before we
       // started the probe. If they had the engine locked, we respect
       // that and leave it muted again (no fireAnalysis). If they had it

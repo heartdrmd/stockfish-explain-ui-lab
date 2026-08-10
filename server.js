@@ -4,12 +4,13 @@
 //   GitHub Pages is static-only and cannot hide secrets. If we baked the
 //   Anthropic API key into browser JS, anyone could steal it via view-source.
 //   This server holds ANTHROPIC_API_KEY in process memory (from Render env),
-//   proxies chat requests to Anthropic, and gates usage behind two rotating
+//   proxies chat requests to Anthropic, and gates usage behind rotating
 //   daily passwords so only invited friends can use the AI features.
 //
 // Password scheme (rotates daily, Central Time "tomorrow"):
 //   SITE:    <SITE_PW_PREFIX>    + tomorrow's 2-digit day
 //   PREMIUM: <PREMIUM_PW_PREFIX> + tomorrow's 2-digit day
+//   PAID AI: <AI_SPEND_PW_PREFIX> + the 2-digit CT day five days ahead
 //   The PREFIXES are SECRETS supplied via env vars (SITE_PW_PREFIX /
 //   PREMIUM_PW_PREFIX) and are NOT in source. Only invited friends know
 //   them. This repo is public, so a hard-coded prefix would let anyone
@@ -17,6 +18,7 @@
 //
 // Two HTTP endpoints:
 //   POST /api/gate    { password }        -> sets httpOnly cookie with tier
+//   POST /api/ai-spend-lock/unlock        -> explicitly permits paid requests
 //   POST /api/ai      { model, ... }      -> proxies to Anthropic if allowed
 //
 // Everything else is served statically (HTML, JS, CSS, WASM, SVG).
@@ -32,6 +34,12 @@ import { wireGames } from './src/server/games.js';
 import { wireVariations } from './src/server/variations.js';
 import { wireLibrary } from './src/server/library.js';
 import { wireSync } from './src/server/sync.js';
+import {
+  AI_SPEND_COOKIE,
+  aiSpendStampCT,
+  expectedAISpendPassword,
+  hasCurrentAISpendCookie,
+} from './src/server/ai-spend-lock.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT       = Number(process.env.PORT || 8000);
@@ -45,6 +53,7 @@ const COOKIE_TTL = 1000 * 60 * 60 * 12;          // 12h — forces re-auth daily
 // reveal the daily password formula (see file header + REVIEW audit S1).
 const SITE_PW_PREFIX    = process.env.SITE_PW_PREFIX    || '';
 const PREMIUM_PW_PREFIX = process.env.PREMIUM_PW_PREFIX || '';
+const AI_SPEND_PW_PREFIX= process.env.AI_SPEND_PW_PREFIX || '';
 const PW_PREFIXES_SET   = !!(SITE_PW_PREFIX && PREMIUM_PW_PREFIX);
 
 if (!API_KEY) {
@@ -53,6 +62,9 @@ if (!API_KEY) {
 if (!PW_PREFIXES_SET) {
   console.warn('⚠  SITE_PW_PREFIX / PREMIUM_PW_PREFIX not set — using INSECURE dev fallbacks. ' +
                'Set both in Render before exposing this server, or the gate is bypassable.');
+}
+if (!AI_SPEND_PW_PREFIX) {
+  console.warn('⚠  AI_SPEND_PW_PREFIX is not set. The paid-AI master lock will fail safe and cannot be unlocked in production.');
 }
 
 // ───────────────────────────────────────────────────────────────────────
@@ -84,6 +96,7 @@ function tomorrowDayCT() {
 const IS_PROD = process.env.NODE_ENV === 'production';
 const DEV_SITE_PREFIX    = 'devsite';
 const DEV_PREMIUM_PREFIX = 'devprem';
+const DEV_AI_SPEND_PREFIX= 'devspend';
 
 function unguessable() { return crypto.randomBytes(24).toString('hex'); }
 
@@ -96,6 +109,11 @@ function expectedPremiumPassword() {
   if (PREMIUM_PW_PREFIX) return PREMIUM_PW_PREFIX + tomorrowDayCT();
   if (IS_PROD) return unguessable();            // fail safe
   return DEV_PREMIUM_PREFIX + tomorrowDayCT();  // localhost only
+}
+function expectedPaidAIUnlockPassword() {
+  if (AI_SPEND_PW_PREFIX) return expectedAISpendPassword(AI_SPEND_PW_PREFIX);
+  if (IS_PROD) return unguessable();            // fail safe
+  return expectedAISpendPassword(DEV_AI_SPEND_PREFIX); // localhost only
 }
 
 // Constant-time compare that does NOT leak length (audit S6). Hash both
@@ -117,6 +135,20 @@ function readTier(req) {
   if (premium) return 'premium';
   if (site)    return 'basic';
   return 'none';
+}
+
+function isPaidAIUnlocked(req) {
+  return hasCurrentAISpendCookie(req.cookies?.[AI_SPEND_COOKIE]);
+}
+
+function secureCookieOptions(req) {
+  return {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: !!req.secure,
+    maxAge: COOKIE_TTL,
+    path: '/',
+  };
 }
 
 // Decide which model tier something requires.
@@ -251,13 +283,39 @@ app.post('/api/gate', authLimiter, (req, res) => {
 // Lightweight tier check (used by the client on page load to decide whether
 // to show the password gate).
 app.get('/api/whoami', (req, res) => {
-  res.json({ tier: readTier(req) });
+  res.json({ tier: readTier(req), paidAIUnlocked: isPaidAIUnlocked(req) });
+});
+
+// ───── paid-AI master lock ─────
+// Site/premium access alone NEVER authorizes an Anthropic request. A second,
+// explicit unlock sets a separate HttpOnly cookie. /api/ai checks that cookie
+// before it constructs or forwards any upstream request.
+app.get('/api/ai-spend-lock', (req, res) => {
+  res.json({ unlocked: isPaidAIUnlocked(req) });
+});
+
+app.post('/api/ai-spend-lock/unlock', authLimiter, (req, res) => {
+  if (readTier(req) === 'none') {
+    return res.status(401).json({ ok: false, unlocked: false, error: 'Site locked.' });
+  }
+  const password = String(req.body?.password || '');
+  if (!safeEqual(password, expectedPaidAIUnlockPassword())) {
+    return res.status(403).json({ ok: false, unlocked: false, error: 'Wrong paid-AI password.' });
+  }
+  res.cookie(AI_SPEND_COOKIE, aiSpendStampCT(), secureCookieOptions(req));
+  res.json({ ok: true, unlocked: true });
+});
+
+app.post('/api/ai-spend-lock/lock', (req, res) => {
+  res.clearCookie(AI_SPEND_COOKIE, { path: '/' });
+  res.json({ ok: true, unlocked: false });
 });
 
 // ───── /api/logout ─────
 app.post('/api/logout', (req, res) => {
   res.clearCookie('sf_site',    { path: '/' });
   res.clearCookie('sf_premium', { path: '/' });
+  res.clearCookie(AI_SPEND_COOKIE, { path: '/' });
   res.json({ ok: true });
 });
 
@@ -268,6 +326,14 @@ app.post('/api/ai', aiLimiter, async (req, res) => {
   const tier = readTier(req);
   if (tier === 'none') {
     return res.status(401).json({ error: 'Site locked. Enter the site password first.' });
+  }
+  // Master cost boundary. Nothing below this line — especially the upstream
+  // fetch — is reachable unless the user explicitly unlocked paid AI.
+  if (!isPaidAIUnlocked(req)) {
+    return res.status(423).json({
+      error: 'Paid AI is locked. Use the top-right PAID AI OFF button to unlock it.',
+      code: 'AI_SPEND_LOCKED',
+    });
   }
   if (!API_KEY) {
     return res.status(503).json({ error: 'Server has no ANTHROPIC_API_KEY configured.' });
@@ -369,5 +435,6 @@ app.use(express.static(__dirname, {
     console.log(`stockfish-explain server listening on :${PORT}`);
     console.log(`today's site password:    ${expectedSitePassword()}`);
     console.log(`today's premium password: ${expectedPremiumPassword()}`);
+    console.log(`paid-AI master lock:      ${AI_SPEND_PW_PREFIX ? 'configured' : 'NOT CONFIGURED'}`);
   });
 })();

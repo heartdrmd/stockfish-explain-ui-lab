@@ -80,18 +80,55 @@ export function setModel(m) { localStorage.setItem(MODEL_STORAGE, m); }
 // ─── proxy-mode tier tracking (server tells us on /api/whoami) ───
 // tier: 'none' (locked out), 'basic' (haiku only), 'premium' (all models)
 let currentTier = 'none';
+let paidAIUnlocked = false;
 export function getTier() { return currentTier; }
 export function setTier(t) { currentTier = t; }
+export function isPaidAIUnlocked() { return paidAIUnlocked; }
 export async function refreshTier() {
   if (!PROXY_MODE) { currentTier = 'premium'; return currentTier; }
   try {
     const r = await fetch('/api/whoami', { credentials: 'include' });
     const j = await r.json();
     currentTier = j.tier || 'none';
+    paidAIUnlocked = j.paidAIUnlocked === true;
   } catch {
     currentTier = 'none';
+    paidAIUnlocked = false;
   }
   return currentTier;
+}
+export async function refreshPaidAILock() {
+  if (!PROXY_MODE) { paidAIUnlocked = false; return false; }
+  try {
+    const r = await fetch('/api/ai-spend-lock', { credentials: 'include' });
+    const j = await r.json();
+    paidAIUnlocked = r.ok && j.unlocked === true;
+  } catch {
+    paidAIUnlocked = false;
+  }
+  return paidAIUnlocked;
+}
+export async function unlockPaidAI(password) {
+  if (!PROXY_MODE) throw new Error('Paid AI can only be unlocked through the protected server.');
+  const r = await fetch('/api/ai-spend-lock/unlock', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ password }),
+  });
+  const j = await r.json().catch(() => ({}));
+  paidAIUnlocked = r.ok && j.unlocked === true;
+  if (!paidAIUnlocked) throw new Error(j.error || `Unlock failed (${r.status}).`);
+  return true;
+}
+export async function lockPaidAI() {
+  paidAIUnlocked = false; // fail closed immediately, before the network round-trip
+  if (!PROXY_MODE) return true;
+  const r = await fetch('/api/ai-spend-lock/lock', {
+    method: 'POST', credentials: 'include',
+  });
+  if (!r.ok) throw new Error(`Could not relock paid AI (${r.status}).`);
+  return true;
 }
 export async function submitGatePassword(password) {
   const r = await fetch('/api/gate', {
@@ -107,6 +144,7 @@ export async function submitGatePassword(password) {
 export async function logout() {
   await fetch('/api/logout', { method: 'POST', credentials: 'include' });
   currentTier = 'none';
+  paidAIUnlocked = false;
 }
 export function isPremiumModel(model) {
   return !String(model || '').toLowerCase().includes('haiku');
@@ -295,6 +333,9 @@ export async function askCoach({
   refinementContext = null, // { cycle, priorAnswer, deeperLines } for multi-cycle analysis
   thinkingTier = 'off',     // extended-thinking tier — off/low/medium/high/exhaustive
 } = {}) {
+  // Defense in depth: every application path reaches this function before
+  // fetch(). The server independently enforces the same lock at /api/ai.
+  if (!paidAIUnlocked) throw new Error('AI_SPEND_LOCKED');
   const m = model || getModel();
   // In proxy mode the server holds the API key. Otherwise fall back to the
   // legacy browser-held key (file:// dev and old static deploys).
@@ -478,6 +519,10 @@ Write the explanation now. Rich, specific, and grounded in every piece of resear
       // Hard errors → throw immediately, no retry
       if (response.status === 401) throw new Error('SITE_LOCKED');
       if (response.status === 402) throw new Error('PREMIUM_REQUIRED');
+      if (response.status === 423) {
+        paidAIUnlocked = false;
+        throw new Error('AI_SPEND_LOCKED');
+      }
       // Transient → retry with backoff (unless this was the last attempt)
       if (TRANSIENT_STATUSES.has(response.status) && attempt < MAX_ATTEMPTS) {
         const backoffMs = 1500 * attempt; // 1.5s, 3s
@@ -491,7 +536,7 @@ Write the explanation now. Rich, specific, and grounded in every piece of resear
     } catch (err) {
       // Network error / fetch threw. Retry unless this is a hard
       // error we already unwrapped above.
-      if (err.message === 'SITE_LOCKED' || err.message === 'PREMIUM_REQUIRED') throw err;
+      if (err.message === 'SITE_LOCKED' || err.message === 'PREMIUM_REQUIRED' || err.message === 'AI_SPEND_LOCKED') throw err;
       lastError = err;
       if (attempt < MAX_ATTEMPTS) {
         const backoffMs = 1500 * attempt;
@@ -510,6 +555,10 @@ Write the explanation now. Rich, specific, and grounded in every piece of resear
     const errText = await response.text();
     if (response.status === 402) throw new Error('PREMIUM_REQUIRED');
     if (response.status === 401) throw new Error('SITE_LOCKED');
+    if (response.status === 423) {
+      paidAIUnlocked = false;
+      throw new Error('AI_SPEND_LOCKED');
+    }
     throw new Error(`Anthropic API ${response.status}: ${errText.slice(0, 300)}`);
   }
 

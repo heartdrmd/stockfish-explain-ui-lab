@@ -1370,6 +1370,32 @@ select.coach-model-input:focus { outline: none; border-color: var(--c-primary); 
   min-width: 90px;
   text-align: right;
 }
+.ai-spend-lock {
+  min-width: 132px;
+  font-weight: 800;
+  letter-spacing: 0.025em;
+  color: #fff;
+  background: linear-gradient(180deg, #9e2525, #701818);
+  border-color: #d85a5a;
+}
+.ai-spend-lock.is-unlocked {
+  background: linear-gradient(180deg, #23864a, #176334);
+  border-color: #55c77b;
+}
+.ai-spend-notice {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px solid #8b3b3b;
+  border-radius: var(--radius-small);
+  background: rgba(158, 37, 37, 0.12);
+  color: var(--c-font-clear);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.ai-spend-notice.is-unlocked {
+  border-color: #318c50;
+  background: rgba(35, 134, 74, 0.12);
+}
 
 /* Big call-to-action button inside AI tabs */
 .ai-big-cta {
@@ -1396,6 +1422,11 @@ select.coach-model-input:focus { outline: none; border-color: var(--c-primary); 
   border-style: solid;
 }
 .ai-big-cta:disabled { opacity: 0.5; cursor: wait; }
+.ai-big-cta[data-ai-spend-locked="1"]:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+  filter: grayscale(0.65);
+}
 .ai-big-cta .cta-title {
   font-size: 16px;
   font-weight: 700;

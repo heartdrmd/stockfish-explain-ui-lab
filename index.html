@@ -98,6 +98,8 @@
         <button id="btn-logout" class="btn btn-auth-mini">Log out</button>
       </span>
     </span>
+    <button id="global-ai-spend-lock" class="btn ai-spend-lock is-locked always-visible"
+            title="Paid AI is locked. Unlocking requires the separate rotating password.">🔒 PAID AI OFF</button>
 
     <nav class="site-nav">
       <!-- Primary action group (left). New game + Practice marked as
@@ -188,7 +190,6 @@
         <button id="global-ai-custom" class="btn small" title="Enter a custom model name">✎</button>
         <button id="global-ai-key" class="btn small" title="Set or change Anthropic API key">🔑 Key</button>
         <span id="global-ai-cost" class="ai-cost" title="Session cost (all AI calls)">—</span>
-        <span class="muted" style="font-size:11px">← Click a tab (Coach / Position / Tactics) to run AI</span>
       </div>
     </nav>
   </header>
@@ -566,6 +567,9 @@
         </div>
 
         <div class="tab-panel" data-tab-panel="coach" hidden>
+          <div class="ai-spend-notice" data-ai-spend-notice>
+            🔒 Paid AI is off. Use <strong>PAID AI OFF</strong> in the top-right toolbar and enter the separate password. Unlocking never starts an analysis by itself.
+          </div>
           <!-- ═══════════ ANALYSIS BUDGET PICKER ═══════════ -->
           <div id="analysis-budget-picker" class="budget-picker" role="radiogroup" aria-label="Analysis cycles">
             <span class="budget-picker-label">Cycles:</span>
@@ -617,6 +621,9 @@
         </div>
 
         <div class="tab-panel" data-tab-panel="tactics" hidden>
+          <div class="ai-spend-notice" data-ai-spend-notice>
+            🔒 Paid AI is off. Use <strong>PAID AI OFF</strong> in the top-right toolbar and enter the separate password.
+          </div>
           <button id="tactics-ai-btn" class="ai-big-cta">
             <span class="cta-title">🧠 AI Tactical Analysis</span>
             <span class="cta-sub">Forced sequences · combinations · sacrifices<br>Names the pattern: fork/pin/skewer/discovered/overload/back-rank/etc.</span>
@@ -731,6 +738,22 @@
       <div style="display:flex;gap:8px;margin-top:12px;">
         <button id="gate-submit" class="btn" style="background:var(--c-secondary);color:white">Unlock</button>
         <button id="gate-cancel" class="btn" hidden>Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Separate cost-consent gate. Site/premium access does not unlock this. -->
+  <div id="ai-spend-modal" class="modal" hidden>
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="ai-spend-title">
+      <h3 id="ai-spend-title">🔒 Unlock paid AI</h3>
+      <p class="muted">This enables paid Anthropic requests for Position, Coach, and Tactics. It does not run anything until you press one of those analysis buttons.</p>
+      <p class="muted"><strong>Run both</strong> sends two analyses, and multi-cycle modes may send additional requests.</p>
+      <p id="ai-spend-status" class="muted" style="min-height:18px"></p>
+      <input id="ai-spend-password" type="password" class="apikey-input"
+             autocomplete="off" placeholder="Paid-AI password">
+      <div class="row-compact" style="margin-top:12px;justify-content:flex-end;">
+        <button id="ai-spend-cancel" class="btn" type="button">Cancel</button>
+        <button id="ai-spend-unlock" class="btn" type="button" style="background:var(--c-secondary);color:white">Unlock paid AI</button>
       </div>
     </div>
   </div>

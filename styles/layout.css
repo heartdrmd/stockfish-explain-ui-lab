@@ -591,6 +591,24 @@ body.nav-collapsed .site-header { min-height: 40px; padding: 6px 14px; }
    stacks the controls; short phone landscape gets its own two-column rule
    below. Normal desktop dimensions retain the established grid. */
 @media (max-width: 640px), (max-height: 640px) and (max-width: 1024px) {
+  /* The paid-AI master lock must never disappear into the horizontally
+     scrollable phone toolbar. Pin it at the physical top-right in portrait
+     and short landscape; the rest of the header can still scroll beneath
+     the reserved space. */
+  .site-header {
+    padding-right: calc(118px + env(safe-area-inset-right, 0px));
+  }
+  .site-header > .ai-spend-lock {
+    position: fixed;
+    top: calc(6px + env(safe-area-inset-top, 0px));
+    right: calc(8px + env(safe-area-inset-right, 0px));
+    z-index: 230;
+    min-width: 104px;
+    padding: 5px 7px;
+    font-size: 10px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.55);
+  }
+
   body.mobile-mode .uniboard {
     padding: 6px;
     gap: 6px;

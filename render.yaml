@@ -29,6 +29,10 @@ services:
         sync: false
       - key: PREMIUM_PW_PREFIX
         sync: false
+      # Separate master switch for every paid Anthropic request. The UI and
+      # /api/ai both remain locked until this rotating password is entered.
+      - key: AI_SPEND_PW_PREFIX
+        sync: false
       # HMAC secret for signed guest export tokens (audit S3). Optional —
       # if unset the server uses a per-boot random (tokens live 2 min, so
       # a restart only invalidates in-flight downloads). Set for stability.
