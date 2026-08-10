@@ -943,20 +943,44 @@ export class BoardController extends EventTarget {
   turn() { return this.chess.turn(); }
 
   /**
-   * Play a sequence of UCI moves from the current position.
+   * Play a sequence of UCI moves.
    *
    * `animate` (default true): animates each move individually via
    * chessground. Good for short PV extrapolations (a few moves).
+   *
+   * `fromCurrent` (default false): play from the position currently shown
+   * instead of first returning to the durable live endpoint. Engine PVs must
+   * use this because they were calculated for the displayed FEN; jumping to
+   * live first can make the move illegal or apply it to the wrong position.
+   *
+   * `preserveLivePath` (default false): keep the durable live endpoint while
+   * the displayed path advances. Learn Explore uses this so engine-line
+   * clicks create scratch analysis variations without redefining the saved
+   * game's active endpoint.
    *
    * When `animate` is false: applies all moves to chess.js internally,
    * then sets the final FEN on chessground in a single shot. Use this
    * when loading a whole game (60+ plies) — avoids the "animation storm"
    * of playing 70 moves in sequence.
    */
-  playUciMoves(uciList, { animate = true, force = false } = {}) {
+  playUciMoves(uciList, {
+    animate = true,
+    force = false,
+    fromCurrent = false,
+    preserveLivePath = false,
+  } = {}) {
     if (this.interactionLocked && !force) return false;
-    if (!this.isAtLive()) this.toEnd();
+    if (!fromCurrent && !this.isAtLive()) this.toEnd();
     if (!uciList || !uciList.length) return false;
+
+    const finishPathState = () => {
+      if (!preserveLivePath) {
+        this.livePath = this.tree.currentPath;
+      }
+      const atLive = this.isAtLive();
+      this.viewPly = atLive ? null : this.tree.nodesAlong(this.tree.currentPath).length;
+      this._historicalChess = atLive ? null : this.chess;
+    };
 
     if (!animate) {
       for (const uci of uciList) {
@@ -970,8 +994,7 @@ export class BoardController extends EventTarget {
         if (addRes) this.tree.currentPath = addRes.path;
       }
       const last = uciList[uciList.length - 1];
-      this.livePath = this.tree.currentPath;
-      this.viewPly = null;
+      finishPathState();
       this._syncToChessground([last.slice(0,2), last.slice(2,4)]);
       this.dispatchEvent(new CustomEvent('move', { detail: { fen: this.fen(), bulk: true } }));
       return true;
@@ -997,8 +1020,7 @@ export class BoardController extends EventTarget {
       if (addRes) this.tree.currentPath = addRes.path;
     }
     const last = uciList[uciList.length - 1];
-    this.livePath = this.tree.currentPath;
-    this.viewPly = null;
+    finishPathState();
     this._syncToChessground([last.slice(0,2), last.slice(2,4)]);
     this.dispatchEvent(new CustomEvent('move', { detail: { fen: this.fen(), bulk: true } }));
     return true;

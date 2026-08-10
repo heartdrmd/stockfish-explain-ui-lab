@@ -235,7 +235,17 @@ export class Explainer {
         e.stopPropagation();
         const pv = topMoves[lineIdx]?.pv;
         if (!pv || !pv.length) return;
-        board.playUciMoves([pv[0]]);   // ONE PLY
+        // The PV belongs to the FEN currently displayed, which may be a
+        // historical position or a Learn Explore side variation. Never jump
+        // to the saved live endpoint before applying it. During Learn Explore
+        // the move stays a scratch branch so Back can restore the lesson and
+        // the original game endpoint remains untouched.
+        const preserveLivePath = typeof window !== 'undefined'
+          && window.__learnExploring === true;
+        board.playUciMoves([pv[0]], {
+          fromCurrent: true,
+          preserveLivePath,
+        });   // ONE PLY
       });
 
       lineEl.addEventListener('contextmenu', (e) => {

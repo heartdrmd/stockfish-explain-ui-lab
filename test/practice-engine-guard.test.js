@@ -69,7 +69,7 @@ test('Practice start reaches a confirmed idle boundary before changing the board
   assert.match(main, /function fireAnalysis\(\) \{[\s\S]*?if \(window\.__practiceStarting\)/);
   assert.match(main, /function _fireAnalysisNow\(\) \{[\s\S]*?if \(window\.__practiceStarting\) return/);
   assert.match(board, /newGame\(\{ force = false \} = \{\}\)[\s\S]*?interactionLocked && !force/);
-  assert.match(board, /playUciMoves\(uciList, \{ animate = true, force = false \} = \{\}\)[\s\S]*?interactionLocked && !force/);
+  assert.match(board, /playUciMoves\(uciList, \{[\s\S]*?force = false,[\s\S]*?\} = \{\}\)[\s\S]*?interactionLocked && !force/);
 });
 
 test('repeat engine boots use truthful loading language instead of claiming a download', async () => {
