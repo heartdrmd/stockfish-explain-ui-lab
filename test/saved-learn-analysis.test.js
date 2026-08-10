@@ -89,3 +89,13 @@ test('clicking any classified error row opens its lesson position', () => {
   assert.match(main, /beforeLesson:\s*\(\) => closeTab\(\)/);
   assert.match(main, /lessonKind[\s\S]*?window\.__enterLearnMode\(targetPly\)/);
 });
+
+test('ordinary detail loading opens the same persistent review workspace as a row click', () => {
+  const detailLoad = main.match(
+    /dLoad\.addEventListener\('click',[\s\S]*?\n    \}\);\n    const dLearn/,
+  )?.[0] || '';
+  assert.match(detailLoad, /loadCloudGameOntoBoard\(g\)/);
+  assert.match(detailLoad, /closeTab\(\)/);
+  assert.match(detailLoad, /window\.__openReviewMode\?\.\(g\)/);
+  assert.match(main, /window\.__openReviewMode = \(game\)[\s\S]*?data-cta="learn"/);
+});

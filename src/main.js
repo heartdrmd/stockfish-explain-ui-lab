@@ -11405,6 +11405,11 @@ async function main() {
       if (!g) return;
       loadCloudGameOntoBoard(g);
       closeTab();
+      // Loading from the detail pane must land in the same review workspace
+      // as clicking the game row: graph/stats plus the persistent Learn CTA.
+      // Keep direct "Learn" shortcuts separate; they intentionally enter the
+      // lesson immediately instead of opening the review workspace first.
+      window.__openReviewMode?.(g);
     });
     const dLearn = document.getElementById('mg-detail-learn');
     if (dLearn) dLearn.addEventListener('click', () => {
