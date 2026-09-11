@@ -1,0 +1,512 @@
+/* Stockfish.explain UI Lab
+   A presentation-only layer loaded after the production styles. The chess
+   board, engine, notation tree, storage, and lesson logic remain untouched. */
+
+body.ui-lab {
+  overflow-x: clip;
+}
+
+html:has(body.ui-lab.mobile-mode) {
+  overflow-x: clip;
+}
+
+body.ui-lab .site-header {
+  gap: 8px;
+  padding: 8px 16px;
+}
+
+body.ui-lab .site-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-right: 4px;
+}
+
+.lab-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 20px;
+  padding: 0 6px;
+  border: 1px solid rgba(214, 79, 0, 0.72);
+  border-radius: 4px;
+  color: #f4b183;
+  background: rgba(214, 79, 0, 0.12);
+  font: 700 9px/1 var(--font-mono);
+  letter-spacing: 0.08em;
+}
+
+body.ui-lab #btn-toggle-toolbar { order: 6; }
+body.ui-lab #btn-quick-new { order: 2; }
+body.ui-lab #btn-quick-practice { order: 3; }
+body.ui-lab #btn-my-games { order: 4; }
+body.ui-lab #auth-area { order: 5; }
+body.ui-lab #btn-live-graph { order: 7; }
+body.ui-lab #btn-coach { order: 8; }
+body.ui-lab #global-ai-spend-lock { order: 9; }
+body.ui-lab .site-nav { order: 10; }
+
+/* The quick controls are the canonical New and Practice actions in the lab. */
+body.ui-lab #btn-new,
+body.ui-lab #btn-practice {
+  display: none !important;
+}
+
+body.ui-lab .btn-quick-action,
+body.ui-lab #btn-my-games,
+body.ui-lab .btn-toggle-toolbar {
+  margin-left: 0;
+  min-height: 38px;
+  padding: 7px 12px;
+  border-radius: 6px;
+  box-shadow: none;
+  font-weight: 700;
+}
+
+body.ui-lab .btn-quick-action,
+body.ui-lab #btn-my-games {
+  color: #eef6ff;
+  border-color: rgba(54, 146, 231, 0.62);
+  background: rgba(54, 146, 231, 0.16);
+}
+
+body.ui-lab #btn-quick-practice {
+  color: #eff8e5;
+  border-color: rgba(98, 153, 36, 0.72);
+  background: rgba(98, 153, 36, 0.2);
+}
+
+body.ui-lab .btn-toggle-toolbar {
+  color: var(--c-font);
+  border-color: var(--c-border);
+  background: var(--c-bg-low);
+}
+
+body.ui-lab #global-ai-spend-lock {
+  position: static;
+  min-width: 0;
+  color: var(--c-font-dim);
+  border-color: var(--c-border);
+  background: transparent;
+  box-shadow: none;
+}
+
+/* Graph, Coach, and paid AI are tools, not primary navigation. */
+body.ui-lab.nav-collapsed #btn-live-graph,
+body.ui-lab.nav-collapsed #btn-coach,
+body.ui-lab.nav-collapsed #global-ai-spend-lock {
+  display: none !important;
+}
+
+/* Practice is a short sequence with a dedicated scrolling body and footer. */
+body.ui-lab #practice-modal .modal-card {
+  display: flex;
+  flex-direction: column;
+  width: min(940px, calc(100vw - 32px));
+  max-width: 940px;
+  height: min(90dvh, 860px);
+  max-height: min(90dvh, 860px);
+  padding: 0;
+  overflow: hidden;
+}
+
+body.ui-lab #practice-modal .modal-card > h3 {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 20px 24px 4px;
+  color: var(--c-font-clear);
+  font-size: 18px;
+}
+
+body.ui-lab #practice-modal .modal-card > p {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 0 56px 16px 24px;
+  line-height: 1.45;
+}
+
+body.ui-lab #practice-modal .modal-close {
+  top: 14px;
+  right: 18px;
+  width: 40px;
+  height: 40px;
+  z-index: 8;
+}
+
+body.ui-lab #practice-modal .tournament-setup {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  margin: 0;
+  padding: 0 20px 20px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+body.ui-lab .practice-flow-section,
+body.ui-lab .practice-flow-advanced {
+  flex: 0 0 auto;
+  border: 1px solid var(--c-border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--c-bg-low) 42%, var(--c-bg));
+}
+
+body.ui-lab .practice-flow-heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-bottom: 1px solid color-mix(in srgb, var(--c-border) 72%, transparent);
+}
+
+body.ui-lab .practice-step-number {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: 1px solid rgba(54, 146, 231, 0.7);
+  border-radius: 5px;
+  color: #dcebfa;
+  background: rgba(54, 146, 231, 0.14);
+  font: 700 12px/1 var(--font-mono);
+}
+
+body.ui-lab .practice-flow-heading strong,
+body.ui-lab .practice-flow-heading small {
+  display: block;
+}
+
+body.ui-lab .practice-flow-heading strong {
+  color: var(--c-font-clear);
+  font-size: 14px;
+}
+
+body.ui-lab .practice-flow-heading small {
+  margin-top: 2px;
+  color: var(--c-font-dim);
+  font-size: 11px;
+  font-weight: 400;
+}
+
+body.ui-lab .practice-flow-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  padding: 14px;
+}
+
+body.ui-lab .practice-flow-opening .practice-flow-grid,
+body.ui-lab .practice-flow-advanced .practice-flow-grid {
+  grid-template-columns: 1fr;
+}
+
+body.ui-lab .practice-flow-grid > .setting {
+  min-width: 0;
+  max-width: 100%;
+  grid-column: auto !important;
+}
+
+body.ui-lab .practice-flow-opening #practice-opening-row {
+  grid-column: 1 / -1 !important;
+}
+
+body.ui-lab .practice-flow-advanced > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  min-height: 48px;
+  padding: 10px 14px;
+  color: var(--c-font);
+  cursor: pointer;
+  list-style: none;
+}
+
+body.ui-lab .practice-flow-advanced > summary::-webkit-details-marker {
+  display: none;
+}
+
+body.ui-lab .practice-flow-advanced > summary::after {
+  content: '+';
+  color: var(--c-primary);
+  font: 700 20px/1 var(--font-mono);
+}
+
+body.ui-lab .practice-flow-advanced[open] > summary::after {
+  content: '−';
+}
+
+body.ui-lab .practice-flow-advanced > summary span,
+body.ui-lab .practice-flow-advanced > summary small {
+  display: block;
+}
+
+body.ui-lab .practice-flow-advanced > summary small {
+  flex: 1;
+  color: var(--c-font-dim);
+  font-size: 11px;
+  font-weight: 400;
+}
+
+body.ui-lab #practice-modal .tournament-actions {
+  position: static;
+  display: flex;
+  flex: 0 0 auto;
+  justify-content: flex-end;
+  min-height: 68px;
+  margin: 0;
+  padding: 12px 20px;
+  border-top: 1px solid var(--c-border);
+  background: var(--c-bg);
+  box-shadow: 0 -8px 18px rgba(0, 0, 0, 0.25);
+}
+
+body.ui-lab #practice-start {
+  min-width: 180px;
+  min-height: 44px;
+  border-radius: 6px;
+  font-weight: 700;
+}
+
+/* Correct the vendor coordinate offset that makes the page 13–24px wider
+   than the phone viewport and visually shifts file labels off the board. */
+body.ui-lab .cg-wrap coords.files {
+  left: 0;
+  width: 100%;
+}
+
+@media (max-width: 640px), (max-height: 640px) and (max-width: 1024px) {
+  body.ui-lab.mobile-mode .site-header {
+    min-height: 56px;
+    padding: 6px 8px;
+    gap: 4px;
+  }
+
+  body.ui-lab.mobile-mode.nav-collapsed .site-header {
+    overflow-x: hidden;
+  }
+
+  body.ui-lab.mobile-mode:not(.nav-collapsed) .site-header {
+    overflow-x: auto;
+  }
+
+  body.ui-lab.mobile-mode .site-title {
+    order: 1;
+    gap: 4px;
+    min-width: 0;
+    font-size: 0;
+  }
+
+  body.ui-lab.mobile-mode .site-title::before {
+    content: 'SF.x LAB';
+    color: var(--c-font);
+    font-size: 13px;
+    font-weight: 700;
+  }
+
+  body.ui-lab.mobile-mode .site-title .accent {
+    display: none;
+  }
+
+  body.ui-lab.mobile-mode .lab-badge {
+    display: none;
+  }
+
+  body.ui-lab.mobile-mode.nav-collapsed .site-nav {
+    display: none !important;
+  }
+
+  body.ui-lab.mobile-mode #auth-area {
+    display: inline-flex !important;
+    margin-left: 0;
+  }
+
+  body.ui-lab.mobile-mode #auth-user .auth-username {
+    display: none;
+  }
+
+  body.ui-lab.mobile-mode #btn-signin,
+  body.ui-lab.mobile-mode #btn-logout {
+    min-width: 44px;
+    min-height: 44px;
+    padding: 6px;
+    font-size: 10px;
+  }
+
+  body.ui-lab.mobile-mode #btn-signin {
+    font-size: 0;
+  }
+
+  body.ui-lab.mobile-mode #btn-signin::before {
+    content: 'Sign in';
+    font-size: 10px;
+  }
+
+  body.ui-lab.mobile-mode .site-header .btn {
+    min-height: 44px;
+    padding: 7px 9px;
+    border-radius: 6px;
+    font-size: 11px;
+  }
+
+  body.ui-lab.mobile-mode #btn-quick-new,
+  body.ui-lab.mobile-mode #btn-quick-practice,
+  body.ui-lab.mobile-mode #btn-my-games,
+  body.ui-lab.mobile-mode #btn-toggle-toolbar {
+    min-width: 0;
+    min-height: 44px;
+  }
+
+  body.ui-lab.mobile-mode .uniboard {
+    padding-top: 4px;
+  }
+
+  body.ui-lab.mobile-mode .board-eval-wrap {
+    top: calc(58px + env(safe-area-inset-top, 0px));
+  }
+
+  body.ui-lab.mobile-mode .board-nav .btn,
+  body.ui-lab.mobile-mode [aria-label="Navigate history"] .btn {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  body.ui-lab.mobile-mode .tools {
+    max-height: 52vh;
+  }
+
+  body.ui-lab.mobile-mode.mobile-drawer-collapsed .tools {
+    max-height: 48px;
+  }
+
+  body.ui-lab.mobile-mode .tools::before {
+    box-sizing: border-box;
+    min-height: 44px;
+    padding: 12px 4px;
+  }
+
+  body.ui-lab.mobile-mode .analysis-lines-btn {
+    min-width: 44px;
+    height: 40px;
+  }
+
+  body.ui-lab #practice-modal {
+    align-items: stretch;
+    justify-content: stretch;
+  }
+
+  body.ui-lab #practice-modal .modal-card {
+    width: 100%;
+    max-width: none;
+    height: 100dvh;
+    max-height: 100dvh;
+    border: 0;
+    border-radius: 0;
+  }
+
+  body.ui-lab #practice-modal .modal-card > h3 {
+    padding: max(16px, env(safe-area-inset-top, 0px)) 56px 4px 14px;
+    font-size: 17px;
+  }
+
+  body.ui-lab #practice-modal .modal-card > p {
+    padding: 0 48px 12px 14px;
+    font-size: 12px;
+  }
+
+  body.ui-lab #practice-modal .modal-close {
+    top: max(8px, env(safe-area-inset-top, 0px));
+    right: 8px;
+    width: 44px;
+    height: 44px;
+  }
+
+  body.ui-lab #practice-modal .tournament-setup {
+    gap: 10px;
+    padding: 0 10px 16px;
+  }
+
+  body.ui-lab .practice-flow-heading {
+    padding: 10px 12px;
+  }
+
+  body.ui-lab .practice-flow-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+    padding: 10px;
+  }
+
+  body.ui-lab .practice-opening-tree {
+    max-height: min(38dvh, 320px);
+  }
+
+  body.ui-lab .practice-opening-tree summary,
+  body.ui-lab #practice-modal .btn,
+  body.ui-lab #practice-modal select,
+  body.ui-lab #practice-modal input[type='search'] {
+    min-height: 44px;
+  }
+
+  body.ui-lab #practice-modal .tournament-actions {
+    min-height: calc(68px + env(safe-area-inset-bottom, 0px));
+    padding: 10px 12px max(10px, env(safe-area-inset-bottom, 0px));
+  }
+
+  body.ui-lab #practice-start {
+    flex: 1;
+    min-height: 48px;
+  }
+}
+
+/* Short phone landscape is a true two-column chess workspace. The analysis
+   drawer occupies the right column in both collapsed and expanded states. */
+@media (orientation: landscape) and (max-height: 640px) and (max-width: 1024px) {
+  body.ui-lab.mobile-mode .uniboard {
+    grid-template-columns: minmax(250px, 42vw) minmax(0, 1fr);
+    grid-template-areas:
+      'mobile-board mobile-analysis'
+      'mobile-actions mobile-analysis';
+    column-gap: 10px;
+    align-items: start;
+  }
+
+  body.ui-lab.mobile-mode .board-eval-wrap {
+    grid-area: mobile-board;
+    width: min(100%, calc(100dvh - 118px));
+    top: calc(58px + env(safe-area-inset-top, 0px));
+  }
+
+  body.ui-lab.mobile-mode .tools,
+  body.ui-lab.mobile-mode.mobile-postgame-analysis .tools {
+    grid-area: mobile-analysis;
+    position: sticky;
+    top: calc(58px + env(safe-area-inset-top, 0px));
+    left: auto;
+    right: auto;
+    bottom: auto;
+    width: 100%;
+    max-height: calc(100dvh - 64px - env(safe-area-inset-bottom, 0px));
+    overflow-x: hidden;
+    overflow-y: auto;
+    align-self: start;
+  }
+
+  body.ui-lab.mobile-mode.mobile-drawer-collapsed .tools,
+  body.ui-lab.mobile-mode.mobile-postgame-analysis.mobile-drawer-collapsed .tools {
+    max-height: 48px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.ui-lab *,
+  body.ui-lab *::before,
+  body.ui-lab *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}

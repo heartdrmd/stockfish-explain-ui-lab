@@ -1,27 +1,13 @@
-databases:
-  # Postgres for multi-user game archives, mistakes, SRS, favourites.
-  # `basic-256mb` plan (~$6/mo, 256 MB RAM, 1 GB storage). Render
-  # deprecated the legacy `starter` plan for new databases in late
-  # 2024 — `basic-256mb` is the direct replacement. More than enough
-  # for a friend-group dev site: ~10 KB/game × 1000 games = 10 MB.
-  - name: stockfish-explain-dev-db
-    plan: basic-256mb
-    region: ohio
-    databaseName: stockfish_explain_dev
-    user: stockfish_explain_dev
-
 services:
   - type: web
-    name: stockfish-explain-dev
+    name: stockfish-explain-ui-lab
     runtime: node
-    plan: starter
+    plan: free
     region: ohio
     buildCommand: "npm install && bash scripts/fetch-full-wasms.sh && bash scripts/fetch-lichess-stockfish.sh"
     startCommand: "node server.js"
     autoDeploy: true
     envVars:
-      - key: ANTHROPIC_API_KEY
-        sync: false
       # Secret gate-password prefixes (see server.js header). sync:false
       # means "set manually in the Render dashboard, never in this file."
       # The daily password is <prefix> + tomorrow's 2-digit CT day.
@@ -40,12 +26,6 @@ services:
         generateValue: true
       - key: NODE_ENV
         value: production
-      # DATABASE_URL is auto-populated by Render when the web service
-      # is linked to the database above via the fromDatabase binding.
-      # When creating the DB manually, paste the Internal Database URL
-      # into the Environment tab instead.
-      - key: DATABASE_URL
-        fromDatabase:
-          name: stockfish-explain-dev-db
-          property: connectionString
+      # Deliberately no DATABASE_URL and no paid-AI key in the first UI lab.
+      # The browser uses isolated localStorage while the interface is tested.
     healthCheckPath: /api/whoami
