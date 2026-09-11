@@ -60,3 +60,7 @@ Phone landscape:
 
 No chess logic, engine ownership, evaluation convention, saved-game format, or
 Learn from Mistakes grading rule changes in this checkpoint.
+
+The Render lab fetches the official Lichess Stockfish 18 build and its NNUE
+networks. Optional full-size custom piece-value engines are excluded from this
+UI checkpoint; their committed lite fallbacks remain available.

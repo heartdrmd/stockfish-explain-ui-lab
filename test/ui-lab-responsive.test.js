@@ -11,6 +11,8 @@ test('UI lab is isolated and loads its presentation layer last', async () => {
   assert.match(html, /Stockfish\.explain · UI Lab/);
   assert.match(html, /github\.com\/heartdrmd\/stockfish-explain-ui-lab/);
   assert.match(yaml, /name:\s*stockfish-explain-ui-lab/);
+  assert.match(yaml, /fetch-lichess-stockfish\.sh/);
+  assert.doesNotMatch(yaml, /fetch-full-wasms\.sh/);
   assert.doesNotMatch(yaml, /^databases:/m);
   assert.doesNotMatch(yaml, /^\s*-\s*key:\s*(?:DATABASE_URL|ANTHROPIC_API_KEY)\s*$/m);
 });

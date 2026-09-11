@@ -4,7 +4,9 @@ services:
     runtime: node
     plan: free
     region: ohio
-    buildCommand: "npm install && bash scripts/fetch-full-wasms.sh && bash scripts/fetch-lichess-stockfish.sh"
+    # The lab needs the official Lichess build plus the lite variants already
+    # committed to the repository. Skip the optional 1.3 GB custom-engine pack.
+    buildCommand: "npm ci && bash scripts/fetch-lichess-stockfish.sh"
     startCommand: "node server.js"
     autoDeploy: true
     envVars:
