@@ -32,6 +32,10 @@ export function handleStudyAnalysisRequest(board, request, context, controls) {
   if (board.watchActive || !request || request.fen !== board.fen()) return false;
   const state = studyAnalysisState(board, context);
   switch (request.action) {
+    case 'engine':
+      if (!state.canToggle || state.hintRunning || ![0,1].includes(request.value)) return false;
+      if (state.engineOn !== (request.value === 1)) controls.toggle();
+      break;
     case 'toggle-engine':
       if (!state.canToggle || state.hintRunning) return false;
       controls.toggle(); break;

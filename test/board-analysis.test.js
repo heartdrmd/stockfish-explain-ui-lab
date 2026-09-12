@@ -34,7 +34,7 @@ test('fullscreen analysis uses legal, ordered lines at exactly the displayed pos
 test('practice shares only explicit hints and preserves opponent engine ownership',()=>{
   const s=setup();s.context.practice=true;
   assert.deepEqual(studyAnalysisState(s.board,s.context).lines,[]);
-  for(const [action,value] of [['toggle-engine'],['lines',3],['play-best'],['play-line',0]]) assert.equal(s.request(action,value),false);
+  for(const [action,value] of [['toggle-engine'],['engine',0],['engine',1],['lines',3],['play-best'],['play-line',0]]) assert.equal(s.request(action,value),false);
   assert.equal(s.request('hint-time',10000),true);
   assert.deepEqual(s.calls,[['hintTime',10000]],'Changing time does not launch a search');
   assert.equal(s.request('hint',10000),true);
@@ -55,7 +55,7 @@ test('practice shares only explicit hints and preserves opponent engine ownershi
 test('lesson, recovery, transitions and game over prevent unsafe engine actions',()=>{
   for(const flag of ['lesson','recovering','busy']) {
     const s=setup();s.context[flag]=true;
-    for(const [action,value] of [['toggle-engine'],['lines',3],['play-best']]) assert.equal(s.request(action,value),false,flag);
+    for(const [action,value] of [['toggle-engine'],['engine',0],['engine',1],['lines',3],['play-best']]) assert.equal(s.request(action,value),false,flag);
     s.context.practice=true;assert.equal(s.request('hint',3000),false,flag);
   }
   const s=setup();
@@ -92,7 +92,20 @@ test('Space and L own analysis shortcuts without scrolling, repeat moves or stea
 
 test('Watch shortcuts and stale own-game requests cannot operate the preserved game',()=>{
   const s=setup();s.board.watchActive=true;
-  for(const [action,value] of [['toggle-engine'],['lines',3],['play-best'],['play-line',0]]) assert.equal(s.request(action,value),false);
+  for(const [action,value] of [['toggle-engine'],['engine',0],['engine',1],['lines',3],['play-best'],['play-line',0]]) assert.equal(s.request(action,value),false);
   assert.deepEqual(s.played,[]);assert.deepEqual(s.calls,[]);
   s.board.watchActive=false;assert.equal(s.request('play-best'),true);
+});
+
+test('explicit analysis on/off is idempotent and rejects stale or invalid requests',()=>{
+  const s=setup();
+  assert.equal(s.request('engine',1),true); assert.equal(s.calls.length,0,'Already on is not toggled off');
+  assert.equal(s.request('engine',0),true); assert.equal(s.calls.length,1);
+  s.context.paused=true;
+  assert.equal(s.request('engine',0),true); assert.equal(s.calls.length,1,'Repeated off stays off');
+  assert.equal(s.request('engine',1),true); assert.equal(s.calls.length,2);
+  assert.equal(s.request('engine',2),false);
+  assert.equal(s.request('engine',true),false);
+  assert.equal(s.request('engine',0,'old position'),false);
+  assert.equal(s.calls.length,2);
 });
