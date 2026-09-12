@@ -65,6 +65,7 @@ import { includeLessonPly, isUserMovePly, notationAnnotation } from './learn-ann
 import { sortGamesByPlayedAt } from './game-order.js';
 import { canApplyPracticeEngineMove } from './practice-engine-guard.js';
 import { install3DBoard } from './board-3d.js';
+import { installWorkspaceSplit } from './workspace-split.js';
 
 // Expose Chess to eval-graph's computeDivision helper — avoids a
 // circular import while still letting it replay SAN to count pieces
@@ -373,6 +374,8 @@ async function main() {
     ui.boardArea.style.maxWidth = sz + 'px';
     ui.boardArea.style.width    = sz + 'px';
   }
+
+  const workspaceSplit = installWorkspaceSplit(board);
 
   wireTabs();
 
@@ -14110,6 +14113,7 @@ async function main() {
     //   overflow (RangeError reported from mobile Safari).
     let _applyingSize = false;
     const applySize = (size) => {
+      if (workspaceSplit?.isActive()) { workspaceSplit.setBoardSize(size); return; }
       if (_applyingSize) return;
       _applyingSize = true;
       try {
@@ -14149,7 +14153,7 @@ async function main() {
     const saved = parseInt(localStorage.getItem(STORAGE_KEY) || '', 10);
     const initial = saved || defaultBoardSize();
     try { localStorage.setItem(STORAGE_KEY, String(Math.round(initial))); } catch {}
-    applySize(initial);
+    if (!workspaceSplit?.isActive()) applySize(initial);
 
     // Also re-fit on window resize if the user hasn't explicitly set a
     // preference via the drag handle. The guard + localStorage write
@@ -14164,7 +14168,7 @@ async function main() {
         // Skip if localStorage already has a user-set value different
         // from the default — we detect 'user has dragged' by checking
         // the user-touched flag set on pointerdown below.
-        if (!window.__boardSizeUserTouched) applySize(defaultBoardSize());
+        if (!window.__boardSizeUserTouched && !workspaceSplit?.isActive()) applySize(defaultBoardSize());
       } finally { _windowResizeHandling = false; }
     });
 
