@@ -360,8 +360,8 @@ body.nav-collapsed .site-header { min-height: 40px; padding: 6px 14px; }
    Pinned elements:
      .board-area              — the chessground wrap itself
      .eval-gauge              — value bar between board and tools
-     .tools > .engine-power-row  — engine on/off + threat toggle row
-     .tools > .ceval          — engine score / depth / PV (stacks
+     :is(.tools, .clock-below-scroll) > .engine-power-row  — engine on/off + threat toggle row
+     :is(.tools, .clock-below-scroll) > .ceval          — engine score / depth / PV (stacks
                                  below engine-power-row)
 
    The move list / coach tabs / eval timeline / pawn strip all scroll
@@ -373,7 +373,7 @@ body.nav-collapsed .site-header { min-height: 40px; padding: 6px 14px; }
 @media (min-width: 800px), (orientation: landscape) and (min-width: 560px) {
   body:not(.mobile-mode) .uniboard .board-area,
   body:not(.mobile-mode) .uniboard .eval-gauge-control,
-  body:not(.mobile-mode) .uniboard .tools > .engine-power-row {
+  body:not(.mobile-mode) .uniboard :is(.tools, .clock-below-scroll) > .engine-power-row {
     position: sticky;
     /* .site-header is position:sticky with min-height 60px (40 when
        the toolbar is collapsed). Offset just below it + a small gap. */
@@ -384,7 +384,7 @@ body.nav-collapsed .site-header { min-height: 40px; padding: 6px 14px; }
   /* .ceval stacks DIRECTLY below the engine-power-row (which is ~56 px
      tall including its margin-bottom: 10px). The combined offset keeps
      both visible simultaneously at the top of the right column. */
-  body:not(.mobile-mode) .uniboard .tools > .ceval {
+  body:not(.mobile-mode) .uniboard :is(.tools, .clock-below-scroll) > .ceval {
     position: sticky;
     top: 124px;           /* 68 (header) + 56 (engine-power-row) */
     align-self: start;
@@ -404,17 +404,17 @@ body.nav-collapsed .site-header { min-height: 40px; padding: 6px 14px; }
   /* Preserve the existing practice-mode stability floor while composing it
      with the optional user resize preference above. The more-specific
      desktop rule would otherwise override panels.css's 200px practice lock. */
-  body.practice-mode:not(.practice-finished):not(.mobile-mode) .uniboard .tools > .ceval {
+  body.practice-mode:not(.practice-finished):not(.mobile-mode) .uniboard :is(.tools, .clock-below-scroll) > .ceval {
     min-height: max(200px, min(var(--ceval-user-min-height, 0px), 60dvh));
   }
   /* Collapsed-toolbar variant: header shrinks to 40 px, so every
      sticky slot shifts up by 20 px. */
   body.nav-collapsed:not(.mobile-mode) .uniboard .board-area,
   body.nav-collapsed:not(.mobile-mode) .uniboard .eval-gauge-control,
-  body.nav-collapsed:not(.mobile-mode) .uniboard .tools > .engine-power-row {
+  body.nav-collapsed:not(.mobile-mode) .uniboard :is(.tools, .clock-below-scroll) > .engine-power-row {
     top: 48px;
   }
-  body.nav-collapsed:not(.mobile-mode) .uniboard .tools > .ceval {
+  body.nav-collapsed:not(.mobile-mode) .uniboard :is(.tools, .clock-below-scroll) > .ceval {
     top: 104px;           /* 48 (collapsed header) + 56 (engine-power-row) */
   }
   /* A board unit taller than the usable viewport cannot obey desktop
@@ -429,7 +429,7 @@ body.nav-collapsed .site-header { min-height: 40px; padding: 6px 14px; }
   }
   /* engine-power-row needs its own bg so items scrolling underneath
      don't leak through. */
-  body:not(.mobile-mode) .uniboard .tools > .engine-power-row {
+  body:not(.mobile-mode) .uniboard :is(.tools, .clock-below-scroll) > .engine-power-row {
     background: var(--c-bg);
   }
 
@@ -472,10 +472,10 @@ body.nav-collapsed .site-header { min-height: 40px; padding: 6px 14px; }
   /* These two controls were page-sticky before the parent became its own
      scroller. Pin them to the top of that scroller instead of leaving a
      duplicate header-sized gap inside the right column. */
-  body:not(.mobile-mode) .uniboard .tools > .engine-power-row { top: 0; }
-  body:not(.mobile-mode) .uniboard .tools > .ceval { top: 56px; }
-  body.nav-collapsed:not(.mobile-mode) .uniboard .tools > .engine-power-row { top: 0; }
-  body.nav-collapsed:not(.mobile-mode) .uniboard .tools > .ceval { top: 56px; }
+  body:not(.mobile-mode) .uniboard :is(.tools, .clock-below-scroll) > .engine-power-row { top: 0; }
+  body:not(.mobile-mode) .uniboard :is(.tools, .clock-below-scroll) > .ceval { top: 56px; }
+  body.nav-collapsed:not(.mobile-mode) .uniboard :is(.tools, .clock-below-scroll) > .engine-power-row { top: 0; }
+  body.nav-collapsed:not(.mobile-mode) .uniboard :is(.tools, .clock-below-scroll) > .ceval { top: 56px; }
 
   /* Protect notation from later siblings such as the docked evaluation
      graph and review stats. The old flex item could shrink to zero inside
@@ -574,13 +574,13 @@ body.nav-collapsed .site-header { min-height: 40px; padding: 6px 14px; }
    4. Notation (move list)
    5. Coach tabs, eval timeline, pawn strip
    CSS order only — HTML order is preserved so JS queries stay intact. */
-.tools > .engine-power-row { order: 0; }
-.tools > .ceval            { order: 1; }
-.tools > #accuracy-strip   { order: 2; }
-.tools > .move-list-wrap   { order: 3; }
-.tools > .tabbed           { order: 4; }
-.tools > #eval-timeline    { order: 5; }
-.tools > #pawn-strip       { order: 6; }
+:is(.tools, .clock-below-scroll) > .engine-power-row { order: 0; }
+:is(.tools, .clock-below-scroll) > .ceval            { order: 1; }
+:is(.tools, .clock-below-scroll) > #accuracy-strip   { order: 2; }
+:is(.tools, .clock-below-scroll) > .move-list-wrap   { order: 3; }
+:is(.tools, .clock-below-scroll) > .tabbed           { order: 4; }
+:is(.tools, .clock-below-scroll) > #eval-timeline    { order: 5; }
+:is(.tools, .clock-below-scroll) > #pawn-strip       { order: 6; }
 
 /* ─── Mobile (#24) — phone-width optimisation ─── */
 /* On narrow screens (< 640px), the tools panel becomes a sticky
@@ -711,7 +711,7 @@ body.nav-collapsed .site-header { min-height: 40px; padding: 6px 14px; }
   /* The mobile drawer is also a height-constrained flex column. Keep the
      engine card at its natural height so selecting 2/3 PVs cannot compress
      them behind the next panel; the drawer itself remains scrollable. */
-  body.mobile-mode .tools > .ceval {
+  body.mobile-mode :is(.tools, .clock-below-scroll) > .ceval {
     flex-shrink: 0;
   }
   body.mobile-mode.mobile-drawer-collapsed .tools {

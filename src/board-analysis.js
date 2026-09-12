@@ -78,6 +78,7 @@ export function installStudyAnalysis(board, getContext, controls) {
     schedule();
     return accepted;
   };
+  installAnalysisKeyboard(window, () => studyAnalysisState(board,getContext()), request => board.requestAnalysis(request));
   for (const event of ['move','nav','new-game','undo','analysis-refresh']) board.addEventListener(event,schedule);
   const wire = engine => {
     for (const event of ['thinking','bestmove','ready','error']) engine.addEventListener(event,schedule);
@@ -92,4 +93,19 @@ export function installStudyAnalysis(board, getContext, controls) {
   }
   document.getElementById('practice-hint-time')?.addEventListener('change',schedule);
   publish();
+}
+
+export function installAnalysisKeyboard(target, getState, request) {
+  target.addEventListener('keydown', event => {
+    if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey ||
+        event.target.closest?.('input,textarea,select,[contenteditable=true],[role=dialog]')) return;
+    const action = event.key.toLowerCase() === 'l' ? 'toggle-engine' :
+      event.code === 'Space' || event.key === ' ' ? 'play-best' : null;
+    if (!action) return;
+    event.preventDefault(); event.stopImmediatePropagation();
+    if (event.repeat) return;
+    const state = getState();
+    if (action === 'play-best' && !state.engineOn) return;
+    request({action,fen:state.fen});
+  }, true);
 }

@@ -914,3 +914,11 @@
 .clock-position-panel{position:fixed;right:auto;box-sizing:border-box;z-index:10000;width:266px;max-width:calc(100vw - 16px);max-height:calc(100dvh - 16px)}
 .clock-position-steps{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px}
 .clock-position-steps button{display:flex;align-items:center;justify-content:center;gap:4px;min-height:32px;background:#303c32;color:#dee4d3;border:1px solid #617059;border-radius:4px;cursor:pointer;font:12px Arial,sans-serif}
+
+.clock-position-control{display:inline-flex;align-items:center;vertical-align:middle;flex:none}
+.clock-position-control[data-open=true]{border:1px solid #c2ba8d;border-radius:5px;background:#26322c;color:#d8ddcf}
+.clock-position-control[data-open=true] .clock-position-toggle{border:0;border-radius:4px 0 0 4px}
+.clock-position-inline{display:inline-flex;align-items:center;gap:6px;padding-right:4px;height:34px}
+.clock-position-inline input{width:100px;accent-color:#c2ba8d;cursor:ns-resize}
+.clock-position-inline output{min-width:32px;font:11px ui-monospace,monospace}
+.clock-position-inline button{display:grid;place-items:center;border:0;background:transparent;color:inherit;min-width:26px;min-height:30px;padding:0;cursor:pointer}

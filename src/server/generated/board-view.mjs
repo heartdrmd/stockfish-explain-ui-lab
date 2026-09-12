@@ -3679,6 +3679,7 @@ function savedViewId(id) {
 }
 function validateView(raw) {
 	const s = raw;
+	if (s?.cameraDefaultRevision != null && (typeof s.cameraDefaultRevision !== "string" || s.cameraDefaultRevision.length > 80)) throw new Error("Invalid camera default revision.");
 	if (!s || typeof s.name !== "string" || !s.name.trim() || s.name.length > 80 || !["studio", "board"].includes(s.mode) || ![
 		"king",
 		"queen",
@@ -3736,7 +3737,7 @@ function validateView(raw) {
 		"club",
 		"strong"
 	].includes(s.practice.level))) throw new Error("Invalid practice settings.");
-	if (s.viewing && (s.viewing.showAnalysis != null && typeof s.viewing.showAnalysis !== "boolean" || s.viewing.showClock != null && typeof s.viewing.showClock !== "boolean" || s.viewing.flatStyle != null && !["classic", "materials"].includes(s.viewing.flatStyle) || s.viewing.flatScale != null && !range(s.viewing.flatScale, 35, 100) || s.viewing.clockPlacement != null && !["left", "right"].includes(s.viewing.clockPlacement) || s.viewing.clockSide != null && ![
+	if (s.viewing && (s.viewing.showAnalysis != null && typeof s.viewing.showAnalysis !== "boolean" || s.viewing.showClock != null && typeof s.viewing.showClock !== "boolean" || s.viewing.flatStyle != null && !["classic", "materials"].includes(s.viewing.flatStyle) || s.viewing.flatScale != null && !range(s.viewing.flatScale, 35, 100) || s.viewing.flatPanY != null && !range(s.viewing.flatPanY, -50, 50) || s.viewing.flatPan != null && !range(s.viewing.flatPan, -50, 50) || s.viewing.clockPlacement != null && !["left", "right"].includes(s.viewing.clockPlacement) || s.viewing.clockSide != null && ![
 		"board",
 		"player",
 		"white",

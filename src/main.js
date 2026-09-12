@@ -70,6 +70,7 @@ import { sortGamesByPlayedAt } from './game-order.js';
 import { canApplyPracticeEngineMove } from './practice-engine-guard.js';
 import { install3DBoard } from './board-3d.js';
 import { installWorkspaceSplit } from './workspace-split.js';
+import { installNativeBoardPan } from './native-board-pan.js';
 import { installBoardResizeHandle } from './board-resize.js';
 import { installLeftPaneToggle, installRightPaneToggle, installDividerToggle } from './left-pane.js';
 import { installClockPresentation } from './clock-presentation.js';
@@ -393,6 +394,7 @@ async function main() {
   installRightPaneToggle();
   installDividerToggle();
   const workspaceSplit = installWorkspaceSplit(board);
+  installNativeBoardPan(board, workspaceSplit);
 
   wireTabs();
 
@@ -6780,7 +6782,9 @@ async function main() {
     event.preventDefault();
     event.stopPropagation();
     if (rightTools) {
-      rightTools.scrollTop += wheelDeltaPixels(event, rightTools.clientHeight);
+      const below = rightTools.querySelector('.clock-below-scroll');
+      const scroller = below && getComputedStyle(below).display !== 'contents' ? below : rightTools;
+      scroller.scrollTop += wheelDeltaPixels(event, scroller.clientHeight);
     }
   }, { passive: false });
 

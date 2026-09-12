@@ -4,6 +4,7 @@ export function installFloatingClock(card, host) {
   const panel = host.closest?.('.tools');
   if (!grip || !panel) return;
   const key = 'stockfish-explain.floating-clock-position';
+  let toolsPin = 0;
   let offset = { x: 0, y: 0 }, drag = null, frame = 0, moveMode = false, skipClick = false;
   try {
     const saved = JSON.parse(localStorage.getItem(key));
@@ -12,20 +13,31 @@ export function installFloatingClock(card, host) {
   const active = () => window.innerWidth >= 800 && !card.hidden &&
     !document.body.classList.contains('clock-presentation-hidden') &&
     document.body.classList.contains('clock-docked-right') &&
-    document.body.classList.contains('right-pane-hidden') &&
     !document.body.classList.contains('mobile-mode');
+  const floating = () => document.body.classList.contains('right-pane-hidden');
   const save = () => {
     try { localStorage.setItem(key, JSON.stringify(offset)); } catch {}
   };
   function paint() {
     panel.style.setProperty('--clock-float-x', `${offset.x}px`);
     panel.style.setProperty('--clock-float-y', `${offset.y}px`);
+    card.style.setProperty('--clock-dock-x',`${offset.x}px`);
+    card.style.setProperty('--clock-dock-y',`${offset.y}px`);
+    host.style.height = active() && !floating() ? `${Math.max(0,card.getBoundingClientRect().height+offset.y)}px` : '';
   }
   function move(x, y) {
-    const rect = panel.getBoundingClientRect();
+    const rect = (floating() ? panel : card).getBoundingClientRect();
     const baseX = rect.left - offset.x, baseY = rect.top - offset.y;
     const header = document.querySelector('.site-header')?.getBoundingClientRect();
-    const top = Math.max(8, (header?.bottom || 0) + 8);
+    let top = Math.max(8, (header?.bottom || 0) + 8);
+    // A transparent clock canvas must never cover the embedded board toolbar.
+    const boardFrame=document.getElementById('zagreb-board');
+    const toolbar=boardFrame?.contentDocument?.querySelector('.viewport-actions');
+    if(boardFrame && !boardFrame.hidden && toolbar){
+      const f=boardFrame.getBoundingClientRect(), t=toolbar.getBoundingClientRect();
+      if(baseX+x < f.left+t.right && baseX+x+rect.width > f.left+t.left)
+        top=Math.max(top,f.top+t.bottom+8);
+    }
     // Keep the grip and clock reachable after a resize or a settings change.
     const maxX = Math.max(8, window.innerWidth - rect.width - 8);
     const maxY = Math.max(top, window.innerHeight - rect.height - 8);
@@ -55,8 +67,20 @@ export function installFloatingClock(card, host) {
     if (frame) return;
     frame = requestAnimationFrame(() => {
       frame = 0;
-      if (active()) move(offset.x, offset.y);
-      else setMoveMode(false);
+      if (active()) {
+        const naturalWidth = parseFloat(card.querySelector('.game-clock')?.style.width || '300');
+        const width = `${Math.round(Math.max(180, Math.min(window.innerWidth * .52, naturalWidth || 300)))}px`;
+        if (floating() && panel.style.getPropertyValue('--floating-clock-width') !== width)
+          panel.style.setProperty('--floating-clock-width', width);
+        move(offset.x, offset.y);
+      }
+      else {setMoveMode(false);host.style.height='';}
+      const docked = window.innerWidth >= 800 && !document.body.classList.contains('mobile-mode') &&
+        document.body.classList.contains('clock-docked-right') && !document.body.classList.contains('right-pane-hidden');
+      const top = parseFloat(getComputedStyle(panel).top) || 0;
+      const next = docked ? Math.max(0, top-(panel.getBoundingClientRect().top-toolsPin)) : 0;
+      if (Math.abs(next-toolsPin)>.1) { toolsPin=next;panel.style.setProperty('--tools-pin-y',`${next}px`); }
+
     });
   }
   paint();
@@ -102,10 +126,13 @@ export function installFloatingClock(card, host) {
     move(offset.x + delta[0] * step, offset.y + delta[1] * step);
     save();
   });
+  window.addEventListener('scroll', schedule, {passive:true});
   window.addEventListener('resize', schedule);
   window.addEventListener('blur', () => setMoveMode(false));
   document.addEventListener('fullscreenchange', schedule);
-  new ResizeObserver(schedule).observe(panel);
+  const resize = new ResizeObserver(schedule);
+  resize.observe(panel);resize.observe(card);
   new MutationObserver(schedule).observe(card, { attributes: true, attributeFilter: ['hidden'] });
+  new MutationObserver(schedule).observe(card, { attributes: true, childList: true, subtree: true, attributeFilter: ['style'] });
   schedule();
 }

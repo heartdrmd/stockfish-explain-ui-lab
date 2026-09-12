@@ -57,8 +57,8 @@ test('desktop and mobile analysis can select one, two, or three engine lines dir
 test('desktop side columns scroll without moving or restructuring the board', () => {
   assert.match(layout, /body:not\(\.mobile-mode\) \.uniboard \.tools \{[\s\S]*?max-height:[\s\S]*?overflow-y:\s*auto[\s\S]*?overscroll-behavior-y:\s*contain/);
   assert.match(layout, /@media \(min-width: 1260px\)[\s\S]*?body:not\(\.mobile-mode\) \.uniboard \.side \{[\s\S]*?overflow-y:\s*auto/);
-  assert.match(layout, /\.tools > \.engine-power-row \{ top:\s*0; \}/);
-  assert.match(layout, /\.tools > \.ceval \{ top:\s*56px; \}/);
+  assert.match(layout, /:is\(\.tools, \.clock-below-scroll\) > \.engine-power-row \{ top:\s*0; \}/);
+  assert.match(layout, /:is\(\.tools, \.clock-below-scroll\) > \.ceval \{ top:\s*56px; \}/);
   assert.doesNotMatch(main, /function fitBoardSizeForSticky\(size\)/);
   assert.match(layout, /\.uniboard \.tools::\-webkit-scrollbar \{[\s\S]*?width:\s*16px/);
   assert.match(layout, /\.move-list-wrap > #move-list::\-webkit-scrollbar \{[\s\S]*?width:\s*12px/);
@@ -70,7 +70,7 @@ test('desktop notation keeps a protected internal scroller above the graph', () 
   assert.match(layout, /\.move-list-wrap > #move-list \{[\s\S]*?min-height:\s*220px[\s\S]*?overflow-y:\s*auto/);
   assert.match(html, /id="move-list"[\s\S]*?id="notation-graph-slot"/);
   assert.match(main, /ui\.moveList\?\.addEventListener\('wheel'[\s\S]*?ui\.moveList\.scrollTop \+=/);
-  assert.match(main, /moveListWrap\?\.addEventListener\('wheel'[\s\S]*?rightTools\.scrollTop \+=/);
+  assert.match(main, /moveListWrap\?\.addEventListener\('wheel'[\s\S]*?scroller\.scrollTop \+=/);
   assert.match(main, /event\.target\?\.closest\?\.\('#move-list'\)/);
 });
 

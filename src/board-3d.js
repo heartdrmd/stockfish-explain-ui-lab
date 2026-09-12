@@ -99,6 +99,17 @@ export function install3DBoard(board) {
     pendingClockStyle = event.detail;
     sendClockStyle();
   });
+  const flatMoveButton = document.getElementById('btn-move-flat-board');
+  let inlineFlat=false, backdrop='#151c1a';
+  const setFlatMoveMode = value => {
+    board.flatMoveMode=value;
+    flatMoveButton?.setAttribute('aria-pressed',String(value));
+    frame.contentWindow.postMessage({type:'zagreb:flat-move-mode',enabled:value},location.origin);
+  };
+  flatMoveButton?.addEventListener('click',()=>setFlatMoveMode(!board.flatMoveMode));
+  board.addEventListener('flat-layout-patch',event=>{
+    if(ready)frame.contentWindow.postMessage({type:'zagreb:flat-layout-patch',...event.detail},location.origin);
+  });
   const controlsToggle = document.getElementById('btn-toggle-board-controls');
   let controlsVisible = true, controlsReady = false;
   function syncControlsToggle() {
@@ -133,6 +144,14 @@ export function install3DBoard(board) {
     // Only visibility changes here. The shared game timer remains untouched.
     frame.contentWindow.postMessage({type:'zagreb:clock-visibility', visible}, location.origin);
   });
+  window.addEventListener('keydown', event => {
+    if (!enabled || !ready || !event.shiftKey || event.ctrlKey || event.metaKey ||
+        event.target.closest?.('input,textarea,select,[contenteditable=true],[role=dialog],.game-clock,.clock-view-panel,#practice-clock,#clock-top-controls')) return;
+    const direction = {ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,1],ArrowDown:[0,-1]}[event.key];
+    if (!direction) return;
+    event.preventDefault(); event.stopImmediatePropagation();
+    frame.contentWindow.postMessage({type:'zagreb:pan-board',horizontal:direction[0],depth:direction[1]}, location.origin);
+  }, true);
   function syncClock() {
     if (ready) frame.contentWindow.postMessage({ type: 'zagreb:clock', ...board.studyClock }, location.origin);
   }
@@ -214,6 +233,8 @@ export function install3DBoard(board) {
     board.rootEl.style.visibility = enabled ? 'hidden' : '';
     board.rootEl.inert = enabled;
     area.classList.toggle('using-3d', enabled);
+    if(flatMoveButton)flatMoveButton.hidden=enabled&&!inlineFlat;
+    area.closest?.('.uniboard')?.style.setProperty?.('--board-surround',enabled?backdrop:'#151c1a');
     toggle.setAttribute('aria-pressed', String(enabled));
     toggle.textContent = enabled ? '2D board' : '3D board';
     syncControlsToggle();
@@ -221,6 +242,19 @@ export function install3DBoard(board) {
     scheduleFrameSize(); sync(true);
   }
   toggle.addEventListener('click', () => setEnabled(!enabled));
+  const fullscreenButton = document.getElementById('btn-board-fullscreen');
+  let returnToNative = false;
+  fullscreenButton?.addEventListener('click', () => {
+    if (!ready) return;
+    returnToNative = !enabled;
+    setEnabled(true);
+    frame.contentWindow.postMessage({type:'zagreb:fullscreen-view', ...(returnToNative ? {flat:true} : {})}, location.origin);
+    const shell = frame.contentDocument?.querySelector('.fullscreen-shell');
+    shell?.requestFullscreen?.().catch(() => {});
+  });
+  document.addEventListener?.('fullscreenchange', () => {
+    if (!document.fullscreenElement && returnToNative) { returnToNative=false; setEnabled(false); }
+  });
   const restartOpening = () => {
     if (window.__practiceStarting || board.interactionLocked) return;
     document.getElementById('btn-practice-again')?.click();
@@ -232,6 +266,23 @@ export function install3DBoard(board) {
   window.addEventListener('chess:account-change', syncAccount);
   window.addEventListener('message', async event => {
     if (event.origin !== location.origin || event.source !== frame.contentWindow) return;
+    if (event.data?.type === 'zagreb:backdrop') {
+      if(!/^#[0-9a-f]{6}$/i.test(event.data.color||''))return;
+      backdrop=event.data.color;
+      if(enabled)area.closest?.('.uniboard')?.style.setProperty?.('--board-surround',backdrop);return;
+    }
+    if(event.data?.type==='zagreb:flat-layout-state'){
+      const {flatPan,flatPanY=0,flatScale}=event.data;
+      if(!Number.isFinite(flatPan)||flatPan < -50||flatPan > 50||!Number.isFinite(flatPanY)||flatPanY < -50||flatPanY > 50||!Number.isFinite(flatScale)||flatScale<35||flatScale>100)return;
+      board.restoreFlatLayout?.({flatPan,flatPanY,flatScale});return;
+    }
+    if(event.data?.type==='zagreb:flat-mode-state'){
+      if(typeof event.data.flat!=='boolean')return;
+      inlineFlat=event.data.flat;if(flatMoveButton)flatMoveButton.hidden=enabled&&!inlineFlat;return;
+    }
+    if(event.data?.type==='zagreb:flat-move-mode'){
+      if(typeof event.data.enabled==='boolean')setFlatMoveMode(event.data.enabled);return;
+    }
     if (event.data?.type === 'zagreb:board-controls-state') {
       if (typeof event.data.visible !== 'boolean' || typeof event.data.ready !== 'boolean') return;
       controlsVisible = event.data.visible; controlsReady = event.data.ready;
@@ -239,7 +290,7 @@ export function install3DBoard(board) {
       return;
     }
     if (event.data?.type === 'zagreb:account-ready') { syncAccount(); return; }
-    if (event.data?.type === 'zagreb:ready') { ready = true; sync(true); return; }
+    if (event.data?.type === 'zagreb:ready') { ready = true; if(fullscreenButton)fullscreenButton.disabled=false; sync(true); return; }
     if (event.data?.type === 'zagreb:clock-hardware-model') {
       board.setClockHardwareModel?.(event.data.family); return;
     }

@@ -543,7 +543,7 @@ body.ui-lab .cg-wrap coords.files {
 body.dividers-hidden .workspace-divider { visibility: hidden; pointer-events: none; }
 .clock-right-host:empty { display: none; }
 .clock-right-host { order: -10; flex: 0 0 auto; min-width: 0; }
-body.clock-docked-right:not(.mobile-mode) .uniboard .tools > :is(.engine-power-row, .ceval) {
+body.clock-docked-right:not(.mobile-mode) .uniboard .tools :is(.engine-power-row, .ceval) {
   position: relative;
   top: auto;
 }
@@ -586,7 +586,7 @@ body.right-pane-hidden .uniboard > #workspace-divider { display: none !important
     top: var(--split-top, 68px);
     right: 20px;
     bottom: auto;
-    width: clamp(180px, 22vw, 320px);
+    width: var(--floating-clock-width, 300px);
     max-width: calc(100vw - 40px);
     max-height: calc(100dvh - var(--split-top, 68px) - 20px);
     padding: 0;
@@ -630,7 +630,7 @@ body.right-pane-hidden .uniboard > #workspace-divider { display: none !important
     display: none;
   }
   body:not(.mobile-mode) .uniboard.split-layout:has(.board-area:not(.using-3d)) {
-    padding-top: 24px;
+    padding-top: 48px;
   }
   body:not(.mobile-mode) .uniboard.split-layout {
     --split-board-width: 500px;
@@ -736,3 +736,63 @@ body.dividers-hidden .workspace-divider::after{display:none!important}
 
 .clock-move-mode #clock-float-drag{background:#506c3a!important;border-color:#d6df83!important;color:#fffac5!important;box-shadow:0 0 0 2px #d6df8344,0 0 14px #c4dc7166}
 .clock-move-mode .clock-live-canvas canvas{cursor:move!important}
+
+@media(min-width:800px){
+  body.clock-docked-right.right-pane-hidden:not(.mobile-mode) #clock-atelier .game-clock-fit{width:100%!important}
+  body:not(.mobile-mode) .board-area:not(.using-3d) > #board,
+  body:not(.mobile-mode) .board-area:not(.using-3d) #board-resize,
+  body:not(.mobile-mode) .board-area:not(.using-3d) ~ .eval-gauge-control{translate:var(--native-board-pan,0px) 0}
+}
+body.native-board-panning,body.native-board-panning #board{cursor:move!important;user-select:none}
+
+body.ui-lab #btn-board-fullscreen{order:7;min-width:36px;padding-inline:8px}
+@media(min-width:800px){
+  body.ui-lab:not(.mobile-mode):has(#clock-position-controls [data-open=true]) .site-header{padding-right:292px}
+  body:not(.mobile-mode) .uniboard.split-layout .board-area:not(.using-3d){position:sticky;top:var(--split-top,78px);translate:0 var(--board-pin-y,0px)}
+  body:not(.mobile-mode) .board-area:not(.using-3d) ~ .eval-gauge-control{position:sticky;top:var(--split-top,78px);translate:var(--native-board-pan,0px) var(--gauge-pin-y,0px)}
+}
+
+.clock-below-scroll{display:contents}
+@media(min-width:800px){
+  body.clock-docked-right:not(.right-pane-hidden):not(.clock-presentation-hidden):not(.mobile-mode) .uniboard > .tools:has(#practice-clock:not([hidden])){
+    height:calc(100dvh - var(--split-top,68px) - 12px);overflow:visible;scrollbar-gutter:auto;gap:14px;
+  }
+  body.clock-docked-right:not(.right-pane-hidden):not(.clock-presentation-hidden):not(.mobile-mode) .tools:has(#practice-clock:not([hidden])) > .clock-below-scroll{
+    display:flex;flex-direction:column;gap:12px;flex:1 1 0;min-height:0;overflow:auto;overscroll-behavior:contain;padding-right:4px;
+  }
+  body.clock-docked-right:not(.right-pane-hidden):not(.mobile-mode) #clock-right-host .game-clock-fit{max-height:min(52dvh,380px)!important}
+  body.clock-docked-right.right-pane-hidden:not(.mobile-mode) .uniboard > .tools:has(#practice-clock:not([hidden])){overflow:hidden}
+  body.dividers-hidden .clock-below-scroll{scrollbar-width:none}
+  body.dividers-hidden .clock-below-scroll::-webkit-scrollbar{display:none}
+}
+
+@media(min-width:800px){body.clock-docked-right:not(.right-pane-hidden):not(.mobile-mode) .uniboard > .tools{translate:0 var(--tools-pin-y,0px)}}
+
+@media(min-width:800px){
+  body.clock-docked-right:not(.mobile-mode) #clock-right-host{position:relative}
+  body.clock-docked-right:not(.right-pane-hidden):not(.mobile-mode) #clock-right-host > #practice-clock{
+    position:absolute;top:0;left:0;width:100%;margin:0;translate:var(--clock-dock-x,0px) var(--clock-dock-y,0px);z-index:32;background:transparent;
+  }
+  body.clock-docked-right:not(.mobile-mode) #clock-float-drag{
+    display:grid;place-items:center;width:36px;height:28px;margin:0 0 4px;padding:0;border:1px solid #81917a55;border-radius:4px;background:var(--board-surround);color:#cbd5c2;font-size:19px;cursor:grab;touch-action:none;
+  }
+  body.clock-docked-right:not(.mobile-mode) .tools,
+  body.clock-docked-right:not(.mobile-mode) #clock-right-host,
+  body.clock-docked-right:not(.mobile-mode) #practice-clock,
+  body.clock-docked-right:not(.mobile-mode) #clock-atelier,
+  body.clock-docked-right:not(.mobile-mode) .game-clock-fit,
+  body.clock-docked-right:not(.mobile-mode) .game-clock{pointer-events:none}
+  body.clock-docked-right:not(.mobile-mode) .clock-below-scroll,
+  body.clock-docked-right:not(.mobile-mode) #practice-clock :is(button,input,select,canvas){pointer-events:auto}
+}
+
+#btn-move-flat-board{order:7;min-width:36px;padding-inline:8px}
+#btn-move-flat-board[hidden]{display:none!important}
+#btn-move-flat-board[aria-pressed=true],.flat-move-tool[aria-pressed=true]{background:#506c3a!important;color:#fffac5!important;box-shadow:0 0 12px #c4dc7166}
+@media(min-width:800px){
+  body:not(.mobile-mode) .board-area:not(.using-3d) > #board,
+  body:not(.mobile-mode) .board-area:not(.using-3d) #board-resize{translate:var(--native-board-pan,0px) var(--native-board-pan-y,0px)}
+  body:not(.mobile-mode) .board-area:not(.using-3d) .board-nav{translate:0 var(--native-board-pan-y,0px)}
+}
+
+@media(min-width:800px){body:not(.mobile-mode) .uniboard.split-layout .board-area{position:sticky;top:var(--split-top,78px);translate:0 var(--board-pin-y,0px)}}

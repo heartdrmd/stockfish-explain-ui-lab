@@ -65,6 +65,19 @@ test('shared clocks use parent time in both board modes and reject foreign contr
   }
   const clockMessages = () => sent.filter(item => item.message.type === 'zagreb:clock');
   message('zagreb:ready');
+  const panMessages = () => sent.filter(item => item.message.type === 'zagreb:pan-board');
+  function panKey(closest = () => null) {
+    const event = new Event('keydown', {cancelable: true});
+    Object.assign(event, {key:'ArrowLeft',shiftKey:true});
+    Object.defineProperty(event, 'target', {value:{closest}});
+    windowTarget.dispatchEvent(event);
+    return event;
+  }
+  assert.equal(panKey().defaultPrevented, true);
+  assert.deepEqual(panMessages().at(-1), {message:{type:'zagreb:pan-board',horizontal:-1,depth:0},target:origin});
+  const panCount = panMessages().length;
+  assert.equal(panKey(() => ({})).defaultPrevented, false, 'Clock controls and editable fields keep their own shortcuts');
+  assert.equal(panMessages().length, panCount);
   const analysisRequests=[],docks=[];
   board.requestAnalysis=request=>analysisRequests.push(request.action);
   board.setClockDock=placement=>docks.push(placement);
@@ -166,6 +179,8 @@ test('shared clocks use parent time in both board modes and reject foreign contr
   assert.deepEqual(hardwareRequests, [{family:'dgt'}, {key:'menu',phase:'down'}, {key:'menu',phase:'up'}]);
   toggle.click();
   assert.equal(controlsButton.hidden, true, 'Native 2D has no viewer toolbar to collapse');
+  panKey();
+  assert.equal(panMessages().length, panCount, 'Native 2D never pans the hidden 3D camera');
   clockButton.click();
   assert.equal(sent.at(-1).message.type, 'zagreb:clock-visibility', 'Clock remains reachable with the viewer hidden for native 2D');
 

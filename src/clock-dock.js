@@ -3,6 +3,14 @@ import { installFloatingClock } from './clock-float.js';
 export function installClockDock(board) {
   const card=document.getElementById('practice-clock'), right=document.getElementById('clock-right-host');
   if (!card || !right) return;
+  // The clock owns a fixed slot; only the material below it scrolls.
+  const tools=right.closest('.tools');
+  if (tools && !tools.querySelector('.clock-below-scroll')) {
+    const below=document.createElement('div');
+    below.className='clock-below-scroll';
+    for(const child of [...tools.children])if(child!==right)below.append(child);
+    tools.append(below);
+  }
   const home=document.createComment('Clock returns here');
   card.before(home);
   installFloatingClock(card, right);

@@ -8,13 +8,13 @@ const layout = fs.readFileSync(new URL('../styles/layout.css', import.meta.url),
 const panels = fs.readFileSync(new URL('../styles/panels.css', import.meta.url), 'utf8');
 
 test('desktop engine panel cannot flex-shrink and clip selected PV lines', () => {
-  assert.match(layout, /tools > \.ceval \{[\s\S]*?flex-shrink:\s*0/);
+  assert.match(layout, /\.clock-below-scroll\) > \.ceval \{[\s\S]*?flex-shrink:\s*0/);
   assert.match(layout, /min-height:\s*min\(var\(--ceval-user-min-height, 0px\), 60dvh\)/);
   assert.match(
     layout,
     /body\.practice-mode:not\(\.practice-finished\):not\(\.mobile-mode\)[\s\S]*?min-height:\s*max\(200px, min\(var\(--ceval-user-min-height, 0px\), 60dvh\)\)/,
   );
-  assert.match(layout, /body\.mobile-mode \.tools > \.ceval \{[\s\S]*?flex-shrink:\s*0/);
+  assert.match(layout, /body\.mobile-mode :is\(\.tools, \.clock-below-scroll\) > \.ceval \{[\s\S]*?flex-shrink:\s*0/);
 });
 
 test('engine analysis has one safe desktop-only persistent resize divider', () => {

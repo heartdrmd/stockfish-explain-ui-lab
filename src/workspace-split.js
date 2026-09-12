@@ -115,7 +115,7 @@ export function installWorkspaceSplit(board) {
     const headerBottom = Math.max(0, document.querySelector('.site-header')?.getBoundingClientRect().bottom || 60);
     const navHeight = layout.querySelector('.board-nav')?.getBoundingClientRect().height || 72;
     const viewer = using3D();
-    const { top, height: fitHeight } = fitBoardHeight(width, window.innerHeight, headerBottom, navHeight, viewer ? 12 : 24);
+    const { top, height: fitHeight } = fitBoardHeight(width, window.innerHeight, headerBottom, navHeight, viewer ? 12 : 48);
     fittedHeight = fitHeight;
     const height = viewer ? fitHeight : Math.max(1, Math.round(fitHeight * squareScale));
     layout.style.setProperty('--split-board-height', height + 'px');
@@ -141,6 +141,7 @@ export function installWorkspaceSplit(board) {
     // The corner owns the visible square; the divider owns the column.
     // A height-limited square must respond without first crossing unused width.
     squareScale = Math.max(0.35, Math.min(1, requested / fittedHeight));
+    board.dispatchEvent(new CustomEvent('flat-layout-patch',{detail:{flatScale:squareScale*100}}));
     apply();
   }
   function schedule(requested = null, requestedSide = null) {
@@ -231,9 +232,12 @@ export function installWorkspaceSplit(board) {
   new MutationObserver(() => { if (!drag) updateLayout(); }).observe(document.body, { attributes: true, attributeFilter: ['class'] });
   // Switching from the viewer to native 2D changes the top breathing room.
   new MutationObserver(updateLayout).observe(board.rootEl.parentElement, { attributes: true, attributeFilter: ['class'] });
+  const header = document.querySelector('.site-header');
+  if (header) new ResizeObserver(updateLayout).observe(header);
   updateLayout();
   return {
     isActive, setBoardSize: apply, resizeFromCorner, save,
+    restoreScale: value => { if(value>=35&&value<=100){squareScale=value/100;apply();save();} },
     getCornerSize: () => (using3D() ? board.rootEl.parentElement : board.rootEl).getBoundingClientRect().width,
   };
 }

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { installClockDock } from '../src/clock-dock.js';
 test('clock docking moves the same live card above tools and returns it home',t=>{
-  const card={timer:{white:123}}, right={append:value=>{right.child=value;}};
+  const card={timer:{white:123}}, right={closest:()=>null,append:value=>{right.child=value;}};
   const home={after:value=>{home.child=value;right.child=null;}};
   card.before=value=>assert.equal(value,home);
   let opened=0,resizes=0;

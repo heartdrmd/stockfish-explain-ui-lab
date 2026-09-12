@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Chess } from '../vendor/chess.js/chess.js';
-import { studyAnalysisState, handleStudyAnalysisRequest } from '../src/board-analysis.js';
+import { studyAnalysisState, handleStudyAnalysisRequest, installAnalysisKeyboard } from '../src/board-analysis.js';
 
 function setup() {
   const chess=new Chess(), played=[], calls=[];
@@ -68,4 +68,24 @@ test('lesson, recovery, transitions and game over prevent unsafe engine actions'
   s.context.threat=true;assert.deepEqual(studyAnalysisState(s.board,s.context).lines,[]);
   s.chess.load('7k/8/6K1/8/8/8/8/8 w - - 0 1');s.context.practice=true;
   assert.equal(s.request('hint',3000),false);
+});
+
+test('Space and L own analysis shortcuts without scrolling, repeat moves or stealing typing',()=>{
+  const target=new EventTarget(), requests=[];
+  let state={fen:'current',engineOn:true};
+  installAnalysisKeyboard(target,()=>state,r=>requests.push(r));
+  function key(key,options={}) {
+    const event=new Event('keydown',{cancelable:true});
+    Object.assign(event,{key,code:key===' '?'Space':'KeyL',...options});
+    if(options.editable)Object.defineProperty(event,'target',{value:{closest:()=>({})}});
+    target.dispatchEvent(event);return event;
+  }
+  assert.equal(key(' ').defaultPrevented,true);
+  assert.deepEqual(requests,[{action:'play-best',fen:'current'}]);
+  key(' ',{repeat:true});assert.equal(requests.length,1);
+  key('l');assert.equal(requests.at(-1).action,'toggle-engine');
+  state={...state,engineOn:false};key(' ');assert.equal(requests.length,2);
+  assert.equal(key(' ',{editable:true}).defaultPrevented,false);
+  assert.equal(key('l',{ctrlKey:true}).defaultPrevented,false);
+  assert.equal(requests.length,2);
 });
