@@ -594,8 +594,11 @@ body.right-pane-hidden .uniboard > #workspace-divider { display: none !important
     z-index: 32;
     overflow: auto;
     scrollbar-gutter: auto;
-    background: var(--board-surround);
+    background: transparent;
     translate: var(--clock-float-x, 0px) var(--clock-float-y, 0px);
+  }
+  body.clock-docked-right.right-pane-hidden:not(.mobile-mode) #practice-clock {
+    background: transparent;
   }
   body.clock-docked-right.right-pane-hidden:not(.mobile-mode) .clock-float-drag {
     display: grid;
