@@ -522,3 +522,7 @@ body.ui-lab .cg-wrap coords.files {
 /* Presentation toggles preserve the board position and all square highlights. */
 .move-list-wrap.notation-hidden { display: none !important; }
 .board-area.using-3d ~ .eval-gauge-control .eval-gauge { visibility: hidden; }
+
+.board-area .board-nav { flex-wrap: wrap; gap: 3px; }
+#board-moves-toggle { white-space: nowrap; min-width: 54px; }
+#board-moves-toggle[aria-pressed="true"] { background: #344c3f; color: #edf1e7; }

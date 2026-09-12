@@ -45,10 +45,11 @@ export function install3DBoard(board) {
   try { movesHidden = localStorage.getItem(movesKey) === '1'; } catch {}
   function applyMoves() {
     movesWrap?.classList.toggle('notation-hidden', movesHidden);
-    movesToggle.textContent = movesHidden ? 'Show moves' : 'Hide moves';
-    movesToggle.setAttribute('aria-label', movesToggle.textContent);
+    const label = movesHidden ? 'Show moves' : 'Hide moves';
+    movesToggle.textContent = 'Moves';
+    movesToggle.setAttribute('aria-label', label);
     movesToggle.setAttribute('aria-pressed', String(!movesHidden));
-    movesToggle.title = movesToggle.textContent;
+    movesToggle.title = label;
   }
   applyMoves();
   movesToggle.addEventListener('click', () => {
