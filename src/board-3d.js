@@ -87,6 +87,23 @@ export function install3DBoard(board) {
   const gaugeControl = document.getElementById('eval-gauge-control');
   let enabled = false, ready = false, busy = false, scheduled = false, lastState = '', lastOverlay = '';
   let viewRevision = 0;
+  const controlsToggle = document.getElementById('btn-toggle-board-controls');
+  let controlsVisible = true, controlsReady = false;
+  function syncControlsToggle() {
+    if (!controlsToggle) return;
+    controlsToggle.hidden = !enabled;
+    controlsToggle.disabled = !controlsReady;
+    const label = controlsVisible ? 'Hide board controls' : 'Show board controls';
+    controlsToggle.setAttribute('aria-label', label);
+    controlsToggle.setAttribute('aria-pressed', String(controlsVisible));
+    controlsToggle.title = label;
+  }
+  controlsToggle?.addEventListener('click', () => {
+    if (!enabled || !controlsReady) return;
+    controlsVisible = !controlsVisible;
+    syncControlsToggle();
+    frame.contentWindow.postMessage({type:'zagreb:board-controls', visible:controlsVisible}, location.origin);
+  });
   function syncClock() {
     if (ready) frame.contentWindow.postMessage({ type: 'zagreb:clock', ...board.studyClock }, location.origin);
   }
@@ -168,6 +185,7 @@ export function install3DBoard(board) {
     area.classList.toggle('using-3d', enabled);
     toggle.setAttribute('aria-pressed', String(enabled));
     toggle.textContent = enabled ? '2D board' : '3D board';
+    syncControlsToggle();
     if (enabled && !frame.src) frame.src = '/zagreb/?embed=1';
     scheduleFrameSize(); sync(true);
   }
@@ -183,6 +201,12 @@ export function install3DBoard(board) {
   window.addEventListener('chess:account-change', syncAccount);
   window.addEventListener('message', async event => {
     if (event.origin !== location.origin || event.source !== frame.contentWindow) return;
+    if (event.data?.type === 'zagreb:board-controls-state') {
+      if (typeof event.data.visible !== 'boolean' || typeof event.data.ready !== 'boolean') return;
+      controlsVisible = event.data.visible; controlsReady = event.data.ready;
+      syncControlsToggle();
+      return;
+    }
     if (event.data?.type === 'zagreb:account-ready') { syncAccount(); return; }
     if (event.data?.type === 'zagreb:ready') { ready = true; sync(true); return; }
     if (event.data?.type === 'zagreb:clock-design') {

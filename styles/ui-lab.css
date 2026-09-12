@@ -49,6 +49,9 @@ body.ui-lab #btn-quick-practice { order: 3; }
 body.ui-lab #btn-my-games { order: 4; }
 body.ui-lab #auth-area { order: 5; }
 body.ui-lab #btn-live-graph { order: 7; }
+body.ui-lab #btn-toggle-board-controls { order: 7; }
+body.ui-lab #btn-toggle-board-controls[hidden] { display: none !important; }
+body.ui-lab #btn-toggle-board-controls[aria-pressed="false"] { color: #a9b8a4; border-color: #718368; }
 body.ui-lab #btn-coach { order: 8; }
 body.ui-lab #global-ai-spend-lock { order: 9; }
 body.ui-lab .site-nav { order: 10; }

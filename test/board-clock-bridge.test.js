@@ -8,13 +8,14 @@ test('shared clocks use parent time in both board modes and reject foreign contr
     style = {};
     children = [];
     classList = { toggle() {}, contains: () => false };
-    setAttribute() {}
+    attributes = {};
+    setAttribute(name, value) { this.attributes[name] = value; }
     prepend(child) { this.children.unshift(child); }
     append(child) { this.children.push(child); }
     insertBefore(child) { this.children.push(child); }
     click() { this.dispatchEvent(new Event('click')); }
   }
-  const area = new Element(), nav = new Element(), root = new Element(), graphButton = new Element();
+  const area = new Element(), nav = new Element(), root = new Element(), graphButton = new Element(), controlsButton = new Element();
   area.querySelector = () => nav;
   root.parentElement = area;
   root.offsetWidth = 640;
@@ -24,7 +25,8 @@ test('shared clocks use parent time in both board modes and reject foreign contr
   const origin = 'https://chess.example';
   const globals = {
     document: {
-      body: new Element(), querySelector: () => null, getElementById: id => id === 'btn-live-graph' ? graphButton : null,
+      body: new Element(), querySelector: () => null, getElementById: id =>
+        id === 'btn-live-graph' ? graphButton : id === 'btn-toggle-board-controls' ? controlsButton : null,
       createElement: () => {
         const element = new Element();
         element.contentWindow = { postMessage: (message, target) => sent.push({message, target}) };
@@ -63,6 +65,18 @@ test('shared clocks use parent time in both board modes and reject foreign contr
   }
   const clockMessages = () => sent.filter(item => item.message.type === 'zagreb:clock');
   message('zagreb:ready');
+  assert.equal(controlsButton.disabled, true, 'Wait for saved settings before offering the toggle');
+  message('zagreb:board-controls-state', {}, origin, {visible:false,ready:true});
+  assert.equal(controlsButton.disabled, true, 'Ignore a state message from a foreign frame');
+  message('zagreb:board-controls-state', frame.contentWindow, origin, {visible:false,ready:true});
+  assert.equal(controlsButton.disabled, false);
+  assert.equal(controlsButton.attributes['aria-label'], 'Show board controls');
+  controlsButton.click();
+  assert.deepEqual(sent.at(-1), {message:{type:'zagreb:board-controls',visible:true},target:origin});
+  controlsButton.click();
+  assert.equal(sent.at(-1).message.visible, false, 'The same accessible header button can hide and restore the row');
+  message('zagreb:board-controls-state', frame.contentWindow, origin, {visible:true,ready:true});
+  assert.equal(controlsButton.attributes['aria-label'], 'Hide board controls', 'Loading another saved view updates the header toggle');
   const positions = () => sent.filter(item => item.message.type === 'zagreb:position').map(item => item.message);
   const firstViewRevision = positions().at(-1).viewRevision;
   assert.equal(positions().at(-1).orientation, 'white');
@@ -94,6 +108,7 @@ test('shared clocks use parent time in both board modes and reject foreign contr
   message('zagreb:clock-pause');
   assert.equal(pauseRequests, 1);
   toggle.click();
+  assert.equal(controlsButton.hidden, true, 'Native 2D has no viewer toolbar to collapse');
   assert.equal(positions().at(-1).viewRevision, firstViewRevision, 'Hiding 3D does not request a camera change');
   const beforeHiddenTick = clockMessages().length;
   message('zagreb:clock-pause');
@@ -136,6 +151,7 @@ test('shared clocks use parent time in both board modes and reject foreign contr
   assert.equal(sent.at(-1).message.error, 'The timed game has stopped.');
   board.cg.state.orientation = 'black';
   toggle.click();
+  assert.equal(controlsButton.hidden, false);
   assert.equal(positions().at(-1).orientation, 'black', 'Returning to 3D takes the current 2D side');
   assert.equal(positions().at(-1).viewRevision, firstViewRevision + 1);
   toggle.click(); toggle.click();
