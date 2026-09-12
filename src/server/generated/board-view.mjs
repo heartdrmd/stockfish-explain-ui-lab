@@ -1,4 +1,4 @@
-//#region ../zagreb-viewer/node_modules/chess.js/dist/esm/chess.js
+//#region node_modules/chess.js/dist/esm/chess.js
 function rootNode(comment) {
 	return comment !== null ? {
 		comment,
