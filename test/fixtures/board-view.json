@@ -69,9 +69,13 @@
     "knightAngle": -43,
     "knightScale": 100,
     "lowerControls": false,
+    "upperControls": false,
     "framing": "maximum",
     "perspective": 38,
     "coordinates": false,
+    "flatStyle": "classic",
+    "flatScale": 100,
+    "railOrder": "moves-first",
     "pieceScales": {
       "king": 91,
       "queen": 92,
@@ -81,7 +85,25 @@
       "pawn": 105
     },
     "showClock": false,
-    "clockStyle": "zmf"
+    "clockStyle": "zmf-pro-3d",
+    "clock3D": {
+      "dgt-3000": {
+        "yaw": 32,
+        "tilt": 45,
+        "zoom": 120,
+        "light": "Side",
+        "intensity": 135,
+        "fill": 55
+      },
+      "zmf-pro": {
+        "yaw": -43,
+        "tilt": 34,
+        "zoom": 90,
+        "light": "Night",
+        "intensity": 70,
+        "fill": 40
+      }
+    }
   },
   "navigation": "pan",
   "showEvaluation": false,

@@ -3600,12 +3600,28 @@ var CLOCK_STYLES = [
 		label: "DGT · classic casing"
 	},
 	{
+		id: "dgt-3000",
+		label: "DGT 3000 · high contrast"
+	},
+	{
+		id: "dgt-3000-3d",
+		label: "DGT 3000 · 3D"
+	},
+	{
 		id: "zmf",
 		label: "ZMF · blue LED"
 	},
 	{
 		id: "zmf-classic",
 		label: "ZMF · classic LCD"
+	},
+	{
+		id: "zmf-pro",
+		label: "ZMF TapNSet Pro · metal"
+	},
+	{
+		id: "zmf-pro-3d",
+		label: "ZMF TapNSet Pro · 3D"
 	},
 	{
 		id: "wood",
@@ -3616,6 +3632,43 @@ var CLOCK_STYLES = [
 		label: "Simple digital"
 	}
 ];
+//#endregion
+//#region lib/clock-3d-settings.ts
+var CLOCK_LIGHTS = [
+	"Studio",
+	"Side",
+	"Daylight",
+	"Warm",
+	"Night"
+];
+function validClock3DViews(value) {
+	if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+	return Object.entries(value).every(([model, view]) => {
+		if (!["dgt-3000", "zmf-pro"].includes(model) || !view || typeof view !== "object" || Array.isArray(view)) return false;
+		const clean = readClock3DView(view);
+		return Object.keys(view).length === Object.keys(clean).length && Object.entries(clean).every(([key, setting]) => view[key] === setting);
+	});
+}
+var DEFAULT_CLOCK_3D = {
+	yaw: -18,
+	tilt: 20,
+	zoom: 100,
+	light: "Studio",
+	intensity: 100,
+	fill: 35
+};
+function readClock3DView(value) {
+	const v = value && typeof value === "object" ? value : {};
+	const num = (key, min, max) => typeof v[key] === "number" && Number.isFinite(v[key]) ? Math.max(min, Math.min(max, v[key])) : DEFAULT_CLOCK_3D[key];
+	return {
+		yaw: num("yaw", -180, 180),
+		tilt: num("tilt", -10, 80),
+		zoom: num("zoom", 65, 145),
+		light: CLOCK_LIGHTS.includes(v.light) ? v.light : DEFAULT_CLOCK_3D.light,
+		intensity: num("intensity", 15, 220),
+		fill: num("fill", 0, 150)
+	};
+}
 //#endregion
 //#region lib/saved-view.ts
 function savedViewId(id) {
@@ -3681,7 +3734,7 @@ function validateView(raw) {
 		"club",
 		"strong"
 	].includes(s.practice.level))) throw new Error("Invalid practice settings.");
-	if (s.viewing && (s.viewing.showClock != null && typeof s.viewing.showClock !== "boolean" || s.viewing.flatStyle != null && !["classic", "materials"].includes(s.viewing.flatStyle) || s.viewing.flatScale != null && !range(s.viewing.flatScale, 35, 100) || s.viewing.railOrder != null && !["clock-first", "moves-first"].includes(s.viewing.railOrder) || s.viewing.clockStyle != null && !CLOCK_STYLES.some((style) => style.id === s.viewing.clockStyle) || !range(s.viewing.knightAngle, -180, 180) || s.viewing.pieceScales != null && (typeof s.viewing.pieceScales !== "object" || Array.isArray(s.viewing.pieceScales) || !Object.entries(s.viewing.pieceScales).every(([name, scale]) => PIECE_NAMES.includes(name) && range(scale, 60, 120))) || s.viewing.knightScale != null && !range(s.viewing.knightScale, 60, 120) || s.viewing.lowerControls != null && typeof s.viewing.lowerControls !== "boolean" || s.viewing.upperControls != null && typeof s.viewing.upperControls !== "boolean" || !range(s.viewing.perspective, 25, 55) || !["comfortable", "maximum"].includes(s.viewing.framing) || typeof s.viewing.coordinates !== "boolean")) throw new Error("Invalid viewing settings.");
+	if (s.viewing && (s.viewing.showClock != null && typeof s.viewing.showClock !== "boolean" || s.viewing.flatStyle != null && !["classic", "materials"].includes(s.viewing.flatStyle) || s.viewing.flatScale != null && !range(s.viewing.flatScale, 35, 100) || s.viewing.railOrder != null && !["clock-first", "moves-first"].includes(s.viewing.railOrder) || s.viewing.clockStyle != null && !CLOCK_STYLES.some((style) => style.id === s.viewing.clockStyle) || s.viewing.clock3D != null && !validClock3DViews(s.viewing.clock3D) || !range(s.viewing.knightAngle, -180, 180) || s.viewing.pieceScales != null && (typeof s.viewing.pieceScales !== "object" || Array.isArray(s.viewing.pieceScales) || !Object.entries(s.viewing.pieceScales).every(([name, scale]) => PIECE_NAMES.includes(name) && range(scale, 60, 120))) || s.viewing.knightScale != null && !range(s.viewing.knightScale, 60, 120) || s.viewing.lowerControls != null && typeof s.viewing.lowerControls !== "boolean" || s.viewing.upperControls != null && typeof s.viewing.upperControls !== "boolean" || !range(s.viewing.perspective, 25, 55) || !["comfortable", "maximum"].includes(s.viewing.framing) || typeof s.viewing.coordinates !== "boolean")) throw new Error("Invalid viewing settings.");
 	if (s.navigation != null && !["orbit", "pan"].includes(s.navigation) || s.showEvaluation != null && typeof s.showEvaluation !== "boolean" || s.showMoves != null && typeof s.showMoves !== "boolean") throw new Error("Invalid board controls.");
 	return {
 		...s,
