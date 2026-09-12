@@ -246,14 +246,20 @@
 }
 .game-clock .clock-turn {
   margin-left: auto;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: currentColor;
-  opacity: 0.12;
+  flex: none;
+  min-width: 23px;
+  height: 13px;
+  padding: 0 3px;
+  border-radius: 2px;
+  color: var(--clock-display, #9da88a);
+  background: var(--clock-ink, #10170f);
+  font: 800 9px/13px Arial, sans-serif;
+  letter-spacing: .025em;
+  text-align: center;
+  visibility: hidden;
 }
 .game-clock .is-running .clock-turn {
-  opacity: 1;
+  visibility: visible;
 }
 .game-clock .clock-readout {
   min-height: 36px;
@@ -796,7 +802,7 @@
 .clock-rendered-screen { position: absolute; display: flex; flex-direction: column; color: #111a13; padding: 1px 3px 2px; }
 .game-clock .clock-rendered-screen .clock-player { font-size: 8px; gap: 3px; margin-bottom: 2px; line-height: 1.1; }
 .game-clock .clock-rendered-screen .clock-stone { width: 5px; height: 5px; }
-.game-clock .clock-rendered-screen .clock-turn { width: 4px; height: 4px; }
+.game-clock .clock-rendered-screen .clock-turn { min-width: 20px; height: 11px; font-size: 8px; line-height: 11px; }
 .game-clock .clock-rendered-screen .clock-readout { flex: 1; min-height: 0; display: flex; }
 .game-clock .clock-rendered-screen .clock-segments { height: 100%; stroke: currentColor; stroke-width: 1.7; stroke-linejoin: round; transform: skewX(-5deg); }
 .clock-rendered-screen.is-low { color: #641d16; }
