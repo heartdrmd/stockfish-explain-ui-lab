@@ -312,13 +312,18 @@
 .game-clock .clock-case[data-clock-style='zmf'] .clock-paddles i {
   height: 10px;
   border-radius: 50%;
+  background: #08111a;
+  border-top-color: #31495e;
+  box-shadow: inset 0 1px 2px #0009;
 }
 .game-clock .clock-case[data-clock-style='zmf'] .clock-paddles .pressed {
   height: 8px;
   margin-top: 2px;
 }
 .game-clock .clock-case[data-clock-style='zmf'] .clock-paddles .is-running {
-  background: #68bdff;
+  background: #79c9ff;
+  border-top-color: #c6edff;
+  box-shadow: 0 0 5px #54b7ff, inset 0 1px 1px #dff6ff;
 }
 .game-clock .clock-case[data-clock-style='zmf'] .clock-segments {
   filter: drop-shadow(0 0 2px #3899de80);
@@ -652,21 +657,23 @@
 .game-clock .clock-pro-controls {
   position: absolute;
   top: 7px;
-  left: 39%;
-  right: 24%;
+  left: 33%;
+  right: 33%;
   display: flex;
   justify-content: space-between;
   align-items: center;
 }
 .game-clock .clock-pro-controls i {
-  width: 5px;
-  height: 5px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
-  background: #13171c;
+  background: #08111a;
+  box-shadow: inset 0 1px 1px #0009;
 }
-.game-clock .clock-pro-controls i:last-child {
-  background: #73b5f7;
-  box-shadow: 0 0 5px #5ca4ed90;
+.game-clock .clock-pro-controls i[data-lit='true'],
+.clock-rendered-indicator[data-lit='true'] {
+  background: #79c9ff;
+  box-shadow: 0 0 4px #54b7ff, 0 0 9px #249dffad, inset 0 1px 1px #dff6ff;
 }
 .game-clock .clock-pro-controls b {
   width: 14px;
@@ -781,7 +788,7 @@
   box-shadow: 0 3px 1px #05090dbb, inset 0 1px 1px #fff9;
 }
 .game-clock [data-clock-style='zmf-pro'] .clock-paddles i.pressed { height: 20px; margin-top: 2px; }
-.game-clock [data-clock-style='zmf-pro'] .clock-pro-controls { top: 12px; left: 37%; right: 37%; }
+.game-clock [data-clock-style='zmf-pro'] .clock-pro-controls { top: 12px; }
 .game-clock [data-clock-style='zmf-pro'] .clock-pro-controls b { width: 16px; height: 10px; background: linear-gradient(#497ea9,#285274); }
 .game-clock [data-clock-style='zmf-pro'] .clock-faces {
   border: 4px solid #151d23;
@@ -799,6 +806,7 @@
 .game-clock [data-clock-style='zmf-pro']::after { left: auto; right: 24px; }
 .clock-rendered-case { position: relative; width: 100%; aspect-ratio: 14 / 9; filter: drop-shadow(0 7px 5px #0005); }
 .clock-case-render { display: block; width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
+.clock-rendered-indicator { position: absolute; border-radius: 45%; background: #08111a; box-shadow: inset 0 1px 1px #0009; pointer-events: none; }
 .clock-rendered-screen { position: absolute; display: flex; flex-direction: column; color: #111a13; padding: 1px 3px 2px; }
 .game-clock .clock-rendered-screen .clock-player { font-size: 8px; gap: 3px; margin-bottom: 2px; line-height: 1.1; }
 .game-clock .clock-rendered-screen .clock-stone { width: 5px; height: 5px; }
@@ -853,7 +861,5 @@
 .game-clock .clock-live-mini .clock-dgt-controls{margin:0;border:1px solid #596659;border-radius:5px;overflow:hidden}
 .game-clock .clock-live-mini .clock-dgt-controls button{min-height:28px;background:#253229;color:#dbe5d4;box-shadow:none}
 .game-clock .clock-live-error{margin:0;font-size:11px;color:#d4c291}
-.game-clock .clock-pro-controls i{background:#122a3c!important;box-shadow:inset 0 1px 1px #0009!important}
-.game-clock .clock-pro-controls i.is-running{background:#79c9ff!important;box-shadow:0 0 4px #54b7ff,0 0 9px #249dffad,inset 0 1px 1px #dff6ff!important}
 
 .clock-view-panel.clock-view-floating{position:fixed;z-index:2147483000;right:auto;width:268px;box-sizing:border-box;transform:none;zoom:1}.clock-view-panel *{box-sizing:border-box}.clock-view-panel :focus-visible{outline:2px solid #d8bf72;outline-offset:2px}
