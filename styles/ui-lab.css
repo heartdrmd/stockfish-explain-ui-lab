@@ -531,6 +531,12 @@ body.ui-lab .cg-wrap coords.files {
 
 /* The divider controls the board and the complete analysis column together. */
 .workspace-divider { display: none; }
+.clock-right-host:empty { display: none; }
+.clock-right-host { order: -10; flex: 0 0 auto; min-width: 0; }
+body.clock-docked-right:not(.mobile-mode) .uniboard .tools > :is(.engine-power-row, .ceval) {
+  position: relative;
+  top: auto;
+}
 body.left-pane-hidden .uniboard > .side { display: none !important; }
 body.left-pane-hidden .uniboard > .workspace-left-divider { display: none !important; }
 body.right-pane-hidden .uniboard > .tools,

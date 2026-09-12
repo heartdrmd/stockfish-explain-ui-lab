@@ -131,6 +131,7 @@ export function install3DBoard(board) {
       evaluationVisible: !gaugeControl?.classList.contains('eval-gauge-hidden'),
       movesVisible: !movesHidden,
       graph: board.studyGraph,
+      analysis: board.studyAnalysis,
       moves: movesFor3D(board),
     };
     const serialized = JSON.stringify(overlay);
@@ -141,6 +142,7 @@ export function install3DBoard(board) {
   }
   if (gauge) new MutationObserver(() => syncOverlay()).observe(gauge, {attributes: true, attributeFilter: ['data-evaluation']});
   board.addEventListener('graph-change', () => syncOverlay());
+  board.addEventListener('analysis-change', () => syncOverlay());
   if (gaugeControl) new MutationObserver(() => syncOverlay()).observe(gaugeControl, {attributes: true, attributeFilter: ['class']});
   function snapshot() {
     const cg = board.cg.state;
@@ -236,8 +238,17 @@ export function install3DBoard(board) {
       board.dispatchEvent(new Event('clock-appearance-state'));
       return;
     }
+    if (event.data?.type === 'zagreb:clock-dock') {
+      board.setClockDock?.(event.data.placement); return;
+    }
     if (event.data?.type === 'zagreb:clock-design') {
       board.dispatchEvent(new CustomEvent('clock-design-request', { detail: event.data.style }));
+      return;
+    }
+    if (event.data?.type === 'zagreb:analysis') {
+      if (busy) return;
+      board.requestAnalysis?.(event.data);
+      syncOverlay();
       return;
     }
     if (event.data?.type === 'zagreb:clock-pause') {
