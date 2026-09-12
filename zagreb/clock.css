@@ -1,3 +1,104 @@
+.clock-control-dialog {
+  box-sizing: border-box;
+  position: fixed;
+  inset: 0;
+  margin: auto;
+  width: min(390px, calc(100vw - 24px));
+  max-height: calc(100dvh - 24px);
+  overflow: auto;
+  padding: 0;
+  border: 1px solid #78816a;
+  border-radius: 12px;
+  color: #f2ead7;
+  background: #19231d;
+  box-shadow: 0 20px 70px #0009;
+  font:
+    14px/1.5 Arial,
+    sans-serif;
+  text-align: left;
+  color-scheme: dark;
+}
+.clock-control-dialog::backdrop {
+  background: #080d0bc4;
+}
+.clock-control-dialog * {
+  box-sizing: border-box;
+}
+.clock-control-dialog form {
+  display: grid;
+  gap: 16px;
+  padding: 24px;
+  margin: 0;
+}
+.clock-control-dialog h2 {
+  margin: 0;
+  font:
+    600 21px/1.25 Georgia,
+    serif;
+  color: #f2ead7;
+}
+.clock-control-dialog p {
+  margin: 0;
+  color: #c6cdbd;
+  font: inherit;
+}
+.clock-control-dialog label {
+  display: grid;
+  gap: 6px;
+  color: #e3e6db;
+  font: inherit;
+}
+.clock-control-dialog :is(input, select) {
+  width: 100%;
+  min-width: 0;
+  height: 42px;
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid #78816a;
+  border-radius: 5px;
+  color: #f2ead7;
+  background: #101913;
+  font: inherit;
+}
+.clock-control-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.clock-control-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.clock-control-dialog button {
+  min-height: 42px;
+  padding: 8px 12px;
+  border: 1px solid #78816a;
+  border-radius: 5px;
+  font:
+    600 13px/1.4 Arial,
+    sans-serif;
+  cursor: pointer;
+  color: #f2ead7;
+  background: transparent;
+}
+.clock-control-dialog button[type='submit'] {
+  color: #172015;
+  background: #d8d2ad;
+  border-color: #d8d2ad;
+}
+.clock-control-dialog :is(input, select, button):focus-visible {
+  outline: 2px solid #ecd89e;
+  outline-offset: 3px;
+}
+.clock-control-dialog :disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.clock-control-dialog [role='alert'] {
+  color: #ffb6a3;
+}
+
 .game-clock-fit {
   position: relative;
   width: 100%;
@@ -404,5 +505,7 @@
     max-width: 340px;
     justify-self: center;
   }
-  body.mobile-mode #clock-atelier .game-clock-fit { max-height: 150px; }
+  body.mobile-mode #clock-atelier .game-clock-fit {
+    max-height: 150px;
+  }
 }

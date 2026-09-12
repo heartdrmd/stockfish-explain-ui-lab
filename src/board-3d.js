@@ -1,5 +1,6 @@
 // Both renderers share BoardController. The iframe never owns a game or engine.
 import { frameUpdate } from './resize-observer.js';
+import { readClockControl } from './generated/clock-control.js';
 export function lastMoveFor3D(board) {
   // Interaction locks and transient cg.set calls may clear Chessground's mark.
   // The node at the displayed FEN is the durable source of the last move.
@@ -185,6 +186,23 @@ export function install3DBoard(board) {
     }
     if (event.data?.type === 'zagreb:clock-pause') {
       board.dispatchEvent(new Event('clock-pause-request'));
+      return;
+    }
+    // The clock remains usable in the parent pane when native 2D hides this frame.
+    if (event.data?.type === 'zagreb:clock-control') {
+      const { requestId } = event.data;
+      if (typeof requestId !== 'string' || !requestId.length || requestId.length > 80) return;
+      try {
+        const control = readClockControl(event.data.control);
+        if (!control) throw new Error('Use 1–999 whole minutes and 0–60 seconds increment.');
+        if (typeof board.setClockTimeControl !== 'function') throw new Error('The game clock is not ready.');
+        board.setClockTimeControl(control);
+        syncClock();
+        frame.contentWindow.postMessage({type: 'zagreb:clock-control-result', requestId, ok: true}, location.origin);
+      } catch (error) {
+        frame.contentWindow.postMessage({type: 'zagreb:clock-control-result', requestId, ok: false,
+          error: error instanceof Error ? error.message : 'The clock could not be updated.'}, location.origin);
+      }
       return;
     }
     if (!enabled) return;

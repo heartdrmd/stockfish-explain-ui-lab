@@ -56,9 +56,9 @@ test('shared clocks use parent time in both board modes and reject foreign contr
   const frame = area.children[0], toggle = nav.children[0];
   assert.equal(frame.style.width, '640px', 'Startup sizing does not require a message event');
   assert.equal(sent.length, 0, 'Wait for the iframe handshake before publishing');
-  function message(type, source = frame.contentWindow, from = origin) {
+  function message(type, source = frame.contentWindow, from = origin, payload = {}) {
     const event = new Event('message');
-    Object.assign(event, {data:{type}, source, origin:from});
+    Object.assign(event, {data:{type, ...payload}, source, origin:from});
     windowTarget.dispatchEvent(event);
   }
   const clockMessages = () => sent.filter(item => item.message.type === 'zagreb:clock');
@@ -81,6 +81,22 @@ test('shared clocks use parent time in both board modes and reject foreign contr
   assert.equal(pauseRequests, 2, 'The visible left-pane clock can pause while the board iframe is hidden');
   assert.equal(clockMessages().length, beforeHiddenTick + 1);
   assert.equal(clockMessages().at(-1).message.whiteMs, 280000, 'Native 2D keeps the shared clock current');
+  const changes = [];
+  board.setClockTimeControl = control => changes.push(control);
+  const payload = {requestId: 'clock-test-1', control: {minutes: 10, incrementSeconds: 5}};
+  message('zagreb:clock-control', {}, origin, payload);
+  message('zagreb:clock-control', frame.contentWindow, 'https://other.example', payload);
+  assert.equal(changes.length, 0, 'Foreign source/origin cannot reset the game clock');
+  message('zagreb:clock-control', frame.contentWindow, origin, {...payload, control: {minutes: 0, incrementSeconds: 0}});
+  assert.equal(changes.length, 0, 'Invalid values never reach the actual timekeeper');
+  assert.equal(sent.at(-1).message.ok, false);
+  message('zagreb:clock-control', frame.contentWindow, origin, payload);
+  assert.deepEqual(changes, [payload.control], 'Native 2D can set the shared game time control');
+  assert.deepEqual(sent.at(-1), {message: {type:'zagreb:clock-control-result', requestId:payload.requestId, ok:true}, target:origin});
+  board.setClockTimeControl = () => { throw new Error('The timed game has stopped.'); };
+  message('zagreb:clock-control', frame.contentWindow, origin, payload);
+  assert.equal(sent.at(-1).message.ok, false, 'The viewer receives a failure if the game stops while editing');
+  assert.equal(sent.at(-1).message.error, 'The timed game has stopped.');
   toggle.click();
   assert.equal(clockMessages().at(-1).message.whiteMs, 280000, 'Returning to the viewer receives the latest parent time');
   board.studyClock = {...board.studyClock, whiteMs:278900, paused:false, running:'w'};

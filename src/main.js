@@ -3,6 +3,7 @@
 
 import { api, currentUser }       from './api.js';
 import { frameUpdate, isResizeObserverNotification } from './resize-observer.js';
+import { resetClockControl } from './generated/clock-control.js';
 import { Engine, ENGINE_FLAVORS } from './engine.js';
 import { BoardController, toDests as toDestsFrom } from './board.js';
 import { Explainer }              from './explain.js';
@@ -2178,6 +2179,8 @@ async function main() {
       whiteMs: clock.msWhite, blackMs: clock.msBlack,
       running: clock.active && !clock.paused ? clock.tickingFor : null,
       label: document.getElementById('clock-format')?.textContent || '',
+      control: {minutes: clock.initialMs / 60000, incrementSeconds: clock.incMs / 1000},
+      canSetTimeControl: canSetClockTimeControl(),
     };
     board.dispatchEvent(new Event('clock-change'));
     const wEl = document.getElementById('clock-time-w');
@@ -2477,6 +2480,32 @@ async function main() {
   window.__clockStop     = stopClock;
   window.__clockSwitch   = switchClock;
   board.addEventListener('clock-pause-request', togglePauseClock);
+  function canSetClockTimeControl() {
+    return clock.active && clock.mode === 'down' && !window.__practiceStarting &&
+      !document.body.classList.contains('practice-finished') && !board.chess.isGameOver();
+  }
+  board.setClockTimeControl = value => {
+    if (!canSetClockTimeControl()) throw new Error('Start an active timed game before setting the clock.');
+    // Keep the current position, turn, interval and pause state. Reset the actual
+    // timekeeper, so flag fall and per-move increments use the new control too.
+    const control = resetClockControl(clock, value, board.chess.turn(), Date.now());
+    const mode = document.getElementById('practice-clock-mode');
+    const preset = document.getElementById('practice-clock-preset');
+    const minutes = document.getElementById('practice-clock-minutes');
+    const increment = document.getElementById('practice-clock-increment');
+    if (mode) { mode.value = 'timed'; mode.dispatchEvent(new Event('change')); }
+    if (minutes) minutes.value = String(control.minutes);
+    if (increment) increment.value = String(control.incrementSeconds);
+    if (preset) {
+      const pair = `${control.minutes}+${control.incrementSeconds}`;
+      preset.value = [...preset.options].some(option => option.value === pair) ? pair : 'custom';
+      preset.dispatchEvent(new Event('change'));
+    }
+    const label = document.getElementById('clock-format');
+    if (label) label.textContent = `${control.minutes}+${control.incrementSeconds} time control · set on clock`;
+    renderClock();
+    return control;
+  };
   // Bind the move listener once; it fires for user moves (from
   // board.play), engine moves (from playEngineMove), and bulk fen
   // loads (from playUciMoves). We need to distinguish the last case
