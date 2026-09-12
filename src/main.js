@@ -14013,9 +14013,9 @@ async function main() {
       return;
     }
     powerBtn.classList.remove('lesson-owned');
-    if (locked) {
+    if (locked || paused) {
       powerBtn.classList.add('off');
-      if (label) label.textContent = 'ENGINE: OFF';
+      if (label) label.textContent = locked ? 'ENGINE: OFF' : 'ENGINE: PAUSED';
       if (sub)   sub.textContent   = 'click to start analysis';
     } else {
       powerBtn.classList.remove('off');
@@ -14023,7 +14023,13 @@ async function main() {
       if (sub)   sub.textContent   = 'click to stop';
     }
   }
-  if (powerBtn) powerBtn.addEventListener('click', toggleEngineLocked);
+  if (powerBtn) powerBtn.addEventListener('click', () => {
+    if (window.__learnOwnsEngine) { toggleEngineLocked(); return; }
+    if (locked || paused) {
+      if (locked) toggleEngineLocked();
+      if (paused) btnPause.click();
+    } else toggleEngineLocked();
+  });
   updatePowerButton();
   updateLockButton();
 
@@ -14197,6 +14203,7 @@ async function main() {
       console.log('[engine] RESUMED');
       fireAnalysis();
     }
+    updatePowerButton();
   });
 
   // Keyboard move input — accept SAN (Nf3, e4, O-O, etc.)
