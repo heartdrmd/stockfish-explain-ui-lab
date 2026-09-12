@@ -89,3 +89,10 @@ test('Space and L own analysis shortcuts without scrolling, repeat moves or stea
   assert.equal(key('l',{ctrlKey:true}).defaultPrevented,false);
   assert.equal(requests.length,2);
 });
+
+test('Watch shortcuts and stale own-game requests cannot operate the preserved game',()=>{
+  const s=setup();s.board.watchActive=true;
+  for(const [action,value] of [['toggle-engine'],['lines',3],['play-best'],['play-line',0]]) assert.equal(s.request(action,value),false);
+  assert.deepEqual(s.played,[]);assert.deepEqual(s.calls,[]);
+  s.board.watchActive=false;assert.equal(s.request('play-best'),true);
+});

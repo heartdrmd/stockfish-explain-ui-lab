@@ -29,7 +29,7 @@ export function studyAnalysisState(board, context) {
 }
 
 export function handleStudyAnalysisRequest(board, request, context, controls) {
-  if (!request || request.fen !== board.fen()) return false;
+  if (board.watchActive || !request || request.fen !== board.fen()) return false;
   const state = studyAnalysisState(board, context);
   switch (request.action) {
     case 'toggle-engine':
@@ -78,7 +78,11 @@ export function installStudyAnalysis(board, getContext, controls) {
     schedule();
     return accepted;
   };
-  installAnalysisKeyboard(window, () => studyAnalysisState(board,getContext()), request => board.requestAnalysis(request));
+  installAnalysisKeyboard(window, () => board.watchActive ? {engineOn:true} : studyAnalysisState(board,getContext()), request => {
+    if (board.watchActive) {
+      document.getElementById('zagreb-board')?.contentWindow?.postMessage({type:'zagreb:watch-analysis-shortcut',action:request.action},location.origin);
+    } else board.requestAnalysis(request);
+  });
   for (const event of ['move','nav','new-game','undo','analysis-refresh']) board.addEventListener(event,schedule);
   const wire = engine => {
     for (const event of ['thinking','bestmove','ready','error']) engine.addEventListener(event,schedule);

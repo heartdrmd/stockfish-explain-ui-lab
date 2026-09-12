@@ -75,6 +75,7 @@ import { installBoardResizeHandle } from './board-resize.js';
 import { installLeftPaneToggle, installRightPaneToggle, installDividerToggle } from './left-pane.js';
 import { installClockPresentation } from './clock-presentation.js';
 import { installClockDock } from './clock-dock.js';
+import { createWatchGuard } from './watch-guard.js';
 import { installStudyAnalysis } from './board-analysis.js';
 
 // Expose Chess to eval-graph's computeDivision helper — avoids a
@@ -2520,6 +2521,8 @@ async function main() {
   window.__clockStop     = stopClock;
   window.__clockSwitch   = switchClock;
   board.addEventListener('clock-pause-request', togglePauseClock);
+  board.setWatchMode = createWatchGuard({ board, clock, togglePause: togglePauseClock,
+    blocked: () => window.__practiceStarting || board.interactionLocked || document.body.classList.contains('practice-thinking') || clock.hardware?.display?.editing });
   board.addUntimedClock = () => {
     if (window.__practiceStarting || board.interactionLocked) throw new Error('Wait for the position to finish loading.');
     // Repeated requests must never restart a clock or replace a timed game.
