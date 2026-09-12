@@ -3592,8 +3592,16 @@ var CLOCK_STYLES = [
 		label: "DGT · red LCD"
 	},
 	{
+		id: "dgt-contrast",
+		label: "DGT · high contrast"
+	},
+	{
 		id: "zmf",
 		label: "ZMF · blue LED"
+	},
+	{
+		id: "zmf-classic",
+		label: "ZMF · classic LCD"
 	},
 	{
 		id: "wood",

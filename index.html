@@ -15,6 +15,7 @@
   <link rel="stylesheet" href="styles/panels.css">
   <link rel="stylesheet" href="styles/my-games.css">
   <link rel="stylesheet" href="styles/ui-lab.css">
+  <link rel="stylesheet" href="zagreb/clock.css">
 
   <!-- Chart.js (MIT) — powers the Lichess-style eval graph. Loaded
        from jsDelivr. Pinned to a specific version to avoid a surprise
@@ -331,6 +332,7 @@
           <h3 style="margin:0;">⏱ Clock</h3>
           <!-- Curated clock styles — big numbers / tournament-grade only. -->
           <div class="clock-style-switcher" id="clock-style-switcher">
+            <button type="button" class="clock-style-btn" data-style="atelier" title="DGT, ZMF and other tournament clock designs" aria-label="Tournament clock designs">▤</button>
             <button type="button" class="clock-style-btn" data-style="digital-mega"        title="Mega digital — huge crisp white numbers">⬛</button>
             <button type="button" class="clock-style-btn active" data-style="digital-jumbo" title="Jumbo digital — even bigger, light theme, high-contrast (default)">🔢</button>
             <button type="button" class="clock-style-btn" data-style="digital-stadium"      title="Stadium scoreboard — dot-matrix LED, giant numerals">🏟</button>
@@ -340,6 +342,7 @@
           </div>
         </div>
 
+        <div id="clock-atelier"></div>
         <!-- Digital variants render into this container.
              Labels use only a solid king glyph (♚) + coloring — no
              "White"/"Black" words. When the user plays black, JS sets

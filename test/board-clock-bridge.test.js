@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { Chess } from '../vendor/chess.js/chess.js';
 import { install3DBoard } from '../src/board-3d.js';
 
-test('embedded clocks use the parent time and only accept controls from the active viewer', t => {
+test('shared clocks use parent time in both board modes and reject foreign controls', t => {
   class Element extends EventTarget {
     style = {};
     children = [];
@@ -48,7 +48,9 @@ test('embedded clocks use the parent time and only accept controls from the acti
     studyClock: {available:true, active:true, paused:false, mode:'down', whiteMs:287600, blackMs:300000, running:'w', label:'5 + 3'},
   });
   let pauseRequests = 0;
+  let designRequests = 0;
   board.addEventListener('clock-pause-request', () => pauseRequests++);
+  board.addEventListener('clock-design-request', () => designRequests++);
   install3DBoard(board);
   frames.splice(0).forEach(callback => callback());
   const frame = area.children[0], toggle = nav.children[0];
@@ -68,11 +70,17 @@ test('embedded clocks use the parent time and only accept controls from the acti
   message('zagreb:clock-pause');
   assert.equal(pauseRequests, 1);
   toggle.click();
+  const beforeHiddenTick = clockMessages().length;
   message('zagreb:clock-pause');
+  message('zagreb:clock-design', {}, origin);
+  assert.equal(designRequests, 0);
+  message('zagreb:clock-design');
+  assert.equal(designRequests, 1, 'The left clock can select a design while native 2D is active');
   board.studyClock = {...board.studyClock, whiteMs:280000, paused:true, running:null};
   board.dispatchEvent(new Event('clock-change'));
-  assert.equal(pauseRequests, 1, 'A hidden renderer cannot change the clock');
-  assert.equal(clockMessages().length, 1);
+  assert.equal(pauseRequests, 2, 'The visible left-pane clock can pause while the board iframe is hidden');
+  assert.equal(clockMessages().length, beforeHiddenTick + 1);
+  assert.equal(clockMessages().at(-1).message.whiteMs, 280000, 'Native 2D keeps the shared clock current');
   toggle.click();
   assert.equal(clockMessages().at(-1).message.whiteMs, 280000, 'Returning to the viewer receives the latest parent time');
   board.studyClock = {...board.studyClock, whiteMs:278900, paused:false, running:'w'};

@@ -2147,9 +2147,9 @@ async function main() {
     lastTickAt: 0,
     timerId: 0,
     initialMs: 0,
-    // Persisted style: user can cycle through digital-dark /
-    // digital-light / digital-led / analog-garde
-    style: localStorage.getItem('stockfish-explain.clock-style') || 'digital-jumbo',
+    // Tournament designs now share the viewer's saved clock appearance.
+    // The older digital/analog clocks remain available through their buttons.
+    style: localStorage.getItem('stockfish-explain.clock-presentation-v2') || 'atelier',
   };
   function formatClockTime(ms) {
     if (ms == null || ms < 0) ms = 0;
@@ -2169,6 +2169,8 @@ async function main() {
     return `${m}:${s.toString().padStart(2,'0')}`;
   }
   function renderClock() {
+    const clockCard = document.getElementById('practice-clock');
+    if (clockCard) clockCard.dataset.clockView = clock.style;
     // The immersive board displays this same clock; it never runs a second timer.
     board.studyClock = {
       available: document.getElementById('practice-clock')?.hidden === false,
@@ -2502,6 +2504,12 @@ async function main() {
       if (!btn) return;
       clock.style = btn.dataset.style;
       try { localStorage.setItem('stockfish-explain.clock-style', clock.style); } catch {}
+      try { localStorage.setItem('stockfish-explain.clock-presentation-v2', clock.style); } catch {}
+      applyActive();
+    });
+    board.addEventListener('clock-design-request', () => {
+      clock.style = 'atelier';
+      try { localStorage.setItem('stockfish-explain.clock-presentation-v2', clock.style); } catch {}
       applyActive();
     });
     applyActive();

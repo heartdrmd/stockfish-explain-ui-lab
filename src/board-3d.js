@@ -86,7 +86,7 @@ export function install3DBoard(board) {
   const gaugeControl = document.getElementById('eval-gauge-control');
   let enabled = false, ready = false, busy = false, scheduled = false, lastState = '', lastOverlay = '';
   function syncClock() {
-    if (ready && enabled) frame.contentWindow.postMessage({ type: 'zagreb:clock', ...board.studyClock }, location.origin);
+    if (ready) frame.contentWindow.postMessage({ type: 'zagreb:clock', ...board.studyClock }, location.origin);
   }
   board.addEventListener('clock-change', syncClock);
   function syncOverlay(force = false) {
@@ -124,7 +124,7 @@ export function install3DBoard(board) {
     };
   }
   function sync(force = false) {
-    if (!ready || !enabled) return;
+    if (!ready) return;
     const state = snapshot();
     const serialized = JSON.stringify(state);
     if (force || serialized !== lastState) {
@@ -179,11 +179,15 @@ export function install3DBoard(board) {
     if (event.origin !== location.origin || event.source !== frame.contentWindow) return;
     if (event.data?.type === 'zagreb:account-ready') { syncAccount(); return; }
     if (event.data?.type === 'zagreb:ready') { ready = true; sync(true); return; }
-    if (!enabled) return;
+    if (event.data?.type === 'zagreb:clock-design') {
+      board.dispatchEvent(new Event('clock-design-request'));
+      return;
+    }
     if (event.data?.type === 'zagreb:clock-pause') {
       board.dispatchEvent(new Event('clock-pause-request'));
       return;
     }
+    if (!enabled) return;
     if (event.data?.type === 'zagreb:flip') {
       const orientation = event.data.orientation;
       if (!['white', 'black'].includes(orientation)) return;
