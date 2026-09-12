@@ -1,5 +1,4 @@
-// Share the divider's width when the visible 2D square is limited by height.
-// Starting from the square's width would snap the entire column inward.
+// The workspace decides whether the corner resizes its 2D square or 3D column.
 export function installBoardResizeHandle({ handle, boardElement, workspaceSplit, onStart, onResize, onFinish,
   request = requestAnimationFrame, cancel = cancelAnimationFrame, blurTarget = window }) {
   let drag = null, frame = null, pendingWidth = null;
@@ -23,8 +22,10 @@ export function installBoardResizeHandle({ handle, boardElement, workspaceSplit,
     if (event.button !== 0 || drag) return;
     event.preventDefault(); event.stopPropagation();
     const sizingElement = workspaceSplit?.isActive() ? boardElement.parentElement : boardElement;
+    const width = workspaceSplit?.isActive() && workspaceSplit.getCornerSize
+      ? workspaceSplit.getCornerSize() : sizingElement.getBoundingClientRect().width;
     drag = { id: event.pointerId, x: event.clientX, y: event.clientY,
-      width: sizingElement.getBoundingClientRect().width, moved: false };
+      width, moved: false };
     onStart();
     handle.setPointerCapture(event.pointerId);
   });

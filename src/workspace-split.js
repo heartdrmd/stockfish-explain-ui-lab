@@ -1,4 +1,5 @@
 const STORAGE_KEY = 'stockfish-explain.workspace-split';
+const SCALE_KEY = 'stockfish-explain.flat-board-scale';
 const DIVIDER_WIDTH = 16;
 
 // Space here excludes the sidebar, gauge, divider, gaps and outer padding.
@@ -36,13 +37,16 @@ export function installWorkspaceSplit(board) {
   divider.tabIndex = 0;
   tools.id ||= 'study-tools';
   layout.insertBefore(divider, tools);
-  let ratio = null;
+  let ratio = null, squareScale = 1;
   try {
     const saved = Number(localStorage.getItem(STORAGE_KEY));
     if (saved > 0 && saved < 1) ratio = saved;
+    const savedScale = Number(localStorage.getItem(SCALE_KEY));
+    if (savedScale >= 0.35 && savedScale <= 1) squareScale = savedScale;
   } catch {}
-  let drag = null, frame = 0, pendingWidth = null, lastWidth = 0;
+  let drag = null, frame = 0, pendingWidth = null, lastWidth = 0, fittedHeight = 0;
   const isActive = () => window.innerWidth >= 800 && !document.body.classList.contains('mobile-mode');
+  const using3D = () => board.rootEl.parentElement.classList.contains('using-3d');
   const space = () => {
     const css = getComputedStyle(layout);
     const wide = window.innerWidth >= 1260;
@@ -53,6 +57,7 @@ export function installWorkspaceSplit(board) {
   };
   function save() {
     if (ratio != null) try { localStorage.setItem(STORAGE_KEY, String(ratio)); } catch {}
+    try { localStorage.setItem(SCALE_KEY, String(squareScale)); } catch {}
   }
   function apply(requested) {
     if (!isActive()) return;
@@ -63,8 +68,10 @@ export function installWorkspaceSplit(board) {
     layout.style.setProperty('--split-board-width', width + 'px');
     const headerBottom = Math.max(0, document.querySelector('.site-header')?.getBoundingClientRect().bottom || 60);
     const navHeight = layout.querySelector('.board-nav')?.getBoundingClientRect().height || 72;
-    const using3D = board.rootEl.parentElement.classList.contains('using-3d');
-    const { top, height } = fitBoardHeight(width, window.innerHeight, headerBottom, navHeight, using3D ? 12 : 24);
+    const viewer = using3D();
+    const { top, height: fitHeight } = fitBoardHeight(width, window.innerHeight, headerBottom, navHeight, viewer ? 12 : 24);
+    fittedHeight = fitHeight;
+    const height = viewer ? fitHeight : Math.max(1, Math.round(fitHeight * squareScale));
     layout.style.setProperty('--split-board-height', height + 'px');
     layout.style.setProperty('--split-top', top + 'px');
     const bounds = splitBounds(available);
@@ -81,6 +88,14 @@ export function installWorkspaceSplit(board) {
       // Chessground must also remeasure square positions for correct hit tests.
       document.dispatchEvent(new Event('chessgroundResize'));
     }
+  }
+  function resizeFromCorner(requested) {
+    if (using3D()) { apply(requested); return; }
+    if (!Number.isFinite(requested) || fittedHeight <= 0) return;
+    // The corner owns the visible square; the divider owns the column.
+    // A height-limited square must respond without first crossing unused width.
+    squareScale = Math.max(0.35, Math.min(1, requested / fittedHeight));
+    apply();
   }
   function schedule(requested = null) {
     pendingWidth = requested;
@@ -137,5 +152,8 @@ export function installWorkspaceSplit(board) {
   // Switching from the viewer to native 2D changes the top breathing room.
   new MutationObserver(updateLayout).observe(board.rootEl.parentElement, { attributes: true, attributeFilter: ['class'] });
   updateLayout();
-  return { isActive, setBoardSize: apply, save };
+  return {
+    isActive, setBoardSize: apply, resizeFromCorner, save,
+    getCornerSize: () => (using3D() ? board.rootEl.parentElement : board.rootEl).getBoundingClientRect().width,
+  };
 }

@@ -14232,7 +14232,7 @@ async function main() {
     //   overflow (RangeError reported from mobile Safari).
     let _applyingSize = false;
     const applySize = (size) => {
-      if (workspaceSplit?.isActive()) { workspaceSplit.setBoardSize(size); return; }
+      if (workspaceSplit?.isActive()) { workspaceSplit.resizeFromCorner(size); return; }
       if (_applyingSize) return;
       _applyingSize = true;
       try {
