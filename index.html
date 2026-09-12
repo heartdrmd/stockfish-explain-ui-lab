@@ -84,7 +84,6 @@
             title="Show or hide the top toolbar — auto-hides during a practice game">⇕ Toolbar</button>
     <button id="btn-toggle-left-pane" class="btn btn-quick-action always-visible" type="button" aria-pressed="true" aria-label="Hide left pane" title="Hide left pane">◧ Left pane</button>
     <button id="btn-toggle-right-pane" class="btn btn-quick-action always-visible" type="button" aria-pressed="true" aria-label="Hide right pane" aria-controls="study-tools" title="Hide right pane">◨ Right pane</button>
-    <button id="btn-toggle-clock" class="btn btn-quick-action always-visible" type="button" disabled aria-pressed="false" aria-label="Show upper-right clock" title="Show upper-right clock">◷ Clock</button>
     <button id="btn-toggle-dividers" class="btn btn-quick-action always-visible" type="button" aria-pressed="true" aria-label="Hide dividers" aria-controls="workspace-left-divider workspace-divider" title="Hide dividers">↔ Dividers</button>
     <button id="btn-quick-new" class="btn btn-quick-action always-visible"
             title="Start a new game from the initial position">🆕 New game</button>
@@ -94,6 +93,10 @@
             title="Open the My Games tab — filter, replay, analyse, delete your saved games">📚 My Games</button>
     <button id="btn-live-graph" class="btn always-visible"
             title="Toggle the live evaluation graph. Hidden during practice by default (anti-cheat) but you can turn it on anytime.">📈 Graph</button>
+    <span id="clock-top-controls" class="always-visible" role="group" aria-label="Clock controls">
+      <button id="btn-toggle-clock" class="btn always-visible" type="button" disabled aria-pressed="false" aria-label="Show upper-right clock" title="Show upper-right clock">◷</button>
+      <span id="clock-position-controls"></span>
+    </span>
     <button id="btn-toggle-board-controls" class="btn always-visible" type="button" disabled
             aria-pressed="true" aria-label="Hide board controls" aria-controls="zagreb-board"
             title="Show or hide the controls above the board">☷ Board controls</button>
@@ -327,9 +330,9 @@
       <!-- The chosen clock is the first card in the left pane. -->
       <div class="side-card practice-card" id="practice-clock" hidden>
         <button type="button" id="clock-float-drag" class="clock-float-drag"
-                aria-label="Move floating clock" aria-describedby="clock-float-drag-help"
+                aria-label="Enable clock move mode" aria-pressed="false" aria-describedby="clock-float-drag-help"
                 title="Drag to move clock. Arrow keys move it; double-click or Home resets its position.">⠿</button>
-        <span id="clock-float-drag-help" class="sr-only">Use arrow keys to move the clock, Shift for fine adjustments, or Home to reset.</span>
+        <span id="clock-float-drag-help" class="sr-only">Click to enable Move mode, then drag the clock or use arrow keys. Click again to rotate normally. Home resets its position.</span>
         <div class="clock-header">
           <select class="clock-style-select" id="clock-style-switcher" aria-label="Clock appearance">
             <option value="atelier">Tournament clock</option>

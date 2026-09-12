@@ -4,7 +4,7 @@ export function installFloatingClock(card, host) {
   const panel = host.closest?.('.tools');
   if (!grip || !panel) return;
   const key = 'stockfish-explain.floating-clock-position';
-  let offset = { x: 0, y: 0 }, drag = null, frame = 0;
+  let offset = { x: 0, y: 0 }, drag = null, frame = 0, moveMode = false, skipClick = false;
   try {
     const saved = JSON.parse(localStorage.getItem(key));
     if (Number.isFinite(saved?.x) && Number.isFinite(saved?.y)) offset = saved;
@@ -37,41 +37,63 @@ export function installFloatingClock(card, host) {
   }
   const finish = () => {
     if (!drag) return;
+    const ended = drag;
     drag = null;
+    if (ended.target.hasPointerCapture?.(ended.id)) ended.target.releasePointerCapture(ended.id);
     document.body.classList.remove('clock-floating-dragging');
     save();
   };
+  function setMoveMode(enabled) {
+    moveMode = enabled;
+    grip.setAttribute('aria-pressed', String(enabled));
+    grip.setAttribute('aria-label', enabled ? 'Stop moving clock' : 'Enable clock move mode');
+    grip.title = enabled ? 'Move mode on · drag the clock, click here to turn off' : 'Enable Move mode · move the clock without rotating it';
+    card.classList.toggle('clock-move-mode', enabled);
+    if (!enabled) finish();
+  }
   function schedule() {
     if (frame) return;
     frame = requestAnimationFrame(() => {
       frame = 0;
       if (active()) move(offset.x, offset.y);
-      else finish();
+      else setMoveMode(false);
     });
   }
   paint();
-  grip.addEventListener('pointerdown', event => {
-    if (!active() || event.button !== 0 || drag) return;
-    event.preventDefault();
-    grip.focus({ preventScroll: true });
-    drag = { id: event.pointerId, x: event.clientX, y: event.clientY, start: { ...offset } };
-    grip.setPointerCapture(event.pointerId);
+  setMoveMode(false);
+  grip.addEventListener('click', () => {
+    if (skipClick) { skipClick = false; return; }
+    if (active()) setMoveMode(!moveMode);
+  });
+  card.addEventListener('pointerdown', event => {
+    if (!active() || !moveMode || event.button !== 0 || drag) return;
+    const target = event.target.closest?.('canvas, #clock-float-drag');
+    if (!target || !card.contains(target)) return;
+    // Capture before the 3D renderer: a Move-mode drag cannot also rotate or
+    // press a physical clock key. Switching Move off restores normal hardware.
+    event.preventDefault(); event.stopImmediatePropagation();
+    drag = { id: event.pointerId, x: event.clientX, y: event.clientY, start: { ...offset }, target };
+    target.setPointerCapture(event.pointerId);
     document.body.classList.add('clock-floating-dragging');
-  });
-  grip.addEventListener('pointermove', event => {
+  }, true);
+  card.addEventListener('pointermove', event => {
     if (!drag || event.pointerId !== drag.id) return;
-    if (!active()) { finish(); return; }
-    move(drag.start.x + event.clientX - drag.x, drag.start.y + event.clientY - drag.y);
-  });
+    event.preventDefault(); event.stopImmediatePropagation();
+    if (!active() || (event.pointerType === 'mouse' && event.buttons === 0)) { finish(); return; }
+    const dx = event.clientX - drag.x, dy = event.clientY - drag.y;
+    if (drag.target === grip && Math.hypot(dx, dy) > 3) skipClick = true;
+    move(drag.start.x + dx, drag.start.y + dy);
+  }, true);
   for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) {
-    grip.addEventListener(type, event => {
-      if (event.pointerId === drag?.id) finish();
-    });
+    card.addEventListener(type, event => {
+      if (event.pointerId !== drag?.id) return;
+      event.stopImmediatePropagation();
+      finish();
+    }, true);
   }
   const reset = () => { if (active()) { move(0, 0); save(); } };
-  grip.addEventListener('dblclick', reset);
   grip.addEventListener('keydown', event => {
-    if (!active() || event.altKey || event.ctrlKey || event.metaKey) return;
+    if (!active() || !moveMode || event.altKey || event.ctrlKey || event.metaKey) return;
     if (event.key === 'Home') { event.preventDefault(); reset(); return; }
     const delta = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[event.key];
     if (!delta) return;
@@ -81,7 +103,7 @@ export function installFloatingClock(card, host) {
     save();
   });
   window.addEventListener('resize', schedule);
-  window.addEventListener('blur', finish);
+  window.addEventListener('blur', () => setMoveMode(false));
   document.addEventListener('fullscreenchange', schedule);
   new ResizeObserver(schedule).observe(panel);
   new MutationObserver(schedule).observe(card, { attributes: true, attributeFilter: ['hidden'] });

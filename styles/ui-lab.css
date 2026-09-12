@@ -710,3 +710,29 @@ body.clock-presentation-hidden #clock-float-drag { display: none !important; }
     display: none !important;
   }
 }
+
+/* The clock toggle and position dropdown share a compact, always-reachable slot. */
+body.ui-lab #clock-top-controls{display:inline-flex;align-items:center;gap:4px;order:9;margin-left:auto}
+body.ui-lab #clock-position-controls{display:inline-flex}
+body.ui-lab #btn-toggle-clock{width:36px;min-width:36px;min-height:34px;padding:4px;font-size:20px;line-height:1}
+body.ui-lab #btn-toggle-clock[aria-pressed=true]{background:#344c3f;border-color:#7d9476;color:#edf1e7}
+@media(min-width:800px){
+  body.ui-lab:not(.mobile-mode) .site-header{padding-right:112px}
+  body.ui-lab:not(.mobile-mode) #clock-top-controls{position:absolute;right:16px;top:8px}
+}
+/* Hide every part of the separator, including its focus and hover decoration.
+   Keep the grid track so toggling the line never changes the saved board size. */
+body.dividers-hidden .workspace-divider{visibility:hidden!important;pointer-events:none!important;opacity:0!important;outline:none!important;background:none!important}
+body.dividers-hidden .workspace-divider::before,
+body.dividers-hidden .workspace-divider::after{display:none!important}
+@media(min-width:800px){
+  body.dividers-hidden:not(.mobile-mode) .uniboard > .tools,
+  body.clock-docked-right.right-pane-hidden:not(.mobile-mode) .uniboard > .tools{
+    scrollbar-width:none;scrollbar-gutter:auto;
+  }
+  body.dividers-hidden:not(.mobile-mode) .uniboard > .tools::-webkit-scrollbar,
+  body.clock-docked-right.right-pane-hidden:not(.mobile-mode) .uniboard > .tools::-webkit-scrollbar{display:none;width:0}
+}
+
+.clock-move-mode #clock-float-drag{background:#506c3a!important;border-color:#d6df83!important;color:#fffac5!important;box-shadow:0 0 0 2px #d6df8344,0 0 14px #c4dc7166}
+.clock-move-mode .clock-live-canvas canvas{cursor:move!important}

@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Saved 3D settings · Zagreb Atelier</title>
+<style>body{font:15px/1.5 system-ui,sans-serif;background:#202923;color:#e0e5d8;max-width:850px;margin:32px auto;padding:0 20px}h1{font-size:24px}textarea{box-sizing:border-box;width:100%;height:65vh;padding:16px;font:13px/1.5 monospace;color:#e0e5d8;background:#151c1a;border:1px solid #697a64;border-radius:6px}button{padding:10px 16px;margin:12px 0;background:#303c32;color:#e0e5d8;border:1px solid #697a64;border-radius:5px;cursor:pointer}</style>
+<h1>Saved 3D settings</h1>
+<p>A backup of the last 3D view saved while signed out in this browser. Opening this page does not change your board or clock.</p>
+<textarea id="settings" aria-label="Saved 3D settings JSON" readonly></textarea>
+<button id="download" type="button">Download settings</button>
+<script>
+let saved;
+try { saved=JSON.parse(localStorage.getItem('zagreb-board-preferences-v1')||'null'); } catch {}
+const text=saved?JSON.stringify(saved,null,2):'No signed-out 3D view has been saved in this browser yet.';
+document.getElementById('settings').value=text;
+document.getElementById('download').disabled=!saved;
+document.getElementById('download').onclick=()=>{
+  const url=URL.createObjectURL(new Blob([text],{type:'application/json'}));
+  const link=document.createElement('a');link.href=url;link.download='zagreb-board-settings.json';link.click();URL.revokeObjectURL(url);
+};
+</script></html>
