@@ -71,6 +71,7 @@ import { install3DBoard } from './board-3d.js';
 import { installWorkspaceSplit } from './workspace-split.js';
 import { installBoardResizeHandle } from './board-resize.js';
 import { installLeftPaneToggle } from './left-pane.js';
+import { installClockPresentation } from './clock-presentation.js';
 
 // Expose Chess to eval-graph's computeDivision helper — avoids a
 // circular import while still letting it replay SAN to count pieces
@@ -2151,7 +2152,7 @@ async function main() {
     initialMs: 0,
     displayOnly: false,
     // Tournament designs now share the viewer's saved clock appearance.
-    // The older digital/analog clocks remain available through their buttons.
+    // The older digital/analog clocks remain available in the same selector.
     style: localStorage.getItem('stockfish-explain.clock-presentation-v2') || 'atelier',
   };
   function formatClockTime(ms) {
@@ -2572,32 +2573,7 @@ async function main() {
     renderClock();
   });
 
-  // Clock style switcher — persists the choice to localStorage and
-  // re-renders immediately so the user sees the chosen skin.
-  (() => {
-    const switcher = document.getElementById('clock-style-switcher');
-    if (!switcher) return;
-    const applyActive = () => {
-      switcher.querySelectorAll('.clock-style-btn').forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.style === clock.style);
-      });
-      renderClock();
-    };
-    switcher.addEventListener('click', (ev) => {
-      const btn = ev.target.closest('.clock-style-btn');
-      if (!btn) return;
-      clock.style = btn.dataset.style;
-      try { localStorage.setItem('stockfish-explain.clock-style', clock.style); } catch {}
-      try { localStorage.setItem('stockfish-explain.clock-presentation-v2', clock.style); } catch {}
-      applyActive();
-    });
-    board.addEventListener('clock-design-request', () => {
-      clock.style = 'atelier';
-      try { localStorage.setItem('stockfish-explain.clock-presentation-v2', clock.style); } catch {}
-      applyActive();
-    });
-    applyActive();
-  })();
+  installClockPresentation(board, clock, renderClock);
 
   // Untimed-increment enable toggle — enables the seconds input.
   (() => {

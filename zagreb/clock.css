@@ -706,6 +706,9 @@
 #clock-atelier {
   margin-top: 12px;
 }
+#clock-atelier:has(.clock-live) {
+  margin-top: 0;
+}
 @media (max-width: 640px), (max-height: 640px) and (max-width: 1024px) {
   body.mobile-mode
     #practice-clock:has(#clock-atelier .game-clock)[data-clock-view='atelier'] {

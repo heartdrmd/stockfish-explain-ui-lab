@@ -3585,8 +3585,16 @@ var PIECE_NAMES = [
 	"pawn"
 ];
 //#endregion
-//#region lib/study-clock.ts
+//#region lib/clock-styles.ts
 var CLOCK_STYLES = [
+	{
+		id: "dgt-3000-3d",
+		label: "DGT 3000 · 3D"
+	},
+	{
+		id: "zmf-pro-3d",
+		label: "ZMF TapNSet Pro · 3D"
+	},
 	{
 		id: "dgt",
 		label: "DGT · red LCD"
@@ -3604,10 +3612,6 @@ var CLOCK_STYLES = [
 		label: "DGT 3000 · high contrast"
 	},
 	{
-		id: "dgt-3000-3d",
-		label: "DGT 3000 · 3D"
-	},
-	{
 		id: "zmf",
 		label: "ZMF · blue LED"
 	},
@@ -3618,10 +3622,6 @@ var CLOCK_STYLES = [
 	{
 		id: "zmf-pro",
 		label: "ZMF TapNSet Pro · metal"
-	},
-	{
-		id: "zmf-pro-3d",
-		label: "ZMF TapNSet Pro · 3D"
 	},
 	{
 		id: "wood",
