@@ -751,7 +751,8 @@ export class BoardController extends EventTarget {
     if (piece.type === 'p'
         && ((piece.color === 'w' && dest[1] === '8')
          || (piece.color === 'b' && dest[1] === '1'))) {
-      promotion = await showPromotion(
+      const supplied = _meta?.via === '3d-board' ? {q: 'queen', r: 'rook', b: 'bishop', n: 'knight'}[_meta.promotion] : null;
+      promotion = supplied || await showPromotion(
         this.overlayEl, dest, piece.color === 'w' ? 'white' : 'black', this.orientation,
       );
     }

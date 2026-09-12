@@ -6,6 +6,14 @@ body.ui-lab {
   overflow-x: clip;
 }
 
+.board-3d-frame{position:absolute;top:0;left:0;border:0;z-index:2;background:#151c1a;border-radius:4px}
+.board-3d-frame[hidden]{display:none}
+.board-render-toggle,.board-restart-opening{font-size:12px!important;white-space:nowrap;padding:0 9px!important;width:auto!important;min-height:36px}
+.board-render-toggle[aria-pressed=true]{color:#ecd895!important;background:#2a4037!important}
+.board-area.using-3d .board-nav{position:relative;z-index:3;flex-wrap:wrap;gap:3px}
+.board-area.using-3d #board-resize{z-index:4}
+.board-area.using-3d~.eval-gauge-control{border-radius:3px;overflow:hidden}
+
 html:has(body.ui-lab.mobile-mode) {
   overflow-x: clip;
 }

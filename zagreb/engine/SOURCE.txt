@@ -1,0 +1,9 @@
+Stockfish.js 18.0.8, lite single-threaded build of Stockfish 18.
+Copyright (C) the Stockfish developers and Nathan Rugg.
+License: GNU General Public License version 3. See COPYING.txt.
+Engine files are unchanged from the upstream npm package.
+Complete corresponding package and source:
+https://registry.npmjs.org/stockfish/-/stockfish-18.0.8.tgz
+Project, source, and build instructions:
+https://github.com/nmrugg/stockfish.js
+https://github.com/official-stockfish/Stockfish

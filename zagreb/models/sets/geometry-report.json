@@ -1,0 +1,74 @@
+{
+  "staunton/king": {
+    "triangles": 55000,
+    "height_mm": 98.1
+  },
+  "staunton/queen": {
+    "triangles": 55000,
+    "height_mm": 85.0
+  },
+  "staunton/bishop": {
+    "triangles": 55000,
+    "height_mm": 78.9
+  },
+  "staunton/knight": {
+    "triangles": 129999,
+    "height_mm": 74.9
+  },
+  "staunton/rook": {
+    "triangles": 42312,
+    "height_mm": 61.1
+  },
+  "staunton/pawn": {
+    "triangles": 30752,
+    "height_mm": 49.6
+  },
+  "dubrovnik/king": {
+    "triangles": 55000,
+    "height_mm": 90.4
+  },
+  "dubrovnik/queen": {
+    "triangles": 55000,
+    "height_mm": 81.6
+  },
+  "dubrovnik/bishop": {
+    "triangles": 52512,
+    "height_mm": 78.4
+  },
+  "dubrovnik/knight": {
+    "triangles": 129999,
+    "height_mm": 73.9
+  },
+  "dubrovnik/rook": {
+    "triangles": 42312,
+    "height_mm": 58.7
+  },
+  "dubrovnik/pawn": {
+    "triangles": 30752,
+    "height_mm": 47.7
+  },
+  "bauhaus/king": {
+    "triangles": 376,
+    "height_mm": 78.0
+  },
+  "bauhaus/queen": {
+    "triangles": 3164,
+    "height_mm": 73.5
+  },
+  "bauhaus/bishop": {
+    "triangles": 288,
+    "height_mm": 62.0
+  },
+  "bauhaus/knight": {
+    "triangles": 376,
+    "height_mm": 60.0
+  },
+  "bauhaus/rook": {
+    "triangles": 188,
+    "height_mm": 38.0
+  },
+  "bauhaus/pawn": {
+    "triangles": 188,
+    "height_mm": 24.0
+  }
+}

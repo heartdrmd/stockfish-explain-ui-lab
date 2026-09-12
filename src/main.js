@@ -64,6 +64,7 @@ import { canReuseLearnScan, learnScanKey } from './learn-scan-cache.js';
 import { includeLessonPly, isUserMovePly, notationAnnotation } from './learn-annotations.js';
 import { sortGamesByPlayedAt } from './game-order.js';
 import { canApplyPracticeEngineMove } from './practice-engine-guard.js';
+import { install3DBoard } from './board-3d.js';
 
 // Expose Chess to eval-graph's computeDivision helper — avoids a
 // circular import while still letting it replay SAN to count pieces
@@ -356,6 +357,7 @@ async function main() {
     document.getElementById('board'),
     document.getElementById('promotion-overlay'),
   ).init();
+  install3DBoard(board);
   // Start per-move timekeeping. Writes into a module-scoped Map so the
   // movetime bar chart in review mode has data.
   try { MoveTime.install(board); } catch {}

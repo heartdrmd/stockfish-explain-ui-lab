@@ -1,0 +1,26 @@
+{
+  "King": {
+    "source_triangles": 146624,
+    "web_triangles": 146624
+  },
+  "Queen": {
+    "source_triangles": 159408,
+    "web_triangles": 159408
+  },
+  "Bishop": {
+    "source_triangles": 119648,
+    "web_triangles": 119648
+  },
+  "Knight": {
+    "source_triangles": 963472,
+    "web_triangles": 963472
+  },
+  "Rook": {
+    "source_triangles": 83140,
+    "web_triangles": 83140
+  },
+  "Pawn": {
+    "source_triangles": 63200,
+    "web_triangles": 63200
+  }
+}
