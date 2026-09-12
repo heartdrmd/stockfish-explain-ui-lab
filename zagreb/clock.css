@@ -308,9 +308,11 @@
   border-radius: 50%;
 }
 .game-clock .clock-case[data-clock-style='zmf'] .clock-paddles .pressed {
-  background: #68bdff;
   height: 8px;
   margin-top: 2px;
+}
+.game-clock .clock-case[data-clock-style='zmf'] .clock-paddles .is-running {
+  background: #68bdff;
 }
 .game-clock .clock-case[data-clock-style='zmf'] .clock-segments {
   filter: drop-shadow(0 0 2px #3899de80);
