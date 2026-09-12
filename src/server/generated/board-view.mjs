@@ -5217,6 +5217,10 @@ function readClock3DView(value) {
 	const v = value && typeof value === "object" ? value : {};
 	const num = (key, min, max) => typeof v[key] === "number" && Number.isFinite(v[key]) ? Math.max(min, Math.min(max, v[key])) : DEFAULT_CLOCK_3D[key];
 	return {
+		...typeof v.dockX === "number" && Number.isFinite(v.dockX) && typeof v.dockY === "number" && Number.isFinite(v.dockY) ? {
+			dockX: Math.max(-1e4, Math.min(1e4, v.dockX)),
+			dockY: Math.max(-1e4, Math.min(1e4, v.dockY))
+		} : {},
 		...typeof v.fullscreenX === "number" && Number.isFinite(v.fullscreenX) && typeof v.fullscreenY === "number" && Number.isFinite(v.fullscreenY) ? {
 			fullscreenX: Math.max(0, Math.min(100, v.fullscreenX)),
 			fullscreenY: Math.max(0, Math.min(100, v.fullscreenY))
@@ -5229,6 +5233,14 @@ function readClock3DView(value) {
 		intensity: num("intensity", 15, 220),
 		fill: num("fill", 0, 150)
 	};
+}
+//#endregion
+//#region lib/clock-layout.ts
+function isClockLayoutKey(value) {
+	return typeof value === "string" && /^(fullscreen:(2d|3d)|window:(2d|3d):(left|right):(open|closed):(open|closed))$/.test(value);
+}
+function validClockLayouts(value) {
+	return !!value && typeof value === "object" && !Array.isArray(value) && Object.entries(value).every(([key, views]) => isClockLayoutKey(key) && validClock3DViews(views));
 }
 //#endregion
 //#region lib/flip-camera.ts
@@ -5317,7 +5329,7 @@ function validateView(raw) {
 		"player",
 		"white",
 		"black"
-	].includes(s.viewing.clockSide) || s.viewing.railOrder != null && !["clock-first", "moves-first"].includes(s.viewing.railOrder) || s.viewing.clockStyle != null && !CLOCK_STYLES.some((style) => style.id === s.viewing.clockStyle) || s.viewing.clock3D != null && !validClock3DViews(s.viewing.clock3D) || !range(s.viewing.knightAngle, -180, 180) || s.viewing.pieceScales != null && (typeof s.viewing.pieceScales !== "object" || Array.isArray(s.viewing.pieceScales) || !Object.entries(s.viewing.pieceScales).every(([name, scale]) => PIECE_NAMES.includes(name) && range(scale, 60, 120))) || s.viewing.knightScale != null && !range(s.viewing.knightScale, 60, 120) || s.viewing.lowerControls != null && typeof s.viewing.lowerControls !== "boolean" || s.viewing.upperControls != null && typeof s.viewing.upperControls !== "boolean" || s.viewing.moveNavigation != null && typeof s.viewing.moveNavigation !== "boolean" || s.viewing.cameraLocked != null && typeof s.viewing.cameraLocked !== "boolean" || !range(s.viewing.perspective, 25, 55) || !["comfortable", "maximum"].includes(s.viewing.framing) || typeof s.viewing.coordinates !== "boolean")) throw new Error("Invalid viewing settings.");
+	].includes(s.viewing.clockSide) || s.viewing.railOrder != null && !["clock-first", "moves-first"].includes(s.viewing.railOrder) || s.viewing.clockStyle != null && !CLOCK_STYLES.some((style) => style.id === s.viewing.clockStyle) || s.viewing.clock3D != null && !validClock3DViews(s.viewing.clock3D) || s.viewing.clockLayouts != null && !validClockLayouts(s.viewing.clockLayouts) || !range(s.viewing.knightAngle, -180, 180) || s.viewing.pieceScales != null && (typeof s.viewing.pieceScales !== "object" || Array.isArray(s.viewing.pieceScales) || !Object.entries(s.viewing.pieceScales).every(([name, scale]) => PIECE_NAMES.includes(name) && range(scale, 60, 120))) || s.viewing.knightScale != null && !range(s.viewing.knightScale, 60, 120) || s.viewing.lowerControls != null && typeof s.viewing.lowerControls !== "boolean" || s.viewing.upperControls != null && typeof s.viewing.upperControls !== "boolean" || s.viewing.moveNavigation != null && typeof s.viewing.moveNavigation !== "boolean" || s.viewing.cameraLocked != null && typeof s.viewing.cameraLocked !== "boolean" || !range(s.viewing.perspective, 25, 55) || !["comfortable", "maximum"].includes(s.viewing.framing) || typeof s.viewing.coordinates !== "boolean")) throw new Error("Invalid viewing settings.");
 	if (s.navigation != null && !["orbit", "pan"].includes(s.navigation) || s.showEvaluation != null && typeof s.showEvaluation !== "boolean" || s.showMoves != null && typeof s.showMoves !== "boolean") throw new Error("Invalid board controls.");
 	return {
 		...s,

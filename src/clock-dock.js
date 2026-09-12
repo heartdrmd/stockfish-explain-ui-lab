@@ -14,7 +14,8 @@ export function installClockDock(board) {
   }
   const home=document.createComment('Clock returns here');
   card.before(home);
-  installFloatingClock(card, right);
+  const floatingClock = installFloatingClock(card, right);
+  board.setClockLayout = request => floatingClock?.setLayout(request);
   installNotationDock(card, right);
   let previous='left';
   board.setClockDock=dock=>{

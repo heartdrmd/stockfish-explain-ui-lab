@@ -362,6 +362,9 @@ export function install3DBoard(board) {
     if (event.data?.type === 'zagreb:clock-dock') {
       board.setClockDock?.(event.data.placement); return;
     }
+    if (event.data?.type === 'zagreb:clock-layout') {
+      board.setClockLayout?.(event.data); return;
+    }
     if (event.data?.type === 'zagreb:clock-design') {
       // An explicit preset selection supersedes an older dropdown request.
       if (isClockStyle(event.data.style)) pendingClockStyle = null;

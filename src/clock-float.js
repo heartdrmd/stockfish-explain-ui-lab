@@ -4,20 +4,33 @@ export function installFloatingClock(card, host) {
   const toolbarToggle = document.getElementById('btn-move-clock');
   const panel = host.closest?.('.tools');
   if (!grip || !panel) return;
-  const key = 'stockfish-explain.floating-clock-position';
+  const key = 'stockfish-explain.floating-clock-layouts-v1';
   let toolsPin = 0;
   let offset = { x: 0, y: 0 }, drag = null, frame = 0, moveMode = false, skipClick = false;
+  let desired = { x: 0, y: 0 }, layout = null, model = null, suspended = false, legacy = null;
+  let positions = {};
+  const point = p => p && Number.isFinite(p.x) && Number.isFinite(p.y) && Math.abs(p.x)<=10000 && Math.abs(p.y)<=10000;
   try {
     const saved = JSON.parse(localStorage.getItem(key));
-    if (Number.isFinite(saved?.x) && Number.isFinite(saved?.y)) offset = saved;
+    if (saved && typeof saved==='object' && !Array.isArray(saved)) positions = saved;
+    const old = JSON.parse(localStorage.getItem('stockfish-explain.floating-clock-position'));
+    if (point(old) && !Object.keys(positions).length) legacy = old;
   } catch {}
+  const inFullscreen = () => suspended || !!document.fullscreenElement ||
+    document.getElementById('zagreb-board')?.contentDocument?.querySelector('.fullscreen-shell')?.classList.contains('is-expanded');
   const active = () => window.innerWidth >= 800 && !card.hidden &&
+    !inFullscreen() &&
     !document.body.classList.contains('clock-presentation-hidden') &&
     document.body.classList.contains('clock-docked-right') &&
     !document.body.classList.contains('mobile-mode');
   const floating = () => document.body.classList.contains('right-pane-hidden');
   const save = () => {
-    try { localStorage.setItem(key, JSON.stringify(offset)); } catch {}
+    if (!layout || !model) return;
+    positions[`${layout}:${model}`] = {...desired};
+    try { localStorage.setItem(key, JSON.stringify(positions)); } catch {}
+    document.getElementById('zagreb-board')?.contentWindow?.postMessage({
+      type:'zagreb:clock-position',layout,model,x:desired.x,y:desired.y,
+    },location.origin);
   };
   function paint() {
     panel.style.setProperty('--clock-float-x', `${offset.x}px`);
@@ -28,7 +41,7 @@ export function installFloatingClock(card, host) {
     if(card.style.getPropertyValue('--clock-available-height') !== availableHeight)card.style.setProperty('--clock-available-height', availableHeight);
     host.style.height = active() && !floating() ? `${Math.max(0,card.getBoundingClientRect().height+offset.y)}px` : '';
   }
-  function move(x, y) {
+  function move(x, y, remember = false) {
     const rect = (floating() ? panel : card).getBoundingClientRect();
     const baseX = rect.left - offset.x, baseY = rect.top - offset.y;
     const header = document.querySelector('.site-header')?.getBoundingClientRect();
@@ -48,6 +61,9 @@ export function installFloatingClock(card, host) {
       x: Math.round(Math.max(8, Math.min(maxX, baseX + x)) - baseX),
       y: Math.round(Math.max(top, Math.min(maxY, baseY + y)) - baseY),
     };
+    // A smaller viewport may clamp the display, but must not overwrite where
+    // the user placed it in this layout at its usual size.
+    if (remember) desired = {...offset};
     paint();
   }
   const finish = () => {
@@ -85,7 +101,7 @@ export function installFloatingClock(card, host) {
         const width = `${Math.round(Math.max(180, Math.min(window.innerWidth * .9, widthForHeight, naturalWidth || 300)))}px`;
         if (panel.style.getPropertyValue('--floating-clock-width') !== width) panel.style.setProperty('--floating-clock-width', width);
         if (card.style.getPropertyValue('--docked-clock-width') !== width) card.style.setProperty('--docked-clock-width', width);
-        move(offset.x, offset.y);
+        move(desired.x, desired.y);
       }
       else {setMoveMode(false);host.style.height='';}
       const docked = window.innerWidth >= 800 && !document.body.classList.contains('mobile-mode') &&
@@ -122,7 +138,7 @@ export function installFloatingClock(card, host) {
     if (!active() || (event.pointerType === 'mouse' && event.buttons === 0)) { finish(); return; }
     const dx = event.clientX - drag.x, dy = event.clientY - drag.y;
     if (drag.target === grip && Math.hypot(dx, dy) > 3) skipClick = true;
-    move(drag.start.x + dx, drag.start.y + dy);
+    move(drag.start.x + dx, drag.start.y + dy, true);
   }, true);
   for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) {
     card.addEventListener(type, event => {
@@ -131,7 +147,7 @@ export function installFloatingClock(card, host) {
       finish();
     }, true);
   }
-  const reset = () => { if (active()) { move(0, 0); save(); } };
+  const reset = () => { if (active()) { move(0, 0, true); save(); } };
   grip.addEventListener('keydown', event => {
     if (!active() || !moveMode || event.altKey || event.ctrlKey || event.metaKey) return;
     if (event.key === 'Home') { event.preventDefault(); reset(); return; }
@@ -139,7 +155,7 @@ export function installFloatingClock(card, host) {
     if (!delta) return;
     event.preventDefault();
     const step = event.shiftKey ? 1 : 10;
-    move(offset.x + delta[0] * step, offset.y + delta[1] * step);
+    move(offset.x + delta[0] * step, offset.y + delta[1] * step, true);
     save();
   });
   window.addEventListener('scroll', schedule, {passive:true});
@@ -150,5 +166,21 @@ export function installFloatingClock(card, host) {
   resize.observe(panel);resize.observe(card);
   new MutationObserver(schedule).observe(card, { attributes: true, attributeFilter: ['hidden'] });
   new MutationObserver(schedule).observe(card, { attributes: true, childList: true, subtree: true, attributeFilter: ['style'] });
+  new MutationObserver(schedule).observe(document.body, {attributes:true,attributeFilter:['class']});
   schedule();
+  return { setLayout(request) {
+    if (!request || !['dgt-3000','zmf-pro'].includes(request.model) ||
+      !/^(fullscreen:(2d|3d)|window:(2d|3d):(left|right):(open|closed):(open|closed))$/.test(request.layout)) return;
+    if (request.layout.startsWith('fullscreen:')) {
+      finish(); suspended = true; setMoveMode(false); schedule(); return;
+    }
+    const changed = layout !== request.layout || model !== request.model;
+    if (changed) {finish();setMoveMode(false);}
+    layout = request.layout; model = request.model; suspended = false;
+    const stored = positions[`${layout}:${model}`];
+    const migrate = !point(request.position) && !point(stored) && legacy && layout.includes(':right:');
+    desired = {...(point(request.position) ? request.position : point(stored) ? stored : migrate ? legacy : {x:0,y:0})};
+    if (migrate) {legacy=null;save();}
+    schedule();
+  }};
 }
