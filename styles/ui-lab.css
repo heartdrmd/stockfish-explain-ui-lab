@@ -540,6 +540,11 @@ body.left-pane-hidden .uniboard > .side { display: none !important; }
   }
 }
 @media (min-width: 800px) {
+  /* The viewer has its own board-size grip; the divider owns its panel width.
+     Native 2D retains the outer grip because it has no inner size control. */
+  body:not(.mobile-mode) .split-layout .board-area.using-3d #board-resize {
+    display: none;
+  }
   body:not(.mobile-mode) .uniboard.split-layout:has(.board-area:not(.using-3d)) {
     padding-top: 24px;
   }
