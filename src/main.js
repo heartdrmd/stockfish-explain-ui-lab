@@ -70,7 +70,7 @@ import { canApplyPracticeEngineMove } from './practice-engine-guard.js';
 import { install3DBoard } from './board-3d.js';
 import { installWorkspaceSplit } from './workspace-split.js';
 import { installBoardResizeHandle } from './board-resize.js';
-import { installLeftPaneToggle } from './left-pane.js';
+import { installLeftPaneToggle, installRightPaneToggle } from './left-pane.js';
 import { installClockPresentation } from './clock-presentation.js';
 
 // Expose Chess to eval-graph's computeDivision helper — avoids a
@@ -387,6 +387,7 @@ async function main() {
   }
 
   installLeftPaneToggle();
+  installRightPaneToggle();
   const workspaceSplit = installWorkspaceSplit(board);
 
   wireTabs();

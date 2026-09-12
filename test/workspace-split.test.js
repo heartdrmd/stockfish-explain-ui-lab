@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { fitSplit, splitBounds, fitBoardHeight, fitSidebar, installWorkspaceSplit } from '../src/workspace-split.js';
+import { installRightPaneToggle } from '../src/left-pane.js';
 
 test('workspace split preserves usable board and analysis widths at both drag limits', () => {
   for (const space of [640, 780, 900, 1200, 1800]) {
@@ -56,7 +57,7 @@ function workspaceFixture(t, saved = new Map()) {
     releasePointerCapture() { this.capture = null; }
   }
   const body = new Element(), layout = new Element(), side = new Element(), area = new Element(), tools = new Element();
-  const win = new EventTarget(), doc = new EventTarget(), elements = [], frames = new Map();
+  const win = new EventTarget(), doc = new EventTarget(), elements = [], frames = new Map(), rightToggle = new Element();
   win.innerWidth = 1600; win.innerHeight = 1000;
   let frameId = 0, resizeEvents = 0;
   const cssNumber = (key, fallback) => parseFloat(layout.values.get(key)) || fallback;
@@ -68,7 +69,7 @@ function workspaceFixture(t, saved = new Map()) {
     selector === '.board-nav' ? {getBoundingClientRect: () => ({height:72})} : null;
   layout.insertBefore = el => elements.push(el);
   const root = { closest: () => layout, parentElement: area, getBoundingClientRect: area.getBoundingClientRect };
-  Object.assign(doc, { body, createElement: () => new Element(), getElementById: () => null,
+  Object.assign(doc, { body, createElement: () => new Element(), getElementById: id => id === 'btn-toggle-right-pane' ? rightToggle : null,
     querySelector: () => ({getBoundingClientRect: () => ({bottom:60})}) });
   doc.addEventListener('chessgroundResize', () => resizeEvents++);
   const globals = { window:win, document:doc,
@@ -82,9 +83,11 @@ function workspaceFixture(t, saved = new Map()) {
     t.after(() => original ? Object.defineProperty(globalThis,key,original) : delete globalThis[key]);
   }
   const flush = () => {const pending=[...frames.values()]; frames.clear(); pending.forEach(cb=>cb());};
+  installRightPaneToggle();
   const split = installWorkspaceSplit({rootEl:root}); flush();
   const left = elements.find(el=>el.id==='workspace-left-divider'), right = elements.find(el=>el.id==='workspace-divider');
-  return {left,right,body,win,saved,split,flush, resizeEvents:()=>resizeEvents,
+  return {left,right,rightToggle,body,win,saved,split,flush, resizeEvents:()=>resizeEvents,
+    height:()=>cssNumber('--split-board-height',600),
     widths:()=>({side:side.getBoundingClientRect().width,board:area.getBoundingClientRect().width}),
     event(handle,type,properties={}) {const event=new Event(type,{cancelable:true}); Object.assign(event,{pointerId:1,clientX:100,button:0,...properties}); handle.dispatchEvent(event);} };
 }
@@ -117,4 +120,33 @@ test('restored left width survives hiding the pane and narrowing the window', t 
   f.event(f.left,'pointerdown'); f.event(f.left,'pointermove',{clientX:600}); f.event(f.left,'pointerup');
   f.win.innerWidth=1600; f.win.dispatchEvent(new Event('resize')); f.flush();
   assert.equal(f.widths().side,460,'The stacked layout cannot overwrite the desktop clock width');
+});
+
+test('right toggle gives the board the free space and restores the chosen divider', t => {
+  const f=workspaceFixture(t), before=f.widths(), oldHeight=f.height();
+  f.event(f.right,'keydown',{key:'ArrowLeft'});
+  const chosen=f.widths(), preference=f.saved.get('stockfish-explain.workspace-split');
+  f.event(f.rightToggle,'click'); f.flush();
+  assert.equal(f.rightToggle.attrs['aria-label'],'Show right pane');
+  assert.equal(f.rightToggle.attrs['aria-pressed'],'false');
+  assert.equal(f.saved.get('stockfish-explain.right-pane-hidden'),'1');
+  assert.deepEqual(f.widths(),{side:before.side,board:1200},'The board takes the full width freed by analysis and its divider');
+  assert.ok(f.height()>oldHeight,'Native 2D also grows to fit the available height');
+  assert.equal(f.saved.get('stockfish-explain.workspace-split'),preference);
+  f.body.classes.add('left-pane-hidden'); f.win.dispatchEvent(new Event('resize')); f.flush();
+  assert.equal(f.widths().board,1520,'Hiding both panes leaves only the board, gauge and outer spacing');
+  f.body.classes.delete('left-pane-hidden'); f.win.dispatchEvent(new Event('resize')); f.flush();
+  f.event(f.rightToggle,'click'); f.flush();
+  assert.deepEqual(f.widths(),chosen,'Showing analysis restores the earlier divider width');
+  assert.equal(f.rightToggle.attrs['aria-label'],'Hide right pane');
+});
+
+test('right-pane preference restores on load and still fits the narrower layout', t => {
+  const saved=new Map([['stockfish-explain.right-pane-hidden','1'],['stockfish-explain.workspace-split','0.6']]);
+  const f=workspaceFixture(t,saved);
+  assert.equal(f.widths().board,1200);
+  f.win.innerWidth=1000; f.win.dispatchEvent(new Event('resize')); f.flush();
+  assert.equal(f.widths().board,924,'At medium width the board consumes all space except gauge, gap and padding');
+  f.event(f.rightToggle,'click'); f.flush();
+  assert.equal(f.widths().board,530,'Reopening uses the saved 60% board share');
 });
