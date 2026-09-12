@@ -1,14 +1,17 @@
 function installPaneToggle(side) {
-  const button = document.getElementById(`btn-toggle-${side}-pane`);
+  const dividers = side === 'dividers';
+  const button = document.getElementById(dividers ? 'btn-toggle-dividers' : `btn-toggle-${side}-pane`);
   if (!button) return;
-  const key = `stockfish-explain.${side}-pane-hidden`;
+  const className = dividers ? 'dividers-hidden' : `${side}-pane-hidden`;
+  const label = dividers ? 'dividers' : `${side} pane`;
+  const key = `stockfish-explain.${className}`;
   let hidden = false;
   try { hidden = localStorage.getItem(key) === '1'; } catch {}
   function apply() {
-    document.body.classList.toggle(`${side}-pane-hidden`, hidden);
+    document.body.classList.toggle(className, hidden);
     button.setAttribute('aria-pressed', String(!hidden));
-    button.setAttribute('aria-label', `${hidden ? 'Show' : 'Hide'} ${side} pane`);
-    button.title = `${hidden ? 'Show' : 'Hide'} ${side} pane`;
+    button.setAttribute('aria-label', `${hidden ? 'Show' : 'Hide'} ${label}`);
+    button.title = `${hidden ? 'Show' : 'Hide'} ${label}`;
   }
   apply();
   button.addEventListener('click', () => {
@@ -21,3 +24,4 @@ function installPaneToggle(side) {
 
 export const installLeftPaneToggle = () => installPaneToggle('left');
 export const installRightPaneToggle = () => installPaneToggle('right');
+export const installDividerToggle = () => installPaneToggle('dividers');

@@ -5,6 +5,12 @@
 body.ui-lab {
   overflow-x: clip;
 }
+body.ui-lab .uniboard { background: #151c1a; }
+body.ui-lab #practice-clock {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+}
 
 .board-3d-frame{position:absolute;top:0;left:0;border:0;z-index:2;background:#151c1a;border-radius:4px}
 .board-3d-frame[hidden]{display:none}
@@ -531,6 +537,7 @@ body.ui-lab .cg-wrap coords.files {
 
 /* The divider controls the board and the complete analysis column together. */
 .workspace-divider { display: none; }
+body.dividers-hidden .workspace-divider { visibility: hidden; pointer-events: none; }
 .clock-right-host:empty { display: none; }
 .clock-right-host { order: -10; flex: 0 0 auto; min-width: 0; }
 body.clock-docked-right:not(.mobile-mode) .uniboard .tools > :is(.engine-power-row, .ceval) {
@@ -541,7 +548,7 @@ body.left-pane-hidden .uniboard > .side { display: none !important; }
 body.left-pane-hidden .uniboard > .workspace-left-divider { display: none !important; }
 body.right-pane-hidden .uniboard > .tools,
 body.right-pane-hidden .uniboard > #workspace-divider { display: none !important; }
-:is(#btn-toggle-left-pane, #btn-toggle-right-pane)[aria-pressed="false"] { background: #273c31; border-color: #7d9476; }
+:is(#btn-toggle-left-pane, #btn-toggle-right-pane, #btn-toggle-dividers)[aria-pressed="false"] { background: #273c31; border-color: #7d9476; }
 @media (min-width: 1260px) {
   body.left-pane-hidden:not(.mobile-mode) .uniboard.split-layout {
     grid-template-columns: 28px var(--split-board-width) 16px minmax(0, 1fr);

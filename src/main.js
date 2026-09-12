@@ -71,7 +71,7 @@ import { canApplyPracticeEngineMove } from './practice-engine-guard.js';
 import { install3DBoard } from './board-3d.js';
 import { installWorkspaceSplit } from './workspace-split.js';
 import { installBoardResizeHandle } from './board-resize.js';
-import { installLeftPaneToggle, installRightPaneToggle } from './left-pane.js';
+import { installLeftPaneToggle, installRightPaneToggle, installDividerToggle } from './left-pane.js';
 import { installClockPresentation } from './clock-presentation.js';
 import { installClockDock } from './clock-dock.js';
 import { installStudyAnalysis } from './board-analysis.js';
@@ -391,6 +391,7 @@ async function main() {
 
   installLeftPaneToggle();
   installRightPaneToggle();
+  installDividerToggle();
   const workspaceSplit = installWorkspaceSplit(board);
 
   wireTabs();
