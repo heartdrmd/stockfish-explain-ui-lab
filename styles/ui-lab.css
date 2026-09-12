@@ -544,27 +544,27 @@ body.right-pane-hidden .uniboard > #workspace-divider { display: none !important
 :is(#btn-toggle-left-pane, #btn-toggle-right-pane)[aria-pressed="false"] { background: #273c31; border-color: #7d9476; }
 @media (min-width: 1260px) {
   body.left-pane-hidden:not(.mobile-mode) .uniboard.split-layout {
-    grid-template-columns: var(--split-board-width) 28px 16px minmax(0, 1fr);
-    grid-template-areas: "board gauge divider tools";
+    grid-template-columns: 28px var(--split-board-width) 16px minmax(0, 1fr);
+    grid-template-areas: "gauge board divider tools";
   }
 }
 @media (min-width: 800px) and (max-width: 1259px) {
   body.right-pane-hidden:not(.mobile-mode) .uniboard.split-layout {
-    grid-template-columns: var(--split-board-width) 24px;
-    grid-template-areas: "board gauge" "side gauge";
+    grid-template-columns: 24px var(--split-board-width);
+    grid-template-areas: "gauge board" "gauge side";
   }
   body.left-pane-hidden.right-pane-hidden:not(.mobile-mode) .uniboard.split-layout {
-    grid-template-areas: "board gauge";
+    grid-template-areas: "gauge board";
   }
 }
 @media (min-width: 1260px) {
   body.right-pane-hidden:not(.mobile-mode) .uniboard.split-layout {
-    grid-template-columns: var(--split-side-width, 280px) 16px var(--split-board-width) 28px;
-    grid-template-areas: "side left-divider board gauge";
+    grid-template-columns: var(--split-side-width, 280px) 16px 28px var(--split-board-width);
+    grid-template-areas: "side left-divider gauge board";
   }
   body.left-pane-hidden.right-pane-hidden:not(.mobile-mode) .uniboard.split-layout {
-    grid-template-columns: var(--split-board-width) 28px;
-    grid-template-areas: "board gauge";
+    grid-template-columns: 28px var(--split-board-width);
+    grid-template-areas: "gauge board";
   }
 }
 @media (min-width: 800px) {
@@ -578,8 +578,8 @@ body.right-pane-hidden .uniboard > #workspace-divider { display: none !important
   }
   body:not(.mobile-mode) .uniboard.split-layout {
     --split-board-width: 500px;
-    grid-template-columns: var(--split-board-width) 24px 16px minmax(0, 1fr);
-    grid-template-areas: "board gauge divider tools" "side gauge divider tools";
+    grid-template-columns: 24px var(--split-board-width) 16px minmax(0, 1fr);
+    grid-template-areas: "gauge board divider tools" "gauge side divider tools";
   }
   body:not(.mobile-mode) .split-layout .board-area {
     width: var(--split-board-width) !important;
@@ -589,9 +589,17 @@ body.right-pane-hidden .uniboard > #workspace-divider { display: none !important
   body:not(.mobile-mode) .split-layout .board-area > #board {
     width: var(--split-board-height, var(--split-board-width)) !important;
     height: var(--split-board-height, var(--split-board-width)) !important;
-    align-self: flex-end;
+    align-self: center;
   }
   body:not(.mobile-mode) .split-layout .board-area.using-3d > #board { width: var(--split-board-width) !important; }
+  /* The square is centered in its column. Keep its gauge and grip attached
+     when height or the saved square scale leaves horizontal breathing room. */
+  body:not(.mobile-mode) .split-layout .board-area:not(.using-3d) ~ .eval-gauge-control {
+    transform: translateX(calc((var(--split-board-width) - var(--split-board-height, var(--split-board-width))) / 2));
+  }
+  body:not(.mobile-mode) .split-layout .board-area:not(.using-3d) #board-resize {
+    right: calc((var(--split-board-width) - var(--split-board-height, var(--split-board-width))) / 2 - 10px);
+  }
   body:not(.mobile-mode) .split-layout .board-area,
   body:not(.mobile-mode) .split-layout .eval-gauge-control,
   body:not(.mobile-mode) .split-layout .tools { top: var(--split-top, 68px); }
@@ -627,8 +635,8 @@ body.right-pane-hidden .uniboard > #workspace-divider { display: none !important
 }
 @media (min-width: 1260px) {
   body:not(.mobile-mode) .uniboard.split-layout {
-    grid-template-columns: var(--split-side-width, 280px) 16px var(--split-board-width) 28px 16px minmax(0, 1fr);
-    grid-template-areas: "side left-divider board gauge divider tools" "side left-divider board gauge divider tools";
+    grid-template-columns: var(--split-side-width, 280px) 16px 28px var(--split-board-width) 16px minmax(0, 1fr);
+    grid-template-areas: "side left-divider gauge board divider tools" "side left-divider gauge board divider tools";
   }
   body:not(.mobile-mode) .split-layout .workspace-left-divider { display: block; grid-area: left-divider; }
   body:not(.mobile-mode) .uniboard.split-layout .side {
