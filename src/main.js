@@ -68,6 +68,7 @@ import { canApplyPracticeEngineMove } from './practice-engine-guard.js';
 import { install3DBoard } from './board-3d.js';
 import { installWorkspaceSplit } from './workspace-split.js';
 import { installBoardResizeHandle } from './board-resize.js';
+import { installLeftPaneToggle } from './left-pane.js';
 
 // Expose Chess to eval-graph's computeDivision helper — avoids a
 // circular import while still letting it replay SAN to count pieces
@@ -382,6 +383,7 @@ async function main() {
     ui.boardArea.style.width    = sz + 'px';
   }
 
+  installLeftPaneToggle();
   const workspaceSplit = installWorkspaceSplit(board);
 
   wireTabs();
@@ -2167,6 +2169,15 @@ async function main() {
     return `${m}:${s.toString().padStart(2,'0')}`;
   }
   function renderClock() {
+    // The immersive board displays this same clock; it never runs a second timer.
+    board.studyClock = {
+      available: document.getElementById('practice-clock')?.hidden === false,
+      active: clock.active, paused: clock.paused === true, mode: clock.mode,
+      whiteMs: clock.msWhite, blackMs: clock.msBlack,
+      running: clock.active && !clock.paused ? clock.tickingFor : null,
+      label: document.getElementById('clock-format')?.textContent || '',
+    };
+    board.dispatchEvent(new Event('clock-change'));
     const wEl = document.getElementById('clock-time-w');
     const bEl = document.getElementById('clock-time-b');
     const wSide = document.getElementById('clock-white');
@@ -2463,6 +2474,7 @@ async function main() {
   window.__clockStart    = startClock;
   window.__clockStop     = stopClock;
   window.__clockSwitch   = switchClock;
+  board.addEventListener('clock-pause-request', togglePauseClock);
   // Bind the move listener once; it fires for user moves (from
   // board.play), engine moves (from playEngineMove), and bulk fen
   // loads (from playUciMoves). We need to distinguish the last case

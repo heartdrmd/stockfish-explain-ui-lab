@@ -40,9 +40,10 @@ export function installWorkspaceSplit(board) {
   const space = () => {
     const css = getComputedStyle(layout);
     const wide = window.innerWidth >= 1260;
-    const sidebar = wide ? layout.querySelector(':scope > .side').getBoundingClientRect().width : 0;
+    const hasSidebar = wide && !document.body.classList.contains('left-pane-hidden');
+    const sidebar = hasSidebar ? layout.querySelector(':scope > .side').getBoundingClientRect().width : 0;
     return layout.clientWidth - parseFloat(css.paddingLeft) - parseFloat(css.paddingRight)
-      - sidebar - (wide ? 28 : 24) - DIVIDER_WIDTH - parseFloat(css.columnGap) * (wide ? 4 : 3);
+      - sidebar - (wide ? 28 : 24) - DIVIDER_WIDTH - parseFloat(css.columnGap) * (hasSidebar ? 4 : 3);
   };
   function save() {
     if (ratio != null) try { localStorage.setItem(STORAGE_KEY, String(ratio)); } catch {}

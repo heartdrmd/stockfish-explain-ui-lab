@@ -85,6 +85,10 @@ export function install3DBoard(board) {
   const gauge = document.getElementById('gauge-black');
   const gaugeControl = document.getElementById('eval-gauge-control');
   let enabled = false, ready = false, busy = false, scheduled = false, lastState = '', lastOverlay = '';
+  function syncClock() {
+    if (ready && enabled) frame.contentWindow.postMessage({ type: 'zagreb:clock', ...board.studyClock }, location.origin);
+  }
+  board.addEventListener('clock-change', syncClock);
   function syncOverlay(force = false) {
     if (!ready || !enabled) return;
     let score;
@@ -128,6 +132,7 @@ export function install3DBoard(board) {
       lastState = serialized;
     }
     syncOverlay(force);
+    if (force) syncClock();
   }
   function schedule() {
     if (scheduled) return;
@@ -170,6 +175,10 @@ export function install3DBoard(board) {
     if (event.origin !== location.origin || event.source !== frame.contentWindow) return;
     if (event.data?.type === 'zagreb:ready') { ready = true; sync(true); return; }
     if (!enabled) return;
+    if (event.data?.type === 'zagreb:clock-pause') {
+      board.dispatchEvent(new Event('clock-pause-request'));
+      return;
+    }
     if (event.data?.type === 'zagreb:flip') {
       const orientation = event.data.orientation;
       if (!['white', 'black'].includes(orientation)) return;

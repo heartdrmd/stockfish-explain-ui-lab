@@ -529,6 +529,14 @@ body.ui-lab .cg-wrap coords.files {
 
 /* The divider controls the board and the complete analysis column together. */
 .workspace-divider { display: none; }
+body.left-pane-hidden .uniboard > .side { display: none !important; }
+#btn-toggle-left-pane[aria-pressed="false"] { background: #273c31; border-color: #7d9476; }
+@media (min-width: 1260px) {
+  body.left-pane-hidden:not(.mobile-mode) .uniboard.split-layout {
+    grid-template-columns: var(--split-board-width) 28px 16px minmax(0, 1fr);
+    grid-template-areas: "board gauge divider tools";
+  }
+}
 @media (min-width: 800px) {
   body:not(.mobile-mode) .uniboard.split-layout {
     --split-board-width: 500px;
