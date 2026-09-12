@@ -2,6 +2,7 @@
 // engine ↔ board loop.
 
 import { api, currentUser }       from './api.js';
+import { frameUpdate, isResizeObserverNotification } from './resize-observer.js';
 import { Engine, ENGINE_FLAVORS } from './engine.js';
 import { BoardController, toDests as toDestsFrom } from './board.js';
 import { Explainer }              from './explain.js';
@@ -125,6 +126,11 @@ for (const lvl of ['log', 'info', 'warn', 'error']) {
 }
 // Also catch uncaught errors and unhandled promise rejections
 window.addEventListener('error', (e) => {
+  if (isResizeObserverNotification(e)) {
+    captureLog('warn', [e.message]);
+    e.preventDefault();
+    return;
+  }
   captureLog('error', [`uncaught: ${e.message} @ ${e.filename}:${e.lineno}:${e.colno}`]);
   // Silence the scary banner for Stockfish-worker crashes — bootEngine
   // already has its own recovery UI (auto-fallback to the default
@@ -14071,9 +14077,11 @@ async function main() {
   const boardLayout = ui.boardArea?.closest('.uniboard');
   const syncEvalGaugeGeometry = () => {
     const rect = boardInner.getBoundingClientRect();
+    const boardUnitHeight = ui.boardArea?.getBoundingClientRect().height || 0;
     if (rect.height > 0) {
-      ui.evalGauge.style.height = rect.height + 'px';
-      ui.evalGauge.style.minHeight = '0';
+      const height = rect.height + 'px';
+      if (ui.evalGauge.style.height !== height) ui.evalGauge.style.height = height;
+      if (ui.evalGauge.style.minHeight !== '0px') ui.evalGauge.style.minHeight = '0px';
     }
     // Desktop keeps the board and gauge sticky only while the complete board
     // unit (square + navigation / docked review content) fits below the
@@ -14082,17 +14090,18 @@ async function main() {
     if (boardLayout && ui.boardArea) {
       const stickyTop = document.body.classList.contains('nav-collapsed') ? 48 : 68;
       const usableHeight = Math.max(0, window.innerHeight - stickyTop - 8);
-      const boardUnitHeight = ui.boardArea.getBoundingClientRect().height;
       const oversized = !document.body.classList.contains('mobile-mode') &&
         boardUnitHeight > usableHeight;
-      boardLayout.classList.toggle('board-sticky-oversized', oversized);
+      if (boardLayout.classList.contains('board-sticky-oversized') !== oversized)
+        boardLayout.classList.toggle('board-sticky-oversized', oversized);
     }
   };
-  const ro = new ResizeObserver(syncEvalGaugeGeometry);
+  const scheduleEvalGaugeGeometry = frameUpdate(syncEvalGaugeGeometry);
+  const ro = new ResizeObserver(scheduleEvalGaugeGeometry);
   ro.observe(boardInner);
   if (ui.boardArea) ro.observe(ui.boardArea);
-  window.addEventListener('resize', syncEvalGaugeGeometry);
-  new MutationObserver(syncEvalGaugeGeometry).observe(document.body, {
+  window.addEventListener('resize', scheduleEvalGaugeGeometry);
+  new MutationObserver(scheduleEvalGaugeGeometry).observe(document.body, {
     attributes: true,
     attributeFilter: ['class'],
   });

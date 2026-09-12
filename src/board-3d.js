@@ -1,4 +1,5 @@
 // Both renderers share BoardController. The iframe never owns a game or engine.
+import { frameUpdate } from './resize-observer.js';
 export function lastMoveFor3D(board) {
   // Interaction locks and transient cg.set calls may clear Chessground's mark.
   // The node at the displayed FEN is the durable source of the last move.
@@ -141,10 +142,13 @@ export function install3DBoard(board) {
     board.addEventListener(event, schedule);
   new MutationObserver(schedule).observe(document.body, {attributes: true, attributeFilter: ['class', 'data-practice-color']});
   function sizeFrame() {
-    frame.style.width = `${board.rootEl.offsetWidth}px`;
-    frame.style.height = `${board.rootEl.offsetHeight}px`;
+    if (!enabled) return;
+    const width = `${board.rootEl.offsetWidth}px`, height = `${board.rootEl.offsetHeight}px`;
+    if (frame.style.width !== width) frame.style.width = width;
+    if (frame.style.height !== height) frame.style.height = height;
   }
-  new ResizeObserver(sizeFrame).observe(board.rootEl);
+  const scheduleFrameSize = frameUpdate(sizeFrame);
+  new ResizeObserver(scheduleFrameSize).observe(board.rootEl);
   toggle.addEventListener('click', () => {
     enabled = !enabled;
     frame.hidden = !enabled;
@@ -154,7 +158,7 @@ export function install3DBoard(board) {
     toggle.setAttribute('aria-pressed', String(enabled));
     toggle.textContent = enabled ? '2D board' : '3D board';
     if (enabled && !frame.src) frame.src = '/zagreb/?embed=1';
-    sizeFrame(); sync(true);
+    scheduleFrameSize(); sync(true);
   });
   const restartOpening = () => {
     if (window.__practiceStarting || board.interactionLocked) return;
@@ -164,6 +168,13 @@ export function install3DBoard(board) {
   window.addEventListener('message', async event => {
     if (event.origin !== location.origin || event.source !== frame.contentWindow || !enabled) return;
     if (event.data?.type === 'zagreb:ready') { ready = true; sync(true); return; }
+    if (event.data?.type === 'zagreb:flip') {
+      const orientation = event.data.orientation;
+      if (!['white', 'black'].includes(orientation)) return;
+      if (board.cg.state.orientation !== orientation) board.flipBoard();
+      sync(true);
+      return;
+    }
     if (event.data?.type === 'zagreb:visibility') {
       if (typeof event.data.visible !== 'boolean') return;
       if (event.data.control === 'moves' && event.data.visible === movesHidden) movesToggle.click();
