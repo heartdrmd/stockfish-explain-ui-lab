@@ -17,3 +17,25 @@ test('3D promotion explicitly preserves all four legal choices',()=>{
   for(const piece of ['q','r','b','n']) assert.ok(canAccept3DMove(b,{fen:b.fen(),uci:'a7a8'+piece}));
   assert.equal(canAccept3DMove(b,{fen:b.fen(),uci:'a7a8'}),false);
 });
+
+import { lastMoveFor3D, movesFor3D } from '../src/board-3d.js';
+import { GameTree } from '../src/tree.js';
+test('3D last move survives cleared renderer marks and follows history navigation', () => {
+  const b = controller(); b.tree = new GameTree(b.fen());
+  for (const san of ['e4', 'e5', 'Nf3']) {
+    const move = b.chess.move(san);
+    const added = b.tree.addNode({ uci: move.from + move.to, san, fen: b.fen() }, b.tree.currentPath);
+    b.tree.currentPath = added.path;
+  }
+  b.livePath = b.tree.currentPath;
+  b.cg.state.lastMove = undefined;
+  assert.deepEqual(lastMoveFor3D(b), ['g1', 'f3']);
+  const moves = movesFor3D(b);
+  assert.deepEqual(moves.map(m => m.label), ['Start', '1. e4', '1… e5', '2. Nf3']);
+  b.chess.undo(); b.tree.currentPath = b.tree.parentPath(b.tree.currentPath);
+  assert.deepEqual(lastMoveFor3D(b), ['e7', 'e5']);
+  assert.equal(movesFor3D(b).length, 4, 'Moving backward retains the continuation');
+  assert.equal(movesFor3D(b)[2].current, true);
+  b.chess.reset(); b.tree.currentPath = '';
+  assert.deepEqual(lastMoveFor3D(b), [], 'Starting position has no stale highlight');
+});

@@ -1,4 +1,28 @@
 // Both renderers share BoardController. The iframe never owns a game or engine.
+export function lastMoveFor3D(board) {
+  // Interaction locks and transient cg.set calls may clear Chessground's mark.
+  // The node at the displayed FEN is the durable source of the last move.
+  const node = board.tree?.nodeAtPath(board.tree.currentPath);
+  if (node?.fen === board.fen()) return node.uci ? [node.uci.slice(0, 2), node.uci.slice(2, 4)] : [];
+  const last = board.chess.history({ verbose: true }).at(-1);
+  return last ? [last.from, last.to] : [];
+}
+
+export function movesFor3D(board) {
+  if (!board.tree) return [];
+  const current = board.tree.currentPath;
+  let path = '';
+  // Keep the continuation visible when stepping backward through a line.
+  const line = (board.livePath || '').startsWith(current) ? board.livePath : current;
+  const result = [{ path: '', label: 'Start', current: current === '' }];
+  for (const node of board.tree.nodesAlong(line || '')) {
+    path += node.id;
+    const before = board.tree.nodeAtPath(path.slice(0, -2)).fen.split(' ');
+    result.push({ path, label: `${before[5]}${before[1] === 'b' ? '…' : '.'} ${node.san}`, current: path === current });
+  }
+  return result;
+}
+
 export function canAccept3DMove(board, request) {
   if (!request || request.fen !== board.fen() || board.interactionLocked ||
       !/^[a-h][1-8][a-h][1-8][qrbn]?$/.test(request.uci || '')) return false;
@@ -70,6 +94,7 @@ export function install3DBoard(board) {
       evaluation: score?.fen === board.fen() ? score.evaluation : null,
       evaluationVisible: !gaugeControl?.classList.contains('eval-gauge-hidden'),
       movesVisible: !movesHidden,
+      moves: movesFor3D(board),
     };
     const serialized = JSON.stringify(overlay);
     if (force || serialized !== lastOverlay) {
@@ -87,7 +112,7 @@ export function install3DBoard(board) {
       type: 'zagreb:position', fen: board.fen(),
       orientation: cg.orientation || board.orientation,
       movable: board.interactionLocked || window.__practiceStarting ? 'none' : cg.movable.color || 'none',
-      lastMove: cg.lastMove || [],
+      lastMove: lastMoveFor3D(board),
       status: board.interactionLocked ? 'Preparing position…' : isThinking ? 'Computer is thinking…' :
         board.chess.isCheckmate() ? 'Checkmate' : board.chess.isDraw() ? 'Draw' :
           `${turn} to move${board.chess.inCheck() ? ' · check' : ''}`,
@@ -148,6 +173,12 @@ export function install3DBoard(board) {
       return;
     }
     if (event.data?.type === 'zagreb:restart') { restartOpening(); return; }
+    if (event.data?.type === 'zagreb:navigate') {
+      if (busy || board.interactionLocked || window.__practiceStarting) return;
+      const path = event.data.path;
+      if (typeof path === 'string' && movesFor3D(board).some(move => move.path === path)) board.goToPath(path);
+      return;
+    }
     if (event.data?.type !== 'zagreb:move') return;
     if (busy || window.__practiceStarting || !canAccept3DMove(board, event.data)) { sync(true); return; }
     busy = true;
