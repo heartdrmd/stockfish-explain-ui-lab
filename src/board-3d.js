@@ -89,6 +89,26 @@ export function install3DBoard(board) {
   let enabled = false, ready = false, busy = false, scheduled = false, lastState = '', lastOverlay = '';
   let viewRevision = 0;
   let clockStyleReady = false, pendingClockStyle = null;
+  const watchButton = document.getElementById('btn-watch');
+  let returnToNative = false;
+  function leaveWatch(notify = true) {
+    board.setWatchMode?.(false);
+    document.body.classList.remove('watch-mode');
+    watchButton?.setAttribute('aria-pressed', 'false');
+    if (notify) frame.contentWindow?.postMessage({type:'zagreb:watch-stop'}, location.origin);
+    sync(true);
+    if (returnToNative) { returnToNative = false; setEnabled(false); }
+  }
+  watchButton?.addEventListener('click', () => {
+    if (!ready) return;
+    const flat = !enabled;
+    if (flat) { returnToNative = true; setEnabled(true); }
+    frame.contentWindow.postMessage({type:'zagreb:watch-menu',flat}, location.origin);
+  });
+  for (const event of ['move','nav','undo','new-game']) board.addEventListener(event, () => {
+    if (board.watchActive) leaveWatch();
+  });
+  frame.addEventListener('load', () => { if (board.watchActive) leaveWatch(); });
   const sendClockStyle = () => {
     if (clockStyleReady && pendingClockStyle) frame.contentWindow.postMessage({
       type: 'zagreb:clock-style', style: pendingClockStyle,
@@ -200,6 +220,8 @@ export function install3DBoard(board) {
     board.addEventListener(event, schedule);
   new MutationObserver(schedule).observe(document.body, {attributes: true, attributeFilter: ['class', 'data-practice-color']});
   function sizeFrame() {
+    const navWidth = `${board.rootEl.offsetWidth}px`;
+    if (nav.style.width !== navWidth) nav.style.width = navWidth;
     if (!enabled) return;
     const width = `${board.rootEl.offsetWidth}px`, height = `${board.rootEl.offsetHeight}px`;
     if (frame.style.width !== width) frame.style.width = width;
@@ -220,7 +242,7 @@ export function install3DBoard(board) {
     if (enabled && !frame.src) frame.src = '/zagreb/?embed=1';
     scheduleFrameSize(); sync(true);
   }
-  toggle.addEventListener('click', () => setEnabled(!enabled));
+  toggle.addEventListener('click', () => { if (board.watchActive) leaveWatch(); else setEnabled(!enabled); });
   const restartOpening = () => {
     if (window.__practiceStarting || board.interactionLocked) return;
     document.getElementById('btn-practice-again')?.click();
@@ -232,6 +254,27 @@ export function install3DBoard(board) {
   window.addEventListener('chess:account-change', syncAccount);
   window.addEventListener('message', async event => {
     if (event.origin !== location.origin || event.source !== frame.contentWindow) return;
+    if (event.data?.type === 'zagreb:move-navigation-ready') {
+      area.classList.add('inner-navigation-ready'); return;
+    }
+    if (event.data?.type === 'zagreb:watch-active') {
+      const {active,requestId}=event.data;
+      if (typeof active !== 'boolean' || typeof requestId !== 'string' || requestId.length > 80) return;
+      try {
+        if (active) {
+          if (busy || typeof board.setWatchMode !== 'function') throw Error('Your game is still getting ready. Try Watch again in a moment.');
+          board.setWatchMode(true);
+          document.body.classList.add('watch-mode');
+          watchButton?.setAttribute('aria-pressed','true');
+        } else leaveWatch(false);
+        frame.contentWindow.postMessage({type:'zagreb:watch-result',requestId,ok:true},location.origin);
+      } catch(error) {
+        frame.contentWindow.postMessage({type:'zagreb:watch-result',requestId,ok:false,error:error.message},location.origin);
+      }
+      return;
+    }
+    if (board.watchActive && ['zagreb:move','zagreb:restart','zagreb:navigate','zagreb:analysis','zagreb:flip',
+      'zagreb:clock-hardware','zagreb:clock-hardware-model','zagreb:clock-pause','zagreb:clock-control','zagreb:clock-add','zagreb:clock-design'].includes(event.data?.type)) return;
     if (event.data?.type === 'zagreb:board-controls-state') {
       if (typeof event.data.visible !== 'boolean' || typeof event.data.ready !== 'boolean') return;
       controlsVisible = event.data.visible; controlsReady = event.data.ready;
@@ -239,7 +282,7 @@ export function install3DBoard(board) {
       return;
     }
     if (event.data?.type === 'zagreb:account-ready') { syncAccount(); return; }
-    if (event.data?.type === 'zagreb:ready') { ready = true; sync(true); return; }
+    if (event.data?.type === 'zagreb:ready') { ready = true; if(watchButton)watchButton.disabled=false; sync(true); return; }
     if (event.data?.type === 'zagreb:clock-hardware-model') {
       board.setClockHardwareModel?.(event.data.family); return;
     }

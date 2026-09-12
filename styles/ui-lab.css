@@ -13,6 +13,12 @@ body.ui-lab {
   box-shadow: none;
 }
 .clock-float-drag { display: none; }
+body.ui-lab #btn-watch { order: 7; }
+#btn-watch[aria-pressed="true"] { background: #304335; border-color: #8f9e69; }
+body.watch-mode #practice-clock,
+body.watch-mode #clock-position-controls { display: none !important; }
+body.watch-mode .tools,
+body.watch-mode .eval-gauge-control { visibility: hidden; pointer-events: none; }
 #clock-float-drag-help { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 
 .board-3d-frame{position:absolute;top:0;left:0;border:0;z-index:2;background:#151c1a;border-radius:4px}
@@ -736,3 +742,7 @@ body.dividers-hidden .workspace-divider::after{display:none!important}
 
 .clock-move-mode #clock-float-drag{background:#506c3a!important;border-color:#d6df83!important;color:#fffac5!important;box-shadow:0 0 0 2px #d6df8344,0 0 14px #c4dc7166}
 .clock-move-mode .clock-live-canvas canvas{cursor:move!important}
+/* The embedded strip follows the visible board, in both 2D and 3D. */
+.board-area .board-nav { max-width:100%; margin-inline:auto; }
+.board-area.using-3d.inner-navigation-ready .board-nav > [id^="board-nav-"] { display:none; }
+body.watch-mode .board-nav { display:none !important; }
