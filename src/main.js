@@ -73,6 +73,8 @@ import { installWorkspaceSplit } from './workspace-split.js';
 import { installBoardResizeHandle } from './board-resize.js';
 import { installLeftPaneToggle, installRightPaneToggle } from './left-pane.js';
 import { installClockPresentation } from './clock-presentation.js';
+import { installClockDock } from './clock-dock.js';
+import { installStudyAnalysis } from './board-analysis.js';
 
 // Expose Chess to eval-graph's computeDivision helper — avoids a
 // circular import while still letting it replay SAN to count pieces
@@ -2592,6 +2594,7 @@ async function main() {
   });
 
   installClockPresentation(board, clock, renderClock);
+  installClockDock(board);
 
   // Untimed-increment enable toggle — enables the seconds input.
   (() => {
@@ -9011,6 +9014,8 @@ async function main() {
   }
 
   function _showPracticeHintStatus(message) {
+    board.studyHint = {fen:board.fen(),status:message,lines:[]};
+    board.dispatchEvent(new Event('analysis-refresh'));
     if (!practiceHintResults) return;
     const status = document.createElement('p');
     status.className = 'practice-hint-status';
@@ -9020,6 +9025,8 @@ async function main() {
   }
 
   function _renderPracticeHintLines(lines, searchedFen) {
+    board.studyHint = {fen:searchedFen,status:'Top three moves · scores favor White when positive.',lines};
+    board.dispatchEvent(new Event('analysis-refresh'));
     if (!practiceHintResults) return;
     if (!lines.length) {
       _showPracticeHintStatus('Stockfish did not return a legal candidate for this position.');
@@ -9118,6 +9125,8 @@ async function main() {
 
     _setPracticeHintButton(false);
     if (clearResults && practiceHintResults) {
+      board.studyHint = null;
+      board.dispatchEvent(new Event('analysis-refresh'));
       practiceHintResults.replaceChildren();
       practiceHintResults.hidden = true;
     }
@@ -15024,6 +15033,25 @@ async function main() {
 
   // All main() state is now declared and the final board mode is known — safe
   // to run the one coalesced initial analysis.
+  installStudyAnalysis(board, () => ({
+    engine, practice:!!practiceColor && !document.body.classList.contains('practice-finished'),
+    player:practiceColor?.[0], paused, locked, hint:board.studyHint, hintRunning:!!practiceHintRun,
+    busy:window.__practiceStarting || board.interactionLocked || window.__practiceReplayInProgress,
+    lesson:window.__learnOwnsEngine, recovering:window.__engineRecovering, threat:window.__threatMode,
+    lineCount:Number(ui.rangeMultipv.value), hintMs:Number(practiceHintTime?.value)||3000,
+    hintTimes:Array.from(practiceHintTime?.options||[],option=>({value:Number(option.value),label:option.textContent})),
+  }), {
+    toggle:() => {
+      if (paused || locked) {
+        if (locked) powerBtn.click();
+        if (paused) btnPause.click();
+      } else btnPause.click();
+    },
+    lines:count=>document.getElementById(`analysis-lines-${count}`)?.click(),
+    hintTime:ms=>{practiceHintTime.value=String(ms); practiceHintTime.dispatchEvent(new Event('change'));},
+    hint:ms=>{practiceHintTime.value=String(ms); practiceHintTime.dispatchEvent(new Event('change')); practiceHintButton.click();},
+    cancelHint:()=>practiceHintButton.click(),
+  });
   mainInitDone = true;
   if (pendingFireAnalysis) {
     pendingFireAnalysis = false;

@@ -65,6 +65,22 @@ test('shared clocks use parent time in both board modes and reject foreign contr
   }
   const clockMessages = () => sent.filter(item => item.message.type === 'zagreb:clock');
   message('zagreb:ready');
+  const analysisRequests=[],docks=[];
+  board.requestAnalysis=request=>analysisRequests.push(request.action);
+  board.setClockDock=placement=>docks.push(placement);
+  message('zagreb:analysis',{},origin,{action:'play-best',fen:chess.fen()});
+  message('zagreb:analysis',frame.contentWindow,'https://other.example',{action:'play-best',fen:chess.fen()});
+  assert.equal(analysisRequests.length,0);
+  message('zagreb:analysis',frame.contentWindow,origin,{action:'toggle-engine',fen:chess.fen()});
+  assert.deepEqual(analysisRequests,['toggle-engine']);
+  message('zagreb:clock-dock',{},origin,{placement:'right'});
+  assert.equal(docks.length,0);
+  message('zagreb:clock-dock',frame.contentWindow,origin,{placement:'right'});
+  assert.deepEqual(docks,['right']);
+  board.studyAnalysis={available:true,fen:chess.fen(),lines:[]};
+  board.dispatchEvent(new Event('analysis-change'));
+  assert.deepEqual(sent.findLast(item=>item.message.type==='zagreb:overlay').message.analysis,board.studyAnalysis);
+
   board.dispatchEvent(new CustomEvent('clock-appearance-request',{detail:'zmf-pro-3d'}));
   assert.equal(sent.some(item=>item.message.type==='zagreb:clock-style'),false,'Wait for saved preferences before applying a requested clock');
   message('zagreb:clock-style-state',{},origin,{style:'dgt'});

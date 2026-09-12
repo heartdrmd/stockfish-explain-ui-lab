@@ -885,9 +885,6 @@
 .clock-operation-help {max-width:640px;margin:auto;font-size:13px;line-height:1.65;text-align:left}
 .clock-operation-help details {font-size:11px;color:#98a79b}
 .clock-operation-help a {color:#d2c8ad}
-#clock-atelier-right {order:-1;flex:0 0 auto;width:100%;margin-bottom:14px;position:relative;min-width:0;box-sizing:border-box;padding-inline:12px}
-#clock-atelier-right:empty {display:none}
-#practice-clock[data-clock-placement='right'] {display:none!important}
 .game-clock-tools {flex-wrap:wrap}
 .game-clock-tools select[aria-label='Clock side arrangement'] {max-width:88px;flex:0 1 88px}
 .game-clock-tools select[aria-label='Clock appearance'] {min-width:130px;flex:1 0 130px}
