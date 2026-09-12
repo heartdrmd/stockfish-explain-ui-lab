@@ -568,6 +568,29 @@ body.right-pane-hidden .uniboard > #workspace-divider { display: none !important
   }
 }
 @media (min-width: 800px) {
+  /* With analysis hidden, keep only the docked clock as an independent
+     upper-right overlay. The board retains all of the freed column width. */
+  body.clock-docked-right.right-pane-hidden:not(.mobile-mode) .uniboard > .tools:has(#practice-clock:not([hidden])) {
+    display: flex !important;
+    position: fixed;
+    top: var(--split-top, 68px);
+    right: 20px;
+    bottom: auto;
+    width: clamp(180px, 22vw, 320px);
+    max-width: calc(100vw - 40px);
+    max-height: calc(100dvh - var(--split-top, 68px) - 20px);
+    padding: 0;
+    gap: 0;
+    z-index: 32;
+    overflow: auto;
+    scrollbar-gutter: auto;
+  }
+  body.clock-docked-right.right-pane-hidden:not(.mobile-mode) .uniboard > .tools > :not(#clock-right-host) {
+    display: none !important;
+  }
+  body.clock-docked-right.right-pane-hidden:not(.mobile-mode) #clock-right-host {
+    width: 100%;
+  }
   /* The viewer has its own board-size grip; the divider owns its panel width.
      Native 2D retains the outer grip because it has no inner size control. */
   body:not(.mobile-mode) .split-layout .board-area.using-3d #board-resize {
