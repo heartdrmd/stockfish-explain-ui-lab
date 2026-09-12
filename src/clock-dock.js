@@ -9,8 +9,10 @@ export function installClockDock(board) {
     previous=dock;
     if (dock==='right') right.append(card); else home.after(card);
     document.body.classList.toggle('clock-docked-right',dock==='right');
-    const pane=document.getElementById(`btn-toggle-${dock}-pane`);
-    if (pane?.getAttribute('aria-pressed')==='false') pane.click();
+    // The upper-right clock has its own visible slot when analysis is hidden.
+    // Restoring its saved placement must not reopen the user's right pane.
+    const pane=document.getElementById('btn-toggle-left-pane');
+    if (dock==='left' && pane?.getAttribute('aria-pressed')==='false') pane.click();
     window.dispatchEvent(new Event('resize'));
   };
 }
