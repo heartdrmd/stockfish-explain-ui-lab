@@ -109,3 +109,85 @@ test("invalid input ignored; disconnect preserves state", () => {
   assert.equal(h.b.active, false);
   assert.equal(h.clock.hardware, undefined);
 });
+
+for (const family of ["dgt", "zmf"]) {
+  test(`${family}: repeated Pause/Resume preserves time and excludes the pause`, () => {
+    const h = harness();
+    h.b.model(family);
+    for (let i = 0; i < 3; i++) {
+      h.advance(1000);
+      h.b.pause();
+      const remaining = h.clock.msWhite;
+      h.advance(12000);
+      assert.equal(h.clock.msWhite, remaining);
+      h.b.pause();
+      assert.equal(h.clock.paused, false);
+      h.advance(1000);
+      assert.equal(h.clock.msWhite, remaining - 1000);
+    }
+  });
+  test(`${family}: Play wakes a powered-off game clock without resetting time`, () => {
+    const h = harness();
+    h.b.model(family);
+    h.advance(2500);
+    h.b.input("power", "down"); h.b.input("power", "up");
+    const remaining = h.clock.msWhite;
+    h.advance(8000);
+    h.b.pause();
+    assert.equal(h.clock.hardware.display.off, false);
+    assert.equal(h.clock.paused, false);
+    assert.equal(h.clock.msWhite, remaining);
+    h.advance(1000);
+    assert.equal(h.clock.msWhite, remaining - 1000);
+  });
+}
+
+for (const start of ["reset", "power cycle"]) {
+  test(`ZMF sensor starts after ${start} and follows the board turn`, () => {
+    const h = harness();
+    h.b.model("zmf");
+    const tap = key => { h.b.input(key, "down"); h.b.input(key, "up"); };
+    if (start === "reset") { tap("menu"); h.advance(100); tap("menu"); }
+    else { tap("power"); h.advance(1000); tap("power"); }
+    assert.equal(h.clock.paused, true);
+    h.turn("b");
+    const remaining = h.clock.msBlack;
+    tap("left");
+    assert.equal(h.clock.paused, false);
+    assert.equal(h.clock.tickingFor, "b");
+    h.advance(1000);
+    assert.equal(h.clock.msBlack, remaining - 1000);
+    tap("right");
+    assert.equal(h.clock.msBlack, remaining - 1000, "extra sensor taps cannot award a bonus");
+    assert.equal(h.clock.tickingFor, "b");
+  });
+}
+
+test("DGT physical menu resumes without resetting its remaining time", () => {
+  const h = harness(); h.b.model("dgt"); h.advance(2000);
+  h.b.input("menu", "down"); h.b.input("menu", "up");
+  const remaining = h.clock.msWhite;
+  h.advance(10000);
+  h.b.input("menu", "down"); h.b.input("menu", "up");
+  assert.equal(h.clock.paused, false);
+  h.advance(1000);
+  assert.equal(h.clock.msWhite, remaining - 1000);
+});
+
+test("resuming an untimed ZMF counts from the same time and current board turn", () => {
+  const h = harness();
+  Object.assign(h.clock, {mode:"up", msWhite:0, msBlack:0, initialMs:0, incMs:0});
+  h.b.model("zmf"); h.advance(2000); h.b.pause();
+  h.advance(8000); h.turn("b"); h.b.pause(); h.advance(1000);
+  assert.equal(h.clock.msWhite, 2000);
+  assert.equal(h.clock.msBlack, 1000);
+  assert.equal(h.clock.tickingFor, "b");
+});
+
+test("Play or a ZMF sensor cannot restart a clock frozen by flag fall", () => {
+  const h = harness(); h.clock.msWhite = 50; h.b.model("zmf"); h.advance(100);
+  h.b.pause();
+  h.b.input("left", "down"); h.b.input("left", "up");
+  assert.equal(h.clock.paused, true);
+  assert.deepEqual(h.flags, ["white"]);
+});

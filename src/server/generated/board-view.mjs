@@ -3646,13 +3646,14 @@ function validClock3DViews(value) {
 	return Object.entries(value).every(([model, view]) => {
 		if (!["dgt-3000", "zmf-pro"].includes(model) || !view || typeof view !== "object" || Array.isArray(view)) return false;
 		const clean = readClock3DView(view);
-		return Object.keys(view).length === Object.keys(clean).length && Object.entries(clean).every(([key, setting]) => view[key] === setting);
+		return Object.keys(view).length === Object.keys(clean).length - (view.vertical === void 0 ? 1 : 0) && Object.entries(clean).every(([key, setting]) => key === "vertical" && view[key] === void 0 ? true : view[key] === setting);
 	});
 }
 var DEFAULT_CLOCK_3D = {
 	yaw: -18,
 	tilt: 20,
 	zoom: 100,
+	vertical: 0,
 	light: "Studio",
 	intensity: 100,
 	fill: 35
@@ -3664,6 +3665,7 @@ function readClock3DView(value) {
 		yaw: num("yaw", -180, 180),
 		tilt: num("tilt", -10, 80),
 		zoom: num("zoom", 65, 255),
+		vertical: num("vertical", -20, 40),
 		light: CLOCK_LIGHTS.includes(v.light) ? v.light : DEFAULT_CLOCK_3D.light,
 		intensity: num("intensity", 15, 220),
 		fill: num("fill", 0, 150)

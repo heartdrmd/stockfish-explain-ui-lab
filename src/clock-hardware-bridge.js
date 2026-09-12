@@ -84,6 +84,16 @@ export function createClockHardwareBridge({
     reportedFlag = false;
     sync();
   }
+  function resume() {
+    if (engine.flag !== null && engine.config.freeze) return;
+    // The board may have advanced while paused. Resume its current player,
+    // without awarding a move bonus or charging the pause duration.
+    engine.lever = turn() === "w" ? 1 : 0;
+    engine.pausedLever = engine.lever;
+    if (!engine.started) engine.first = engine.lever;
+    engine.phase = "running";
+    engine.started = true;
+  }
   return {
     get active() {
       return !!engine;
@@ -119,9 +129,8 @@ export function createClockHardwareBridge({
       if (engine.phase === "running") {
         engine.phase = "paused";
         engine.pausedLever = engine.lever;
-      } else if (engine.phase === "paused" || engine.phase === "ready") {
-        engine.phase = "running";
-        engine.started = true;
+      } else if (["paused", "ready", "off"].includes(engine.phase)) {
+        resume();
       }
       sync();
       render();
@@ -151,10 +160,12 @@ export function createClockHardwareBridge({
         ["running", "ready", "paused"].includes(engine.phase)
       ) {
         // Sensors remain functional in setup/correction. During a board game,
-        // the legal board move owns the side switch. A paused ZMF can resume by sensor.
-        if (family === "zmf" && engine.phase === "paused" && phase === "down") {
-          engine.phase = "running";
-          engine.lever = turn() === "w" ? 1 : 0;
+        // the legal board move owns the side switch. A ZMF sensor starts a
+        // ready clock after reset/power-on as well as resuming a paused clock.
+        if (family === "zmf" && ["paused", "ready"].includes(engine.phase) && phase === "down") {
+          engine.advance(now());
+          engine.cancel(now());
+          resume();
           sync();
           render();
         }

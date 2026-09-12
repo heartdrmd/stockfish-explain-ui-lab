@@ -892,8 +892,11 @@
 .clock-accessible-keys {margin-top:12px;border-top:1px solid #4b5948;padding-top:8px}
 .clock-accessible-keys summary {cursor:pointer;padding:5px 0;color:#dbe3d1}
 .clock-accessible-keys .clock-real-buttons {margin-top:8px}
-.game-clock-tools[hidden], .game-clock .clock-view-menu[hidden] {display:none}
+.game-clock-tools[hidden], .game-clock .clock-view-menu[hidden], .game-clock-caption[hidden] {display:none}
 .clock-quick-tools {display:flex;justify-content:flex-end;gap:4px;margin-bottom:6px}
 .clock-quick-tools button {display:grid;place-items:center;width:28px;height:28px;border:1px solid #81917a55;border-radius:4px;background:#17221c;color:#d8ddcf;cursor:pointer}
 .clock-quick-tools button:hover {background:#354539}
 .clock-quick-tools button:disabled {opacity:.4;cursor:default}
+.clock-quick-tools, .game-clock-tools {position:relative;z-index:5}
+.clock-quick-tools, .game-clock-tools, .game-clock .clock-view-menu {pointer-events:none}
+.clock-quick-tools > *, .game-clock-tools > *, .game-clock .clock-view-menu > * {pointer-events:auto}
