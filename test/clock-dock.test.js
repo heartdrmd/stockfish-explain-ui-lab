@@ -7,7 +7,7 @@ test('clock docking moves the same live card above tools and returns it home',t=
   card.before=value=>assert.equal(value,home);
   let opened=0,resizes=0;
   const pane={getAttribute:()=> 'false',click:()=>opened++};
-  const globals={document:{createComment:()=>home,body:{classList:{toggle(){}}},getElementById:id=>({'practice-clock':card,'clock-right-host':right,'btn-toggle-right-pane':pane,'btn-toggle-left-pane':pane})[id]},window:{dispatchEvent:()=>resizes++}};
+  const globals={document:{querySelector:()=>null,createComment:()=>home,body:{classList:{toggle(){}}},getElementById:id=>({'practice-clock':card,'clock-right-host':right,'btn-toggle-right-pane':pane,'btn-toggle-left-pane':pane})[id]},window:{dispatchEvent:()=>resizes++}};
   for (const [name,value] of Object.entries(globals)) {
     const original=Object.getOwnPropertyDescriptor(globalThis,name);
     Object.defineProperty(globalThis,name,{value,configurable:true});

@@ -538,6 +538,27 @@ body.ui-lab .cg-wrap coords.files {
 
 /* Presentation toggles preserve the board position and all square highlights. */
 .move-list-wrap.notation-hidden { display: none !important; }
+body.ui-lab .move-table { font-size:26.25px; }
+body.ui-lab .move-table .mt-num { font-size:22.75px; width:52px; }
+body.ui-lab .move-table td:not(.mt-num) { white-space:normal; overflow-wrap:anywhere; }
+/* The same notation follows the clock in regular 2D, with the right pane
+   either open or hidden. Only the moves area scrolls below the clock. */
+body.notation-follows-clock .clock-below-scroll > .move-list-wrap { order:-20; flex:1 1 auto; min-height:160px; }
+body.notation-follows-clock .side > .move-list-wrap { order:0; width:100%; max-height:65dvh; overflow:auto; }
+@media(min-width:800px) {
+  body.notation-follows-clock.clock-docked-right.right-pane-hidden:not(.mobile-mode) .uniboard > #study-tools.tools:has(.move-list-wrap:not(.notation-hidden)) {
+    display:flex!important; position:fixed; top:var(--split-top,68px); right:20px; bottom:auto;
+    height:calc(100dvh - var(--split-top,68px) - max(0px,var(--clock-float-y,0px)) - 20px);
+    width:var(--floating-clock-width,300px); max-width:calc(100vw - 40px); max-height:calc(100dvh - var(--split-top,68px) - 20px);
+    padding:0; gap:12px; z-index:32; overflow:visible; background:transparent;
+    translate:var(--clock-float-x,0px) var(--clock-float-y,0px);
+  }
+  body.notation-follows-clock.clock-docked-right.right-pane-hidden:not(.mobile-mode) .uniboard > .tools > .clock-below-scroll {
+    display:flex!important; flex-direction:column; flex:1 1 0; min-height:0; overflow:auto; pointer-events:auto;
+  }
+  body.notation-follows-clock.clock-docked-right.right-pane-hidden .clock-below-scroll > :not(.move-list-wrap) { display:none!important; }
+  body.notation-follows-clock.clock-docked-right.right-pane-hidden .move-list-wrap { margin:0; min-height:0; height:100%; }
+}
 .board-area.using-3d ~ .eval-gauge-control .eval-gauge { visibility: hidden; }
 
 .board-area .board-nav { flex-wrap: wrap; gap: 3px; }
@@ -624,7 +645,7 @@ body.right-pane-hidden .uniboard > #workspace-divider { display: none !important
   }
   .clock-float-drag:focus-visible { outline: 2px solid #ecd89e; outline-offset: 2px; }
   body.clock-floating-dragging .clock-float-drag { cursor: grabbing !important; }
-  body.clock-docked-right.right-pane-hidden:not(.mobile-mode) .uniboard > .tools > :not(#clock-right-host) {
+  body.clock-docked-right.right-pane-hidden:not(.mobile-mode):not(.notation-follows-clock) .uniboard > .tools > :not(#clock-right-host) {
     display: none !important;
   }
   body.clock-docked-right.right-pane-hidden:not(.mobile-mode) #clock-right-host {

@@ -1,4 +1,4 @@
-//#region ../zagreb-viewer/node_modules/chess.js/dist/esm/chess.js
+//#region node_modules/chess.js/dist/esm/chess.js
 function rootNode(comment) {
 	return comment !== null ? {
 		comment,
@@ -3056,7 +3056,7 @@ var Chess$1 = class {
 	}
 };
 //#endregion
-//#region ../zagreb-viewer/node_modules/@badrap/result/dist/mjs/index.mjs
+//#region node_modules/@badrap/result/dist/mjs/index.mjs
 var _Result = class {
 	unwrap(ok, err) {
 		const r = this._chain((value) => Result.ok(ok ? ok(value) : value), (error) => err ? Result.ok(err(error)) : Result.err(error));
@@ -3124,7 +3124,7 @@ var Result;
 	Result.all = all;
 })(Result || (Result = {}));
 //#endregion
-//#region ../zagreb-viewer/node_modules/chessops/dist/esm/squareSet.js
+//#region node_modules/chessops/dist/esm/squareSet.js
 var popcnt32 = (n) => {
 	n = n - (n >>> 1 & 1431655765);
 	n = (n & 858993459) + (n >>> 2 & 858993459);
@@ -3306,7 +3306,7 @@ var SquareSet = class SquareSet {
 	}
 };
 //#endregion
-//#region ../zagreb-viewer/node_modules/chessops/dist/esm/types.js
+//#region node_modules/chessops/dist/esm/types.js
 var FILE_NAMES = [
 	"a",
 	"b",
@@ -3339,7 +3339,7 @@ var ROLES = [
 var CASTLING_SIDES = ["a", "h"];
 var isDrop = (v) => "role" in v;
 //#endregion
-//#region ../zagreb-viewer/node_modules/chessops/dist/esm/util.js
+//#region node_modules/chessops/dist/esm/util.js
 var defined = (v) => v !== void 0;
 var opposite = (color) => color === "white" ? "black" : "white";
 var squareRank = (square) => square >> 3;
@@ -3397,7 +3397,7 @@ var parseUci = (str) => {
 var kingCastlesTo = (color, side) => color === "white" ? side === "a" ? 2 : 6 : side === "a" ? 58 : 62;
 var rookCastlesTo = (color, side) => color === "white" ? side === "a" ? 3 : 5 : side === "a" ? 59 : 61;
 //#endregion
-//#region ../zagreb-viewer/node_modules/chessops/dist/esm/attacks.js
+//#region node_modules/chessops/dist/esm/attacks.js
 /**
 * Compute attacks and rays.
 *
@@ -3535,7 +3535,7 @@ var ray = (a, b) => {
 */
 var between = (a, b) => ray(a, b).intersect(SquareSet.full().shl64(a).xor(SquareSet.full().shl64(b))).withoutFirst();
 //#endregion
-//#region ../zagreb-viewer/node_modules/chessops/dist/esm/board.js
+//#region node_modules/chessops/dist/esm/board.js
 /**
 * Piece positions on a board.
 *
@@ -3655,7 +3655,7 @@ var Board = class Board {
 	}
 };
 //#endregion
-//#region ../zagreb-viewer/node_modules/chessops/dist/esm/chess.js
+//#region node_modules/chessops/dist/esm/chess.js
 var IllegalSetup;
 (function(IllegalSetup) {
 	IllegalSetup["Empty"] = "ERR_EMPTY";
@@ -4098,7 +4098,7 @@ var normalizeMove = (pos, move) => {
 	};
 };
 //#endregion
-//#region ../zagreb-viewer/node_modules/chessops/dist/esm/setup.js
+//#region node_modules/chessops/dist/esm/setup.js
 var MaterialSide = class MaterialSide {
 	constructor() {}
 	static empty() {
@@ -4423,7 +4423,7 @@ var makeFen = (setup, opts) => [
 	...(opts === null || opts === void 0 ? void 0 : opts.epd) ? [] : [Math.max(0, Math.min(setup.halfmoves, 9999)), Math.max(1, Math.min(setup.fullmoves, 9999))]
 ].join(" ");
 //#endregion
-//#region ../zagreb-viewer/node_modules/chessops/dist/esm/san.js
+//#region node_modules/chessops/dist/esm/san.js
 var makeSanWithoutSuffix = (pos, move) => {
 	let san = "";
 	if (isDrop(move)) {
@@ -5231,10 +5231,21 @@ function readClock3DView(value) {
 	};
 }
 //#endregion
+//#region lib/flip-camera.ts
+function cameraFacesBlack(camera) {
+	return camera.position[2] < camera.target[2];
+}
+//#endregion
 //#region lib/saved-view.ts
 function savedViewId(id) {
 	if (typeof id !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) throw new Error("Choose a saved view to delete.");
 	return id;
+}
+function savedBoardDisplay(saved) {
+	return saved.boardDisplay ?? (/^2d/i.test(saved.name.trim()) ? saved.viewing?.flatStyle || "classic" : "3d");
+}
+function savedBoardOrientation(saved) {
+	return saved.boardOrientation ?? (cameraFacesBlack(saved.camera) ? "black" : "white");
 }
 function validateView(raw) {
 	const s = raw;
@@ -5247,6 +5258,11 @@ function validateView(raw) {
 		"rook",
 		"pawn"
 	].includes(s.piece)) throw new Error("Choose a name for this view.");
+	if (s.boardDisplay != null && ![
+		"3d",
+		"classic",
+		"materials"
+	].includes(s.boardDisplay) || s.boardOrientation != null && !["white", "black"].includes(s.boardOrientation)) throw new Error("Invalid board display.");
 	parsePosition(s.fen);
 	const v = (x) => Array.isArray(x) && x.length === 3 && x.every((n) => typeof n === "number" && Number.isFinite(n) && Math.abs(n) < 10);
 	if (!s.camera || !v(s.camera.position) || !v(s.camera.target) || s.camera.autoFraming != null && typeof s.camera.autoFraming !== "boolean") throw new Error("The camera view could not be saved.");
@@ -5309,4 +5325,4 @@ function validateView(raw) {
 	};
 }
 //#endregion
-export { savedViewId, validateView };
+export { savedBoardDisplay, savedBoardOrientation, savedViewId, validateView };

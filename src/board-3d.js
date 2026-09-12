@@ -300,7 +300,9 @@ export function install3DBoard(board) {
     }
     if(event.data?.type==='zagreb:flat-mode-state'){
       if(typeof event.data.flat!=='boolean')return;
-      inlineFlat=event.data.flat;if(flatMoveButton)flatMoveButton.hidden=enabled&&!inlineFlat;return;
+      inlineFlat=event.data.flat;
+      document.body.classList.toggle('inline-flat-board',inlineFlat);
+      if(flatMoveButton)flatMoveButton.hidden=enabled&&!inlineFlat;return;
     }
     if(event.data?.type==='zagreb:flat-move-mode'){
       if(typeof event.data.enabled==='boolean')setFlatMoveMode(event.data.enabled);return;
@@ -361,6 +363,8 @@ export function install3DBoard(board) {
       board.setClockDock?.(event.data.placement); return;
     }
     if (event.data?.type === 'zagreb:clock-design') {
+      // An explicit preset selection supersedes an older dropdown request.
+      if (isClockStyle(event.data.style)) pendingClockStyle = null;
       board.dispatchEvent(new CustomEvent('clock-design-request', { detail: event.data.style }));
       return;
     }
@@ -433,6 +437,6 @@ export function install3DBoard(board) {
   });
   // Start the viewer after its bridge is listening. It restores the complete
   // last-used appearance and camera automatically from its saved preferences.
-  // Switching to 2D is temporary; the next visit always opens in 3D.
+  // The viewer also restores whether the last board was 2D or 3D.
   setEnabled(true);
 }
