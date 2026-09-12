@@ -890,4 +890,13 @@
 #practice-clock[data-clock-placement='right'] {display:none!important}
 .game-clock-tools {flex-wrap:wrap}
 .game-clock-tools select[aria-label='Clock side arrangement'] {max-width:88px;flex:0 1 88px}
+.game-clock-tools select[aria-label='Clock appearance'] {min-width:130px;flex:1 0 130px}
 .game-clock-tools .clock-set-time {display:inline-flex;align-items:center;gap:5px;width:auto;min-width:78px;flex:0 0 auto;padding-inline:8px;white-space:nowrap}
+.clock-accessible-keys {margin-top:12px;border-top:1px solid #4b5948;padding-top:8px}
+.clock-accessible-keys summary {cursor:pointer;padding:5px 0;color:#dbe3d1}
+.clock-accessible-keys .clock-real-buttons {margin-top:8px}
+.game-clock-tools[hidden], .game-clock .clock-view-menu[hidden] {display:none}
+.clock-quick-tools {display:flex;justify-content:flex-end;gap:4px;margin-bottom:6px}
+.clock-quick-tools button {display:grid;place-items:center;width:28px;height:28px;border:1px solid #81917a55;border-radius:4px;background:#17221c;color:#d8ddcf;cursor:pointer}
+.clock-quick-tools button:hover {background:#354539}
+.clock-quick-tools button:disabled {opacity:.4;cursor:default}

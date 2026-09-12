@@ -3663,7 +3663,7 @@ function readClock3DView(value) {
 	return {
 		yaw: num("yaw", -180, 180),
 		tilt: num("tilt", -10, 80),
-		zoom: num("zoom", 65, 145),
+		zoom: num("zoom", 65, 255),
 		light: CLOCK_LIGHTS.includes(v.light) ? v.light : DEFAULT_CLOCK_3D.light,
 		intensity: num("intensity", 15, 220),
 		fill: num("fill", 0, 150)
