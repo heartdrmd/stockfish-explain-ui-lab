@@ -67,6 +67,7 @@ import { sortGamesByPlayedAt } from './game-order.js';
 import { canApplyPracticeEngineMove } from './practice-engine-guard.js';
 import { install3DBoard } from './board-3d.js';
 import { installWorkspaceSplit } from './workspace-split.js';
+import { installBoardResizeHandle } from './board-resize.js';
 
 // Expose Chess to eval-graph's computeDivision helper — avoids a
 // circular import while still letting it replay SAN to count pieces
@@ -14113,7 +14114,6 @@ async function main() {
   const boardElForResize = document.getElementById('board');
   if (resizeHandle) {
     let resizing = false;
-    let startX = 0, startY = 0, startW = 0;
     const STORAGE_KEY = 'stockfish-explain.board-size';
 
     // Recursion guard — critical on mobile. Without this:
@@ -14181,44 +14181,21 @@ async function main() {
       } finally { _windowResizeHandling = false; }
     });
 
-    // rAF-coalesced resize (lichess-style smooth drag). We batch all
-    // pointermove events into at most one applySize per animation
-    // frame (~16 ms) so DOM writes + chessground relayout don't happen
-    // 120+ times per second on a high-Hz pointer.
-    let pendingSize = 0;
-    let rafId = 0;
-    const scheduleSize = (size) => {
-      pendingSize = size;
-      if (rafId) return;
-      rafId = requestAnimationFrame(() => {
-        rafId = 0;
-        applySize(pendingSize);
-      });
-    };
-
-    resizeHandle.addEventListener('pointerdown', (e) => {
-      e.preventDefault(); e.stopPropagation();
-      resizing = true;
-      startX = e.clientX; startY = e.clientY;
-      startW = boardElForResize.getBoundingClientRect().width;
-      localStorage.setItem(STORAGE_KEY, String(Math.round(startW)));
-      window.__boardSizeUserTouched = true;
-      resizeHandle.setPointerCapture(e.pointerId);
-    });
-    resizeHandle.addEventListener('pointermove', (e) => {
-      if (!resizing) return;
-      const dx = e.clientX - startX;
-      const dy = e.clientY - startY;
-      const delta = (dx + dy) / 2;
-      scheduleSize(startW + delta);
-    });
-    resizeHandle.addEventListener('pointerup', (e) => {
-      if (!resizing) return;
-      resizing = false;
-      if (rafId) { cancelAnimationFrame(rafId); rafId = 0; }
-      resizeHandle.releasePointerCapture(e.pointerId);
-      const finalW = Math.round(boardElForResize.getBoundingClientRect().width);
-      localStorage.setItem(STORAGE_KEY, String(finalW));
+    installBoardResizeHandle({
+      handle: resizeHandle, boardElement: boardElForResize, workspaceSplit,
+      onStart: () => { resizing = true; },
+      onResize: applySize,
+      onFinish: moved => {
+        resizing = false;
+        if (!moved) return;
+        window.__boardSizeUserTouched = true;
+        const finalW = Math.round(boardElForResize.getBoundingClientRect().width);
+        try { localStorage.setItem(STORAGE_KEY, String(finalW)); } catch {}
+        // Commit after the final animation-frame update, not on an earlier
+        // pointerup listener which can still see the previous divider position.
+        if (workspaceSplit?.isActive()) workspaceSplit.save();
+        window.dispatchEvent(new Event('resize'));
+      },
     });
   }
 

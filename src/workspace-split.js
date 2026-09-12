@@ -119,7 +119,6 @@ export function installWorkspaceSplit(board) {
     event.preventDefault(); event.stopPropagation();
     apply(targets[event.key]); save();
   });
-  document.getElementById('board-resize')?.addEventListener('pointerup', save);
   window.addEventListener('resize', updateLayout);
   let measuredWidth = layout.clientWidth;
   new ResizeObserver(() => {
@@ -129,5 +128,5 @@ export function installWorkspaceSplit(board) {
   // Mobile mode / toolbar changes may alter available space without a resize.
   new MutationObserver(() => { if (!drag) updateLayout(); }).observe(document.body, { attributes: true, attributeFilter: ['class'] });
   updateLayout();
-  return { isActive, setBoardSize: apply };
+  return { isActive, setBoardSize: apply, save };
 }
