@@ -701,3 +701,12 @@ body.right-pane-hidden .uniboard > #workspace-divider { display: none !important
     max-height: calc(100dvh - var(--split-top, 68px) - 12px);
   }
 }
+
+/* Hiding the case never changes practice-clock.hidden, which owns timer availability. */
+body.clock-presentation-hidden #practice-clock,
+body.clock-presentation-hidden #clock-float-drag { display: none !important; }
+@media (min-width: 800px) {
+  body.clock-presentation-hidden.clock-docked-right.right-pane-hidden:not(.mobile-mode) .uniboard > .tools {
+    display: none !important;
+  }
+}

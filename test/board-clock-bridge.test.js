@@ -15,7 +15,7 @@ test('shared clocks use parent time in both board modes and reject foreign contr
     insertBefore(child) { this.children.push(child); }
     click() { this.dispatchEvent(new Event('click')); }
   }
-  const area = new Element(), nav = new Element(), root = new Element(), graphButton = new Element(), controlsButton = new Element();
+  const area = new Element(), nav = new Element(), root = new Element(), graphButton = new Element(), controlsButton = new Element(), clockButton = new Element();
   area.querySelector = () => nav;
   root.parentElement = area;
   root.offsetWidth = 640;
@@ -26,7 +26,7 @@ test('shared clocks use parent time in both board modes and reject foreign contr
   const globals = {
     document: {
       body: new Element(), querySelector: () => null, getElementById: id =>
-        id === 'btn-live-graph' ? graphButton : id === 'btn-toggle-board-controls' ? controlsButton : null,
+        id === 'btn-toggle-clock' ? clockButton : id === 'btn-live-graph' ? graphButton : id === 'btn-toggle-board-controls' ? controlsButton : null,
       createElement: () => {
         const element = new Element();
         element.contentWindow = { postMessage: (message, target) => sent.push({message, target}) };
@@ -77,6 +77,22 @@ test('shared clocks use parent time in both board modes and reject foreign contr
   assert.equal(docks.length,0);
   message('zagreb:clock-dock',frame.contentWindow,origin,{placement:'right'});
   assert.deepEqual(docks,['right']);
+  const visibility = {visible:true,available:true,ready:true};
+  message('zagreb:clock-visibility-state', {}, origin, visibility);
+  assert.equal(clockButton.attributes['aria-label'], undefined);
+  message('zagreb:clock-visibility-state', frame.contentWindow, 'https://other.example', visibility);
+  assert.equal(clockButton.attributes['aria-label'], undefined);
+  message('zagreb:clock-visibility-state', frame.contentWindow, origin, visibility);
+  assert.equal(clockButton.attributes['aria-label'], 'Hide clock');
+  const timeBeforeHide = {...board.studyClock};
+  clockButton.click();
+  assert.deepEqual(sent.at(-1), {message:{type:'zagreb:clock-visibility',visible:false},target:origin});
+  message('zagreb:clock-visibility-state', frame.contentWindow, origin, {...visibility,visible:false});
+  assert.equal(clockButton.attributes['aria-label'], 'Show upper-right clock');
+  clockButton.click();
+  assert.deepEqual(sent.at(-1), {message:{type:'zagreb:clock-visibility',visible:true},target:origin});
+  assert.deepEqual(board.studyClock, timeBeforeHide, 'Hiding/restoring never changes time or pause state');
+  assert.equal(pauseRequests, 0, 'Visibility never presses a clock button');
   board.studyAnalysis={available:true,fen:chess.fen(),lines:[]};
   board.dispatchEvent(new Event('analysis-change'));
   assert.deepEqual(sent.findLast(item=>item.message.type==='zagreb:overlay').message.analysis,board.studyAnalysis);
@@ -150,6 +166,9 @@ test('shared clocks use parent time in both board modes and reject foreign contr
   assert.deepEqual(hardwareRequests, [{family:'dgt'}, {key:'menu',phase:'down'}, {key:'menu',phase:'up'}]);
   toggle.click();
   assert.equal(controlsButton.hidden, true, 'Native 2D has no viewer toolbar to collapse');
+  clockButton.click();
+  assert.equal(sent.at(-1).message.type, 'zagreb:clock-visibility', 'Clock remains reachable with the viewer hidden for native 2D');
+
   assert.equal(positions().at(-1).viewRevision, firstViewRevision, 'Hiding 3D does not request a camera change');
   const beforeHiddenTick = clockMessages().length;
   message('zagreb:clock-pause');

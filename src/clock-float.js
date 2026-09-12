@@ -10,6 +10,7 @@ export function installFloatingClock(card, host) {
     if (Number.isFinite(saved?.x) && Number.isFinite(saved?.y)) offset = saved;
   } catch {}
   const active = () => window.innerWidth >= 800 && !card.hidden &&
+    !document.body.classList.contains('clock-presentation-hidden') &&
     document.body.classList.contains('clock-docked-right') &&
     document.body.classList.contains('right-pane-hidden') &&
     !document.body.classList.contains('mobile-mode');

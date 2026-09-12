@@ -116,6 +116,23 @@ export function install3DBoard(board) {
     syncControlsToggle();
     frame.contentWindow.postMessage({type:'zagreb:board-controls', visible:controlsVisible}, location.origin);
   });
+  const clockToggle = document.getElementById('btn-toggle-clock');
+  let clockVisible = false, clockAvailable = false, clockToggleReady = false;
+  function syncClockToggle() {
+    if (!clockToggle) return;
+    const shown = clockVisible && clockAvailable;
+    clockToggle.disabled = !clockToggleReady;
+    const label = shown ? 'Hide clock' : 'Show upper-right clock';
+    clockToggle.setAttribute('aria-label', label);
+    clockToggle.setAttribute('aria-pressed', String(shown));
+    clockToggle.title = label;
+  }
+  clockToggle?.addEventListener('click', () => {
+    if (!clockToggleReady) return;
+    const visible = !(clockVisible && clockAvailable);
+    // Only visibility changes here. The shared game timer remains untouched.
+    frame.contentWindow.postMessage({type:'zagreb:clock-visibility', visible}, location.origin);
+  });
   function syncClock() {
     if (ready) frame.contentWindow.postMessage({ type: 'zagreb:clock', ...board.studyClock }, location.origin);
   }
@@ -236,6 +253,14 @@ export function install3DBoard(board) {
       pendingClockStyle = null;
       board.clockAppearance = event.data.style;
       board.dispatchEvent(new Event('clock-appearance-state'));
+      return;
+    }
+    if (event.data?.type === 'zagreb:clock-visibility-state') {
+      const {visible, available, ready: toggleReady} = event.data;
+      if (typeof visible !== 'boolean' || typeof available !== 'boolean' || typeof toggleReady !== 'boolean') return;
+      clockVisible = visible; clockAvailable = available; clockToggleReady = toggleReady;
+      document.body.classList.toggle('clock-presentation-hidden', !visible);
+      syncClockToggle();
       return;
     }
     if (event.data?.type === 'zagreb:clock-dock') {

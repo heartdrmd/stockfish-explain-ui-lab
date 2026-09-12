@@ -903,3 +903,6 @@
 .clock-quick-tools, .game-clock-tools {position:relative;z-index:5}
 .clock-quick-tools, .game-clock-tools, .game-clock .clock-view-menu {pointer-events:none}
 .clock-quick-tools > *, .game-clock-tools > *, .game-clock .clock-view-menu > * {pointer-events:auto}
+
+.clock-view-panel .clock-move-handle{cursor:ns-resize;touch-action:none;user-select:none;min-height:34px;margin:0 0 8px}
+.clock-move-handle:focus-visible{outline:2px solid #ecd89e;outline-offset:2px}
