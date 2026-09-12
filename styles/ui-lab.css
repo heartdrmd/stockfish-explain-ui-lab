@@ -518,3 +518,7 @@ body.ui-lab .cg-wrap coords.files {
     animation-iteration-count: 1 !important;
   }
 }
+
+/* Presentation toggles preserve the board position and all square highlights. */
+.move-list-wrap.notation-hidden { display: none !important; }
+.board-area.using-3d ~ .eval-gauge-control .eval-gauge { visibility: hidden; }

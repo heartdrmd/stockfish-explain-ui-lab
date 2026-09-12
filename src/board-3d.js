@@ -33,7 +33,51 @@ export function install3DBoard(board) {
   restart.title = 'Restart the same practice opening';
   restart.setAttribute('aria-label', 'Restart practice opening');
   nav.append(restart);
-  let enabled = false, ready = false, busy = false, scheduled = false, lastState = '';
+  // Visibility is presentation only. Keep notation mounted and leave cg.lastMove
+  // intact so hiding the list cannot erase last-move square highlights.
+  const movesWrap = document.querySelector('.move-list-wrap');
+  const movesToggle = document.createElement('button');
+  movesToggle.type = 'button'; movesToggle.className = 'nav-btn';
+  movesToggle.id = 'board-moves-toggle';
+  nav.append(movesToggle);
+  const movesKey = 'stockfish-explain.moves-hidden';
+  let movesHidden = false;
+  try { movesHidden = localStorage.getItem(movesKey) === '1'; } catch {}
+  function applyMoves() {
+    movesWrap?.classList.toggle('notation-hidden', movesHidden);
+    movesToggle.textContent = movesHidden ? 'Show moves' : 'Hide moves';
+    movesToggle.setAttribute('aria-label', movesToggle.textContent);
+    movesToggle.setAttribute('aria-pressed', String(!movesHidden));
+    movesToggle.title = movesToggle.textContent;
+  }
+  applyMoves();
+  movesToggle.addEventListener('click', () => {
+    movesHidden = !movesHidden; applyMoves();
+    try { localStorage.setItem(movesKey, movesHidden ? '1' : '0'); } catch {}
+    syncOverlay();
+  });
+  const gauge = document.getElementById('gauge-black');
+  const gaugeControl = document.getElementById('eval-gauge-control');
+  let enabled = false, ready = false, busy = false, scheduled = false, lastState = '', lastOverlay = '';
+  function syncOverlay(force = false) {
+    if (!ready || !enabled) return;
+    let score;
+    try { score = JSON.parse(gauge?.dataset.evaluation || 'null'); } catch {}
+    const overlay = {
+      type: 'zagreb:overlay', fen: board.fen(),
+      // A new board position must never inherit the old position's score.
+      evaluation: score?.fen === board.fen() ? score.evaluation : null,
+      evaluationVisible: !gaugeControl?.classList.contains('eval-gauge-hidden'),
+      movesVisible: !movesHidden,
+    };
+    const serialized = JSON.stringify(overlay);
+    if (force || serialized !== lastOverlay) {
+      frame.contentWindow.postMessage(overlay, location.origin);
+      lastOverlay = serialized;
+    }
+  }
+  if (gauge) new MutationObserver(() => syncOverlay()).observe(gauge, {attributes: true, attributeFilter: ['data-evaluation']});
+  if (gaugeControl) new MutationObserver(() => syncOverlay()).observe(gaugeControl, {attributes: true, attributeFilter: ['class']});
   function snapshot() {
     const cg = board.cg.state;
     const turn = board.chess.turn() === 'w' ? 'White' : 'Black';
@@ -56,6 +100,7 @@ export function install3DBoard(board) {
       frame.contentWindow.postMessage(state, location.origin);
       lastState = serialized;
     }
+    syncOverlay(force);
   }
   function schedule() {
     if (scheduled) return;
@@ -93,6 +138,14 @@ export function install3DBoard(board) {
   window.addEventListener('message', async event => {
     if (event.origin !== location.origin || event.source !== frame.contentWindow || !enabled) return;
     if (event.data?.type === 'zagreb:ready') { ready = true; sync(true); return; }
+    if (event.data?.type === 'zagreb:visibility') {
+      if (typeof event.data.visible !== 'boolean') return;
+      if (event.data.control === 'moves' && event.data.visible === movesHidden) movesToggle.click();
+      if (event.data.control === 'evaluation' && event.data.visible === gaugeControl?.classList.contains('eval-gauge-hidden'))
+        document.getElementById('eval-gauge-toggle')?.click();
+      syncOverlay();
+      return;
+    }
     if (event.data?.type === 'zagreb:restart') { restartOpening(); return; }
     if (event.data?.type !== 'zagreb:move') return;
     if (busy || window.__practiceStarting || !canAccept3DMove(board, event.data)) { sync(true); return; }

@@ -45,10 +45,18 @@ export class Explainer {
    * to neutral while Stockfish starts. This prevents undo/history review
    * from leaving the previous position's score on screen indefinitely.
    */
+  _publishEvaluation(kind, score, depth = 0) {
+    const evaluation = Number.isFinite(score) && ['cp', 'mate'].includes(kind)
+      ? { cp: kind === 'cp' ? score : null, mate: kind === 'mate' ? score : null, depth: Number(depth) || 0 }
+      : null;
+    this.ui.gaugeBlack.dataset.evaluation = JSON.stringify({ fen: this.currentFen, evaluation });
+  }
+
   showPositionEval(cached = null) {
     const hasMate = cached?.mate != null && Number.isFinite(Number(cached.mate));
     const hasCp = cached?.cpWhite != null && Number.isFinite(Number(cached.cpWhite));
     if (!hasMate && !hasCp) {
+      this._publishEvaluation(null, null);
       this.ui.pearl.textContent = '…';
       this.ui.pearl.className = 'pearl';
       this.ui.gaugeBlack.style.height = '50%';
@@ -61,6 +69,7 @@ export class Explainer {
 
     const kind = hasMate ? 'mate' : 'cp';
     const score = Number(hasMate ? cached.mate : cached.cpWhite);
+    this._publishEvaluation(kind, score, cached.depth);
     this.ui.pearl.textContent = Narr.formatScore(kind, score);
     this.ui.pearl.className = 'pearl ' + scoreClass(kind, score);
     this.ui.gaugeBlack.style.height = `${100 - gaugePercent(kind, score)}%`;
@@ -83,6 +92,7 @@ export class Explainer {
     // whichever info line happened to arrive last.
     const best = topMoves.find(t => t.multipv === 1) || topMoves[0] || info;
     const wp = Narr.toWhitePOV(best.scoreKind, best.score, stm);
+    this._publishEvaluation(wp.scoreKind, wp.score, info.depth);
 
     this.ui.pearl.textContent = Narr.formatScore(wp.scoreKind, wp.score);
     this.ui.pearl.className   = 'pearl ' + scoreClass(wp.scoreKind, wp.score);
