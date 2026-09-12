@@ -14,6 +14,12 @@ export function fitSplit(space, requested) {
   return { board, tools: available - board };
 }
 
+export function fitBoardHeight(width, viewportHeight, headerBottom, navHeight, topGap = 24) {
+  const top = Math.max(0, headerBottom) + topGap;
+  const height = Math.max(1, Math.floor(Math.min(width, viewportHeight - top - navHeight - 20)));
+  return { top, height };
+}
+
 export function installWorkspaceSplit(board) {
   const layout = board.rootEl.closest('.uniboard');
   const tools = layout?.querySelector(':scope > .tools');
@@ -57,8 +63,8 @@ export function installWorkspaceSplit(board) {
     layout.style.setProperty('--split-board-width', width + 'px');
     const headerBottom = Math.max(0, document.querySelector('.site-header')?.getBoundingClientRect().bottom || 60);
     const navHeight = layout.querySelector('.board-nav')?.getBoundingClientRect().height || 72;
-    const top = headerBottom + 12;
-    const height = Math.round(Math.min(width, Math.max(220, window.innerHeight - top - navHeight - 20)));
+    const using3D = board.rootEl.parentElement.classList.contains('using-3d');
+    const { top, height } = fitBoardHeight(width, window.innerHeight, headerBottom, navHeight, using3D ? 12 : 24);
     layout.style.setProperty('--split-board-height', height + 'px');
     layout.style.setProperty('--split-top', top + 'px');
     const bounds = splitBounds(available);
@@ -128,6 +134,8 @@ export function installWorkspaceSplit(board) {
   }).observe(layout);
   // Mobile mode / toolbar changes may alter available space without a resize.
   new MutationObserver(() => { if (!drag) updateLayout(); }).observe(document.body, { attributes: true, attributeFilter: ['class'] });
+  // Switching from the viewer to native 2D changes the top breathing room.
+  new MutationObserver(updateLayout).observe(board.rootEl.parentElement, { attributes: true, attributeFilter: ['class'] });
   updateLayout();
   return { isActive, setBoardSize: apply, save };
 }

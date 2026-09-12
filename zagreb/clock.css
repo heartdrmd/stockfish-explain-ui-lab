@@ -389,12 +389,14 @@
   outline-offset: 3px;
 }
 
-/* A darker LCD and heavier segment strokes improve DGT legibility. */
-.game-clock [data-clock-style='dgt-contrast'] {
+/* Both LCD designs share the same high-contrast face and segment weight. */
+.game-clock [data-clock-style='dgt-contrast'],
+.game-clock [data-clock-style='zmf-classic'] {
   --clock-display: #9da88a;
   --clock-ink: #10170f;
 }
-.game-clock [data-clock-style='dgt-contrast'] .clock-segments {
+.game-clock [data-clock-style='dgt-contrast'] .clock-segments,
+.game-clock [data-clock-style='zmf-classic'] .clock-segments {
   stroke: currentColor;
   stroke-width: 1.2;
   stroke-linejoin: round;
@@ -593,10 +595,8 @@
     sans-serif;
 }
 
-/* TapNSet-inspired metal body, silver sensors and gray LCD. */
+/* TapNSet-inspired metal body and silver sensors around the shared LCD. */
 .game-clock [data-clock-style='zmf-classic'] {
-  --clock-display: #939889;
-  --clock-ink: #121913;
   padding: 29px 12px 11px;
   border: 1px solid #656a71;
   border-bottom: 7px solid #111519;

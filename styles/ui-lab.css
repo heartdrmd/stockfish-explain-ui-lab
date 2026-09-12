@@ -538,6 +538,9 @@ body.left-pane-hidden .uniboard > .side { display: none !important; }
   }
 }
 @media (min-width: 800px) {
+  body:not(.mobile-mode) .uniboard.split-layout:has(.board-area:not(.using-3d)) {
+    padding-top: 24px;
+  }
   body:not(.mobile-mode) .uniboard.split-layout {
     --split-board-width: 500px;
     grid-template-columns: var(--split-board-width) 24px 16px minmax(0, 1fr);
