@@ -811,16 +811,11 @@ body.watch-mode .board-nav { display:none !important; }
 /* A deliberately enlarged or moved clock can extend beyond the column. */
 @media(min-width:800px){body.clock-docked-right:not(.mobile-mode) .uniboard > .tools:has(#practice-clock:not([hidden])){z-index:45}}
 
-/* Watch's renderer includes its own clock and notation: use the freed column. */
-@media(min-width:800px){
-  body.watch-mode:not(.mobile-mode) .uniboard > #study-tools,
-  body.watch-mode:not(.mobile-mode) .uniboard > #workspace-divider{display:none!important}
-}
+/* Watch's own data fills the chosen side panes without touching the study. */
+body.watch-mode .uniboard > :is(#study-side,#study-tools) { visibility:visible; pointer-events:auto; min-width:0; }
+body.watch-mode .uniboard > :is(#study-side,#study-tools) > :not(.watch-pane) { display:none!important; }
+body.watch-mode .uniboard > :is(#study-side,#study-tools) { position:sticky!important; top:var(--split-top,80px)!important; translate:none!important; overflow:hidden!important; height:calc(100dvh - var(--split-top,80px) - 12px)!important; max-height:none!important; padding:0!important; }
 @media(min-width:800px) and (max-width:1259px){
-  body.watch-mode:not(.mobile-mode) .uniboard.split-layout{grid-template-columns:24px var(--split-board-width);grid-template-areas:"gauge board" "gauge side"}
-  body.watch-mode.left-pane-hidden:not(.mobile-mode) .uniboard.split-layout{grid-template-areas:"gauge board"}
-}
-@media(min-width:1260px){
-  body.watch-mode:not(.mobile-mode) .uniboard.split-layout{grid-template-columns:var(--split-side-width,280px) 16px 28px var(--split-board-width);grid-template-areas:"side left-divider gauge board"}
-  body.watch-mode.left-pane-hidden:not(.mobile-mode) .uniboard.split-layout{grid-template-columns:28px var(--split-board-width);grid-template-areas:"gauge board"}
+  body.watch-mode:not(.left-pane-hidden):not(.right-pane-hidden):not(.mobile-mode) .uniboard.split-layout { grid-template-columns:var(--split-side-width,220px) 16px 24px var(--split-board-width) 16px minmax(0,1fr); grid-template-areas:"side left-divider gauge board divider tools"; }
+  body.watch-mode:not(.left-pane-hidden).right-pane-hidden:not(.mobile-mode) .uniboard.split-layout { grid-template-columns:var(--split-side-width,220px) 16px 24px var(--split-board-width); grid-template-areas:"side left-divider gauge board"; }
 }

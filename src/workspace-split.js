@@ -72,8 +72,8 @@ export function installWorkspaceSplit(board) {
   } catch {}
   let drag = null, frame = 0, pendingWidth = null, pendingSide = null, lastWidth = 0, fittedHeight = 0;
   const isActive = () => window.innerWidth >= 800 && !document.body.classList.contains('mobile-mode');
-  const hasSidebar = () => isActive() && window.innerWidth >= 1260 && !document.body.classList.contains('left-pane-hidden');
-  const hasTools = () => !document.body.classList.contains('right-pane-hidden') && !document.body.classList.contains('watch-mode');
+  const hasSidebar = () => isActive() && (window.innerWidth >= 1260 || document.body.classList.contains('watch-mode')) && !document.body.classList.contains('left-pane-hidden');
+  const hasTools = () => !document.body.classList.contains('right-pane-hidden');
   const using3D = () => board.rootEl.parentElement.classList.contains('using-3d');
   const contentSpace = () => {
     const css = getComputedStyle(layout);
