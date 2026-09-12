@@ -401,6 +401,17 @@ const migrations = [
         ON guest_claim_audit(user_id, created_at DESC);
     `,
   },
+  {
+    name: '018_user_board_settings',
+    sql: `
+      CREATE TABLE IF NOT EXISTS user_board_settings (
+        user_id INT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+        document JSONB NOT NULL DEFAULT '{"latest":null,"views":[]}',
+        revision INTEGER NOT NULL DEFAULT 0,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `,
+  },
 ];
 
 export async function runMigrations() {

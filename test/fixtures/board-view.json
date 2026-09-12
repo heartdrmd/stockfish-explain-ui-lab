@@ -1,0 +1,94 @@
+{
+  "id": "00000000-0000-4000-8000-000000000001",
+  "name": "All settings",
+  "createdAt": 1789215000000,
+  "mode": "board",
+  "piece": "queen",
+  "fen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+  "camera": {
+    "position": [
+      0.3,
+      0.4,
+      0.6
+    ],
+    "target": [
+      0.02,
+      0,
+      -0.03
+    ],
+    "autoFraming": false
+  },
+  "appearance": {
+    "collection": "zagreb",
+    "boardShape": "classic",
+    "darkReflections": 100,
+    "whiteLightness": 112,
+    "blackLightness": 143,
+    "whitePieceLight": {
+      "preset": "window",
+      "intensity": 240
+    },
+    "blackPieceLight": {
+      "preset": "ebony",
+      "intensity": 132
+    },
+    "contactShadows": 100,
+    "toneMapping": "aces",
+    "pieces": {
+      "id": "classic-v2",
+      "label": "Boxwood / ebony v2",
+      "light": "#cba56b",
+      "dark": "#211a13",
+      "surface": "wood"
+    },
+    "board": {
+      "id": "graphite",
+      "label": "Graphite & chalk",
+      "light": "#b6b9b6",
+      "dark": "#182020",
+      "frame": "#101616",
+      "surface": "ceramic"
+    },
+    "lighting": "studio",
+    "brightness": 82,
+    "light": {
+      "key": 100,
+      "fill": 12,
+      "rim": 85,
+      "reflections": 60,
+      "direction": -50,
+      "height": 48,
+      "warmth": 35,
+      "softness": 65
+    },
+    "grain": 153,
+    "polish": 29,
+    "quality": "detail"
+  },
+  "viewing": {
+    "knightAngle": -43,
+    "knightScale": 100,
+    "lowerControls": false,
+    "framing": "maximum",
+    "perspective": 38,
+    "coordinates": false,
+    "pieceScales": {
+      "king": 91,
+      "queen": 92,
+      "bishop": 93,
+      "knight": 78,
+      "rook": 96,
+      "pawn": 105
+    },
+    "showClock": false,
+    "clockStyle": "zmf"
+  },
+  "navigation": "pan",
+  "showEvaluation": false,
+  "showMoves": false,
+  "line": {
+    "startFen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+    "moves": [],
+    "cursor": 0
+  }
+}

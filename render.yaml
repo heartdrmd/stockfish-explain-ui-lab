@@ -1,3 +1,14 @@
+# Separate UI Lab account database, matching stockfish-explain-dev-db.
+databases:
+  - name: stockfish-explain-ui-lab-db
+    plan: basic-256mb
+    region: ohio
+    postgresMajorVersion: "16"
+    diskSizeGB: 15
+    databaseName: stockfish_explain_ui_lab
+    user: stockfish_explain_ui_lab
+    ipAllowList: []
+
 services:
   - type: web
     name: stockfish-explain-ui-lab
@@ -28,6 +39,9 @@ services:
         generateValue: true
       - key: NODE_ENV
         value: production
-      # Deliberately no DATABASE_URL and no paid-AI key in the first UI lab.
-      # The browser uses isolated localStorage while the interface is tested.
+      - key: DATABASE_URL
+        fromDatabase:
+          name: stockfish-explain-ui-lab-db
+          property: connectionString
+      # Paid AI remains separately gated; no AI key is added here.
     healthCheckPath: /api/whoami

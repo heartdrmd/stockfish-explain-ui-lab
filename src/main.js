@@ -12153,6 +12153,10 @@ async function main() {
   const authToggle  = document.getElementById('auth-toggle');
   let authMode = 'signin'; // 'signin' | 'signup'
 
+  function announceBoardAccount() {
+    window.__boardAccountReady = true;
+    window.dispatchEvent(new Event('chess:account-change'));
+  }
   function renderAuthUi() {
     const u = window.__currentUser;
     const mobileHeader = document.body.classList.contains('mobile-mode');
@@ -12218,6 +12222,7 @@ async function main() {
       try {
         const res = authMode === 'signup' ? await api.signup(u, p) : await api.login(u, p);
         window.__currentUser = res.user;
+        announceBoardAccount();
         preparePortableAccount(res.user);
         renderAuthUi();
         closeAuth();
@@ -12239,6 +12244,7 @@ async function main() {
       console.warn('[auth] logout request failed (clearing client-side anyway)', err.message || err);
     }
     window.__currentUser = null;
+    announceBoardAccount();
     clearPortableLocalState();
     renderAuthUi();
     console.log('[auth] logged out', { wasUser, serverOk });
@@ -12442,6 +12448,7 @@ async function main() {
   (async () => {
     const u = await currentUser();
     window.__currentUser = u;
+    announceBoardAccount();
     if (u) preparePortableAccount(u);
     else {
       let owner = null;

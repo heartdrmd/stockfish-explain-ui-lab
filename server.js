@@ -33,6 +33,7 @@ import { wireAuth } from './src/server/auth.js';
 import { wireGames } from './src/server/games.js';
 import { wireVariations } from './src/server/variations.js';
 import { wireLibrary } from './src/server/library.js';
+import { wireBoardSettings } from './src/server/board-settings.js';
 import { wireSync } from './src/server/sync.js';
 import {
   AI_SPEND_COOKIE,
@@ -381,6 +382,7 @@ wireGames(app);
 wireVariations(app);
 wireLibrary(app);
 wireSync(app);
+wireBoardSettings(app);
 
 // ───── source/secret blocklist (audit S2) ─────
 // express.static(__dirname) serves the REPO ROOT, so without this guard

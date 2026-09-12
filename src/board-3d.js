@@ -171,8 +171,13 @@ export function install3DBoard(board) {
     document.getElementById('btn-practice-again')?.click();
   };
   restart.addEventListener('click', restartOpening);
+  function syncAccount() {
+    if (window.__boardAccountReady && frame.contentWindow) frame.contentWindow.postMessage({ type: 'zagreb:account', user: window.__currentUser || null }, location.origin);
+  }
+  window.addEventListener('chess:account-change', syncAccount);
   window.addEventListener('message', async event => {
     if (event.origin !== location.origin || event.source !== frame.contentWindow) return;
+    if (event.data?.type === 'zagreb:account-ready') { syncAccount(); return; }
     if (event.data?.type === 'zagreb:ready') { ready = true; sync(true); return; }
     if (!enabled) return;
     if (event.data?.type === 'zagreb:clock-pause') {
