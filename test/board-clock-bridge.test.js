@@ -63,6 +63,9 @@ test('shared clocks use parent time in both board modes and reject foreign contr
   }
   const clockMessages = () => sent.filter(item => item.message.type === 'zagreb:clock');
   message('zagreb:ready');
+  const positions = () => sent.filter(item => item.message.type === 'zagreb:position').map(item => item.message);
+  const firstViewRevision = positions().at(-1).viewRevision;
+  assert.equal(positions().at(-1).orientation, 'white');
   assert.deepEqual(clockMessages().at(-1), {message:{type:'zagreb:clock',...board.studyClock},target:origin});
   message('zagreb:clock-pause', {}, origin);
   message('zagreb:clock-pause', frame.contentWindow, 'https://other.example');
@@ -70,6 +73,7 @@ test('shared clocks use parent time in both board modes and reject foreign contr
   message('zagreb:clock-pause');
   assert.equal(pauseRequests, 1);
   toggle.click();
+  assert.equal(positions().at(-1).viewRevision, firstViewRevision, 'Hiding 3D does not request a camera change');
   const beforeHiddenTick = clockMessages().length;
   message('zagreb:clock-pause');
   message('zagreb:clock-design', {}, origin);
@@ -109,7 +113,13 @@ test('shared clocks use parent time in both board modes and reject foreign contr
   message('zagreb:clock-control', frame.contentWindow, origin, payload);
   assert.equal(sent.at(-1).message.ok, false, 'The viewer receives a failure if the game stops while editing');
   assert.equal(sent.at(-1).message.error, 'The timed game has stopped.');
+  board.cg.state.orientation = 'black';
   toggle.click();
+  assert.equal(positions().at(-1).orientation, 'black', 'Returning to 3D takes the current 2D side');
+  assert.equal(positions().at(-1).viewRevision, firstViewRevision + 1);
+  toggle.click(); toggle.click();
+  assert.equal(positions().at(-1).viewRevision, firstViewRevision + 2,
+    'Reentering with an unchanged side still corrects a freely rotated or restored 3D camera');
   assert.equal(clockMessages().at(-1).message.whiteMs, 280000, 'Returning to the viewer receives the latest parent time');
   board.studyClock = {...board.studyClock, whiteMs:278900, paused:false, running:'w'};
   board.dispatchEvent(new Event('clock-change'));

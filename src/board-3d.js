@@ -86,6 +86,7 @@ export function install3DBoard(board) {
   const gauge = document.getElementById('gauge-black');
   const gaugeControl = document.getElementById('eval-gauge-control');
   let enabled = false, ready = false, busy = false, scheduled = false, lastState = '', lastOverlay = '';
+  let viewRevision = 0;
   function syncClock() {
     if (ready) frame.contentWindow.postMessage({ type: 'zagreb:clock', ...board.studyClock }, location.origin);
   }
@@ -117,6 +118,7 @@ export function install3DBoard(board) {
     return {
       type: 'zagreb:position', fen: board.fen(),
       orientation: cg.orientation || board.orientation,
+      viewRevision,
       movable: board.interactionLocked || window.__practiceStarting ? 'none' : cg.movable.color || 'none',
       lastMove: lastMoveFor3D(board),
       status: board.interactionLocked ? 'Preparing position…' : isThinking ? 'Computer is thinking…' :
@@ -156,6 +158,7 @@ export function install3DBoard(board) {
   const scheduleFrameSize = frameUpdate(sizeFrame);
   new ResizeObserver(scheduleFrameSize).observe(board.rootEl);
   function setEnabled(value) {
+    if (value && !enabled) viewRevision++;
     enabled = value;
     frame.hidden = !enabled;
     board.rootEl.style.visibility = enabled ? 'hidden' : '';
