@@ -23,6 +23,8 @@ export function installFloatingClock(card, host) {
     panel.style.setProperty('--clock-float-y', `${offset.y}px`);
     card.style.setProperty('--clock-dock-x',`${offset.x}px`);
     card.style.setProperty('--clock-dock-y',`${offset.y}px`);
+    const availableHeight = `${Math.max(120, window.innerHeight - Math.max(8,card.getBoundingClientRect().top) - 48)}px`;
+    if(card.style.getPropertyValue('--clock-available-height') !== availableHeight)card.style.setProperty('--clock-available-height', availableHeight);
     host.style.height = active() && !floating() ? `${Math.max(0,card.getBoundingClientRect().height+offset.y)}px` : '';
   }
   function move(x, y) {
@@ -68,10 +70,14 @@ export function installFloatingClock(card, host) {
     frame = requestAnimationFrame(() => {
       frame = 0;
       if (active()) {
-        const naturalWidth = parseFloat(card.querySelector('.game-clock')?.style.width || '300');
-        const width = `${Math.round(Math.max(180, Math.min(window.innerWidth * .52, naturalWidth || 300)))}px`;
-        if (floating() && panel.style.getPropertyValue('--floating-clock-width') !== width)
-          panel.style.setProperty('--floating-clock-width', width);
+        const face = card.querySelector('.game-clock');
+        const naturalWidth = parseFloat(face?.style.width || '300');
+        const ratio = face?.offsetHeight / Math.max(1, naturalWidth) || .75;
+        const clockTop = Math.max(8, card.getBoundingClientRect().top);
+        const widthForHeight = Math.max(180, (window.innerHeight - clockTop - 64) / ratio + 30);
+        const width = `${Math.round(Math.max(180, Math.min(window.innerWidth * .9, widthForHeight, naturalWidth || 300)))}px`;
+        if (panel.style.getPropertyValue('--floating-clock-width') !== width) panel.style.setProperty('--floating-clock-width', width);
+        if (card.style.getPropertyValue('--docked-clock-width') !== width) card.style.setProperty('--docked-clock-width', width);
         move(offset.x, offset.y);
       }
       else {setMoveMode(false);host.style.height='';}

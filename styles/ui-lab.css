@@ -744,7 +744,7 @@ body.dividers-hidden .workspace-divider::after{display:none!important}
 .clock-move-mode .clock-live-canvas canvas{cursor:move!important}
 
 @media(min-width:800px){
-  body.clock-docked-right.right-pane-hidden:not(.mobile-mode) #clock-atelier .game-clock-fit{width:100%!important}
+  body.clock-docked-right:not(.mobile-mode) #clock-atelier .game-clock-fit{width:100%!important}
   body:not(.mobile-mode) .board-area:not(.using-3d) > #board,
   body:not(.mobile-mode) .board-area:not(.using-3d) #board-resize,
   body:not(.mobile-mode) .board-area:not(.using-3d) ~ .eval-gauge-control{translate:var(--native-board-pan,0px) 0}
@@ -766,7 +766,7 @@ body.ui-lab #btn-board-fullscreen{order:7;min-width:36px;padding-inline:8px}
   body.clock-docked-right:not(.right-pane-hidden):not(.clock-presentation-hidden):not(.mobile-mode) .tools:has(#practice-clock:not([hidden])) > .clock-below-scroll{
     display:flex;flex-direction:column;gap:12px;flex:1 1 0;min-height:0;overflow:auto;overscroll-behavior:contain;padding-right:4px;
   }
-  body.clock-docked-right:not(.right-pane-hidden):not(.mobile-mode) #clock-right-host .game-clock-fit{max-height:min(52dvh,380px)!important}
+  body.clock-docked-right:not(.mobile-mode) #clock-right-host .game-clock-fit{max-height:var(--clock-available-height,calc(100dvh - var(--split-top,68px) - 48px))!important}
   body.clock-docked-right.right-pane-hidden:not(.mobile-mode) .uniboard > .tools:has(#practice-clock:not([hidden])){overflow:hidden}
   body.dividers-hidden .clock-below-scroll{scrollbar-width:none}
   body.dividers-hidden .clock-below-scroll::-webkit-scrollbar{display:none}
@@ -777,7 +777,7 @@ body.ui-lab #btn-board-fullscreen{order:7;min-width:36px;padding-inline:8px}
 @media(min-width:800px){
   body.clock-docked-right:not(.mobile-mode) #clock-right-host{position:relative}
   body.clock-docked-right:not(.right-pane-hidden):not(.mobile-mode) #clock-right-host > #practice-clock{
-    position:absolute;top:0;left:0;width:100%;margin:0;translate:var(--clock-dock-x,0px) var(--clock-dock-y,0px);z-index:32;background:transparent;
+    position:absolute;top:0;right:0;width:var(--docked-clock-width,100%);max-width:calc(100vw - 16px);margin:0;translate:var(--clock-dock-x,0px) var(--clock-dock-y,0px);z-index:32;background:transparent;
   }
   body.clock-docked-right:not(.mobile-mode) #clock-float-drag{
     display:grid;place-items:center;width:36px;height:28px;margin:0 0 4px;padding:0;border:1px solid #81917a55;border-radius:4px;background:var(--board-surround);color:#cbd5c2;font-size:19px;cursor:grab;touch-action:none;
@@ -806,3 +806,20 @@ body.ui-lab #btn-board-fullscreen{order:7;min-width:36px;padding-inline:8px}
 .board-area .board-nav { max-width:100%; margin-inline:auto; }
 .board-area.using-3d.inner-navigation-ready .board-nav > [id^="board-nav-"] { display:none; }
 body.watch-mode .board-nav { display:none !important; }
+
+/* A deliberately enlarged or moved clock can extend beyond the column. */
+@media(min-width:800px){body.clock-docked-right:not(.mobile-mode) .uniboard > .tools:has(#practice-clock:not([hidden])){z-index:45}}
+
+/* Watch's renderer includes its own clock and notation: use the freed column. */
+@media(min-width:800px){
+  body.watch-mode:not(.mobile-mode) .uniboard > #study-tools,
+  body.watch-mode:not(.mobile-mode) .uniboard > #workspace-divider{display:none!important}
+}
+@media(min-width:800px) and (max-width:1259px){
+  body.watch-mode:not(.mobile-mode) .uniboard.split-layout{grid-template-columns:24px var(--split-board-width);grid-template-areas:"gauge board" "gauge side"}
+  body.watch-mode.left-pane-hidden:not(.mobile-mode) .uniboard.split-layout{grid-template-areas:"gauge board"}
+}
+@media(min-width:1260px){
+  body.watch-mode:not(.mobile-mode) .uniboard.split-layout{grid-template-columns:var(--split-side-width,280px) 16px 28px var(--split-board-width);grid-template-areas:"side left-divider gauge board"}
+  body.watch-mode.left-pane-hidden:not(.mobile-mode) .uniboard.split-layout{grid-template-columns:28px var(--split-board-width);grid-template-areas:"gauge board"}
+}

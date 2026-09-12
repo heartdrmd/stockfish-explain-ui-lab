@@ -73,7 +73,7 @@ export function installWorkspaceSplit(board) {
   let drag = null, frame = 0, pendingWidth = null, pendingSide = null, lastWidth = 0, fittedHeight = 0;
   const isActive = () => window.innerWidth >= 800 && !document.body.classList.contains('mobile-mode');
   const hasSidebar = () => isActive() && window.innerWidth >= 1260 && !document.body.classList.contains('left-pane-hidden');
-  const hasTools = () => !document.body.classList.contains('right-pane-hidden');
+  const hasTools = () => !document.body.classList.contains('right-pane-hidden') && !document.body.classList.contains('watch-mode');
   const using3D = () => board.rootEl.parentElement.classList.contains('using-3d');
   const contentSpace = () => {
     const css = getComputedStyle(layout);
@@ -113,7 +113,7 @@ export function installWorkspaceSplit(board) {
     if (hasTools() && (ratio == null || requested != null)) ratio = width / available;
     layout.style.setProperty('--split-board-width', width + 'px');
     const headerBottom = Math.max(0, document.querySelector('.site-header')?.getBoundingClientRect().bottom || 60);
-    const navHeight = layout.querySelector('.board-nav')?.getBoundingClientRect().height || 72;
+    const navHeight = board.watchActive ? 0 : layout.querySelector('.board-nav')?.getBoundingClientRect().height || 72;
     const viewer = using3D();
     const { top, height: fitHeight } = fitBoardHeight(width, window.innerHeight, headerBottom, navHeight, viewer ? 12 : 48);
     fittedHeight = fitHeight;
