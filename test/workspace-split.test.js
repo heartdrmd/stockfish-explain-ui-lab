@@ -150,3 +150,15 @@ test('right-pane preference restores on load and still fits the narrower layout'
   f.event(f.rightToggle,'click'); f.flush();
   assert.equal(f.widths().board,530,'Reopening uses the saved 60% board share');
 });
+
+test('Watch keeps both divider widths and gives the board space only when a pane is hidden', t => {
+  const f=workspaceFixture(t), before=f.widths();
+  f.body.classes.add('watch-mode');f.win.dispatchEvent(new Event('resize'));f.flush();
+  assert.deepEqual(f.widths(),before,'Watch uses the normal side columns instead of overlaying them on the board');
+  f.event(f.right,'keydown',{key:'ArrowRight'});
+  assert.equal(f.widths().board,before.board+16,'Right divider still works while watching');
+  f.event(f.rightToggle,'click');f.flush();
+  assert.ok(f.widths().board>before.board+16);
+  f.event(f.rightToggle,'click');f.flush();
+  assert.equal(f.widths().board,before.board+16);
+});
