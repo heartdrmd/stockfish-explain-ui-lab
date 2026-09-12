@@ -696,6 +696,9 @@
 #clock-atelier {
   display: none;
 }
+#practice-clock[data-clock-view='atelier']:has(.game-clock-tools[hidden]) > .clock-header {
+  display: none;
+}
 #practice-clock[data-clock-view='atelier'] #clock-atelier {
   display: block;
 }
