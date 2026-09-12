@@ -533,11 +533,32 @@ body.ui-lab .cg-wrap coords.files {
 .workspace-divider { display: none; }
 body.left-pane-hidden .uniboard > .side { display: none !important; }
 body.left-pane-hidden .uniboard > .workspace-left-divider { display: none !important; }
-#btn-toggle-left-pane[aria-pressed="false"] { background: #273c31; border-color: #7d9476; }
+body.right-pane-hidden .uniboard > .tools,
+body.right-pane-hidden .uniboard > #workspace-divider { display: none !important; }
+:is(#btn-toggle-left-pane, #btn-toggle-right-pane)[aria-pressed="false"] { background: #273c31; border-color: #7d9476; }
 @media (min-width: 1260px) {
   body.left-pane-hidden:not(.mobile-mode) .uniboard.split-layout {
     grid-template-columns: var(--split-board-width) 28px 16px minmax(0, 1fr);
     grid-template-areas: "board gauge divider tools";
+  }
+}
+@media (min-width: 800px) and (max-width: 1259px) {
+  body.right-pane-hidden:not(.mobile-mode) .uniboard.split-layout {
+    grid-template-columns: var(--split-board-width) 24px;
+    grid-template-areas: "board gauge" "side gauge";
+  }
+  body.left-pane-hidden.right-pane-hidden:not(.mobile-mode) .uniboard.split-layout {
+    grid-template-areas: "board gauge";
+  }
+}
+@media (min-width: 1260px) {
+  body.right-pane-hidden:not(.mobile-mode) .uniboard.split-layout {
+    grid-template-columns: var(--split-side-width, 280px) 16px var(--split-board-width) 28px;
+    grid-template-areas: "side left-divider board gauge";
+  }
+  body.left-pane-hidden.right-pane-hidden:not(.mobile-mode) .uniboard.split-layout {
+    grid-template-columns: var(--split-board-width) 28px;
+    grid-template-areas: "board gauge";
   }
 }
 @media (min-width: 800px) {

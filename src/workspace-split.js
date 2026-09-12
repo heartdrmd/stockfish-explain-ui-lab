@@ -10,20 +10,21 @@ export function splitBounds(space) {
   const max = Math.max(min, Math.min(1100, available - Math.min(280, available / 2)));
   return { min, max, available };
 }
-export function fitSplit(space, requested) {
+export function fitSplit(space, requested, toolsVisible = true) {
   const { min, max, available } = splitBounds(space);
+  if (!toolsVisible) return { board: Math.floor(available), tools: 0 };
   const board = Math.round(Math.max(min, Math.min(max, Number.isFinite(requested) ? requested : available * 0.58)));
   return { board, tools: available - board };
 }
 
 // Leave room for both the board and analysis when enlarging the clock pane.
-export function sidebarBounds(space) {
+export function sidebarBounds(space, toolsVisible = true) {
   const available = Math.max(0, Number.isFinite(space) ? space : 0);
-  const max = Math.min(560, Math.max(0, available - 580));
+  const max = Math.min(560, Math.max(0, available - 300 - (toolsVisible ? 280 : 0)));
   return { min: Math.min(220, max), max };
 }
-export function fitSidebar(space, requested) {
-  const { min, max } = sidebarBounds(space);
+export function fitSidebar(space, requested, toolsVisible = true) {
+  const { min, max } = sidebarBounds(space, toolsVisible);
   return Math.round(Math.max(min, Math.min(max, Number.isFinite(requested) ? requested : 280)));
 }
 
@@ -72,13 +73,14 @@ export function installWorkspaceSplit(board) {
   let drag = null, frame = 0, pendingWidth = null, pendingSide = null, lastWidth = 0, fittedHeight = 0;
   const isActive = () => window.innerWidth >= 800 && !document.body.classList.contains('mobile-mode');
   const hasSidebar = () => isActive() && window.innerWidth >= 1260 && !document.body.classList.contains('left-pane-hidden');
+  const hasTools = () => !document.body.classList.contains('right-pane-hidden');
   const using3D = () => board.rootEl.parentElement.classList.contains('using-3d');
   const contentSpace = () => {
     const css = getComputedStyle(layout);
     const wide = window.innerWidth >= 1260;
     return layout.clientWidth - parseFloat(css.paddingLeft) - parseFloat(css.paddingRight)
-      - (wide ? 28 : 24) - DIVIDER_WIDTH * (hasSidebar() ? 2 : 1)
-      - parseFloat(css.columnGap) * (hasSidebar() ? 5 : 3);
+      - (wide ? 28 : 24) - DIVIDER_WIDTH * (Number(hasSidebar()) + Number(hasTools()))
+      - parseFloat(css.columnGap) * (1 + (hasSidebar() ? 2 : 0) + (hasTools() ? 2 : 0));
   };
   const space = () => contentSpace() - (hasSidebar() ? side.getBoundingClientRect().width : 0);
   function save() {
@@ -91,23 +93,24 @@ export function installWorkspaceSplit(board) {
     if (hasSidebar()) {
       const currentSide = side.getBoundingClientRect().width;
       const defaultSide = Math.max(220, Math.min(280, window.innerWidth * 0.22));
-      const fittedSide = fitSidebar(contentSpace(), requestedSide ?? sideWidth ?? defaultSide);
+      const fittedSide = fitSidebar(contentSpace(), requestedSide ?? sideWidth ?? defaultSide, hasTools());
       if (requestedSide != null) {
         sideWidth = fittedSide;
         // Keep the analysis width steady until the board reaches its fit limit.
         requested = board.rootEl.parentElement.getBoundingClientRect().width + currentSide - fittedSide;
       }
       layout.style.setProperty('--split-side-width', fittedSide + 'px');
-      const bounds = sidebarBounds(contentSpace());
+      const bounds = sidebarBounds(contentSpace(), hasTools());
       leftDivider.setAttribute('aria-valuemin', String(bounds.min));
       leftDivider.setAttribute('aria-valuemax', String(bounds.max));
       leftDivider.setAttribute('aria-valuenow', String(fittedSide));
       leftDivider.setAttribute('aria-valuetext', `Clock pane ${fittedSide} pixels`);
     }
     const available = space();
-    const { board: width, tools: right } = fitSplit(available, requested ?? (ratio == null ? initialWidth : available * ratio));
-    if (ratio == null) ratio = width / available;
-    if (requested != null) ratio = width / available;
+    const { board: width, tools: right } = fitSplit(available, requested ?? (ratio == null ? initialWidth : available * ratio), hasTools());
+    // Hiding analysis gives the whole remaining width to the board temporarily.
+    // Keep its split preference so showing the pane restores the user's divider.
+    if (hasTools() && (ratio == null || requested != null)) ratio = width / available;
     layout.style.setProperty('--split-board-width', width + 'px');
     const headerBottom = Math.max(0, document.querySelector('.site-header')?.getBoundingClientRect().bottom || 60);
     const navHeight = layout.querySelector('.board-nav')?.getBoundingClientRect().height || 72;
@@ -166,10 +169,11 @@ export function installWorkspaceSplit(board) {
     layout.classList.toggle('split-layout', active);
     if (!active) { finish(); return; }
     if (drag?.handle === leftDivider && !hasSidebar()) finish();
+    if (drag?.handle === divider && !hasTools()) finish();
     schedule();
   }
   divider.addEventListener('pointerdown', event => {
-    if (!isActive() || event.button !== 0) return;
+    if (!isActive() || !hasTools() || event.button !== 0) return;
     event.preventDefault();
     divider.focus();
     drag = { id: event.pointerId, handle: divider, x: event.clientX, width: board.rootEl.parentElement.getBoundingClientRect().width };
@@ -201,13 +205,14 @@ export function installWorkspaceSplit(board) {
   leftDivider.addEventListener('keydown', event => {
     if (!hasSidebar()) return;
     const width = side.getBoundingClientRect().width;
-    const step = event.shiftKey ? 40 : 16, bounds = sidebarBounds(contentSpace());
+    const step = event.shiftKey ? 40 : 16, bounds = sidebarBounds(contentSpace(), hasTools());
     const targets = { ArrowLeft: width - step, ArrowRight: width + step, Home: bounds.min, End: bounds.max };
     if (!(event.key in targets)) return;
     event.preventDefault(); event.stopPropagation();
     apply(null, targets[event.key]); save();
   });
   divider.addEventListener('keydown', event => {
+    if (!isActive() || !hasTools()) return;
     const width = board.rootEl.parentElement.getBoundingClientRect().width;
     const step = event.shiftKey ? 40 : 16;
     const bounds = splitBounds(space());
