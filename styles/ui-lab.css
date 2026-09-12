@@ -844,3 +844,6 @@ body.watch-mode .uniboard > :is(#study-side,#study-tools) { position:sticky!impo
 /* Saved fullscreen layouts also work when the browser cannot grant native fullscreen. */
 body.presentation-fullscreen { overflow:hidden; }
 #zagreb-board.presentation-fullscreen { position:fixed!important; inset:0!important; width:100vw!important; height:100dvh!important; max-width:none!important; max-height:none!important; z-index:10000; }
+/* A translated sticky board would trap the fixed fullscreen iframe and let
+   the docked clock sit above it after a reload without native fullscreen. */
+body.presentation-fullscreen .uniboard .board-area { position:static!important; translate:none!important; transform:none!important; z-index:10000!important; }
