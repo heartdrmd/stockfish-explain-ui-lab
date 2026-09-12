@@ -316,37 +316,17 @@
   </section>
 
   <main class="uniboard">
-    <aside class="side">
-      <div class="side-card">
-        <h3>Confidence</h3>
-        <div id="confidence-display" class="confidence">
-          <span class="confidence-badge" data-level="unknown">Waiting…</span>
-          <p class="confidence-reason muted">The engine hasn't thought yet.</p>
-        </div>
-      </div>
-
+    <aside class="side" id="study-side">
       <div class="optional-clock-control" id="clock-add-area">
         <button type="button" id="btn-add-untimed-clock" class="practice-btn" disabled title="Track time from now without changing the game's time control">⏱ Add untimed clock</button>
         <span id="clock-add-status" role="status"></span>
       </div>
-      <!-- Chess clock — positioned BETWEEN Confidence and Save position so
-           it's high up in the column and immediately visible during a
-           practice game. Visible only when practice has a clock time
-           control; shows both sides' remaining time, lights up red when
-           low, and triggers timeout loss at 0. -->
+      <!-- The chosen clock is the first card in the left pane. -->
       <div class="side-card practice-card" id="practice-clock" hidden>
         <div class="clock-header">
-          <h3 style="margin:0;">⏱ Clock</h3>
-          <!-- Curated clock styles — big numbers / tournament-grade only. -->
-          <div class="clock-style-switcher" id="clock-style-switcher">
-            <button type="button" class="clock-style-btn" data-style="atelier" title="DGT, ZMF and other tournament clock designs" aria-label="Tournament clock designs">▤</button>
-            <button type="button" class="clock-style-btn" data-style="digital-mega"        title="Mega digital — huge crisp white numbers">⬛</button>
-            <button type="button" class="clock-style-btn active" data-style="digital-jumbo" title="Jumbo digital — even bigger, light theme, high-contrast (default)">🔢</button>
-            <button type="button" class="clock-style-btn" data-style="digital-stadium"      title="Stadium scoreboard — dot-matrix LED, giant numerals">🏟</button>
-            <button type="button" class="clock-style-btn" data-style="digital-chronos"      title="Chronos GX — blue 7-segment tournament clock">♟</button>
-            <button type="button" class="clock-style-btn" data-style="analog-garde"         title="Classic Garde analog (your favourite)">⏰</button>
-            <button type="button" class="clock-style-btn" data-style="analog-chrome"        title="Modern chrome analog">🔘</button>
-          </div>
+          <select class="clock-style-select" id="clock-style-switcher" aria-label="Clock appearance">
+            <option value="atelier">Tournament clock</option>
+          </select>
         </div>
 
         <div id="clock-atelier"></div>
@@ -464,6 +444,13 @@
             <button id="btn-practice-again" class="practice-btn again-btn" title="Replay this SAME opening with the same strength / colour / clock — one click, no picker">🔁 Same opening again</button>
             <button id="btn-practice-different" class="practice-btn again-btn" title="Open the picker to start practice with a DIFFERENT opening">🎯 Different opening</button>
           </div>
+        </div>
+      </div>
+      <div class="side-card" id="confidence-card">
+        <h3>Confidence</h3>
+        <div id="confidence-display" class="confidence">
+          <span class="confidence-badge" data-level="unknown">Waiting…</span>
+          <p class="confidence-reason muted">The engine hasn't thought yet.</p>
         </div>
       </div>
     </aside>

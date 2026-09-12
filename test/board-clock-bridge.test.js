@@ -65,6 +65,16 @@ test('shared clocks use parent time in both board modes and reject foreign contr
   }
   const clockMessages = () => sent.filter(item => item.message.type === 'zagreb:clock');
   message('zagreb:ready');
+  board.dispatchEvent(new CustomEvent('clock-appearance-request',{detail:'zmf-pro-3d'}));
+  assert.equal(sent.some(item=>item.message.type==='zagreb:clock-style'),false,'Wait for saved preferences before applying a requested clock');
+  message('zagreb:clock-style-state',{},origin,{style:'dgt'});
+  assert.equal(board.clockAppearance,undefined,'Foreign frames cannot supply a clock preference');
+  message('zagreb:clock-style-state',frame.contentWindow,origin,{style:'dgt'});
+  assert.deepEqual(sent.at(-1),{message:{type:'zagreb:clock-style',style:'zmf-pro-3d'},target:origin});
+  message('zagreb:clock-style-state',frame.contentWindow,origin,{style:'zmf-pro-3d'});
+  assert.equal(board.clockAppearance,'zmf-pro-3d');
+  message('zagreb:clock-style-state',frame.contentWindow,origin,{style:'unknown-clock'});
+  assert.equal(board.clockAppearance,'zmf-pro-3d','Invalid styles cannot replace a saved clock');
   assert.equal(controlsButton.disabled, true, 'Wait for saved settings before offering the toggle');
   message('zagreb:board-controls-state', {}, origin, {visible:false,ready:true});
   assert.equal(controlsButton.disabled, true, 'Ignore a state message from a foreign frame');

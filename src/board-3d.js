@@ -1,6 +1,7 @@
 // Both renderers share BoardController. The iframe never owns a game or engine.
 import { frameUpdate } from './resize-observer.js';
 import { readClockControl } from './generated/clock-control.js';
+import { isClockStyle } from './generated/clock-styles.js';
 export function lastMoveFor3D(board) {
   // Interaction locks and transient cg.set calls may clear Chessground's mark.
   // The node at the displayed FEN is the durable source of the last move.
@@ -87,6 +88,17 @@ export function install3DBoard(board) {
   const gaugeControl = document.getElementById('eval-gauge-control');
   let enabled = false, ready = false, busy = false, scheduled = false, lastState = '', lastOverlay = '';
   let viewRevision = 0;
+  let clockStyleReady = false, pendingClockStyle = null;
+  const sendClockStyle = () => {
+    if (clockStyleReady && pendingClockStyle) frame.contentWindow.postMessage({
+      type: 'zagreb:clock-style', style: pendingClockStyle,
+    }, location.origin);
+  };
+  board.addEventListener('clock-appearance-request', event => {
+    if (!isClockStyle(event.detail)) return;
+    pendingClockStyle = event.detail;
+    sendClockStyle();
+  });
   const controlsToggle = document.getElementById('btn-toggle-board-controls');
   let controlsVisible = true, controlsReady = false;
   function syncControlsToggle() {
@@ -215,8 +227,17 @@ export function install3DBoard(board) {
     if (event.data?.type === 'zagreb:clock-hardware') {
       board.clockHardwareInput?.(event.data.key,event.data.phase); return;
     }
+    if (event.data?.type === 'zagreb:clock-style-state') {
+      if (!isClockStyle(event.data.style)) return;
+      clockStyleReady = true;
+      if (pendingClockStyle && pendingClockStyle !== event.data.style) { sendClockStyle(); return; }
+      pendingClockStyle = null;
+      board.clockAppearance = event.data.style;
+      board.dispatchEvent(new Event('clock-appearance-state'));
+      return;
+    }
     if (event.data?.type === 'zagreb:clock-design') {
-      board.dispatchEvent(new Event('clock-design-request'));
+      board.dispatchEvent(new CustomEvent('clock-design-request', { detail: event.data.style }));
       return;
     }
     if (event.data?.type === 'zagreb:clock-pause') {

@@ -2440,31 +2440,22 @@ body.practice-mode .practice-card[hidden]       { display: none !important; }
   align-items: center;
   margin-bottom: 8px;
 }
-.clock-style-switcher {
-  display: flex;
-  gap: 3px;
-}
-.clock-style-btn {
-  width: 26px;
-  height: 26px;
-  border-radius: 4px;
+.clock-style-select {
+  width: 100%;
+  min-width: 0;
+  min-height: 36px;
+  padding: 7px 8px;
   border: 1px solid var(--c-border);
+  border-radius: 4px;
   background: var(--c-bg-zebra);
-  color: var(--c-font-dim);
-  font-size: 13px;
-  cursor: pointer;
-  padding: 0;
-  transition: all 0.15s;
-}
-.clock-style-btn:hover {
-  background: var(--c-bg-zebra2);
-  color: var(--c-font);
-}
-.clock-style-btn.active {
-  background: rgba(122,167,255,0.2);
-  border-color: var(--c-accent, #7aa7ff);
   color: var(--c-font-clear);
-  box-shadow: 0 0 0 1px rgba(122,167,255,0.3);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+.clock-style-select:focus-visible {
+  outline: 2px solid var(--c-accent, #7aa7ff);
+  outline-offset: 2px;
 }
 
 /* ─── Theme variants ─── */

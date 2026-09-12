@@ -41,10 +41,12 @@ function readClockControl(value) {
 function resetClockControl(clock, value, turn, now) {
 	const control = readClockControl(value);
 	if (!control) throw new Error("Use 1–999 whole minutes and 0–60 seconds increment.");
-	if (!clock.active || clock.mode !== "down" || !["w", "b"].includes(turn)) throw new Error("Start a timed game before setting the clock.");
+	if (!clock.active || !["up", "down"].includes(clock.mode) || !["w", "b"].includes(turn)) throw new Error("Add a clock before setting its time.");
 	if (!Number.isFinite(now)) throw new Error("The clock could not be updated.");
 	const initialMs = control.minutes * 6e4;
 	Object.assign(clock, {
+		mode: "down",
+		displayOnly: false,
 		initialMs,
 		msWhite: initialMs,
 		msBlack: initialMs,

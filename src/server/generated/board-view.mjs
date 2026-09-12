@@ -3585,7 +3585,7 @@ var PIECE_NAMES = [
 	"pawn"
 ];
 //#endregion
-//#region lib/study-clock.ts
+//#region lib/clock-styles.ts
 var CLOCK_STYLES = [
 	{
 		id: "dgt-3000-3d",

@@ -20,7 +20,6 @@ test('an optional untimed display cannot supply game timing limits or replace a 
     assert.equal(clock.incMs, 0);
     assert.equal(clock.initialMs, 0);
     assert.equal(usesClockBudget(clock), false);
-    assert.throws(() => resetClockControl(clock, {minutes: 1, incrementSeconds: 0}, turn, 7000));
     const before = {...clock};
     assert.throws(() => startUntimedDisplay(clock, turn, 9000));
     assert.deepEqual(clock, before, 'A repeated Add request cannot reset the running counter');
@@ -42,7 +41,7 @@ test('changing time control resets both actual clocks and preserves running/paus
       const clock = {...currentClock(), paused, timerId: paused ? 0 : 42};
       const control = resetClockControl(clock, {minutes: 10, incrementSeconds: 5}, turn, 5678);
       assert.deepEqual(control, {minutes: 10, incrementSeconds: 5});
-      assert.deepEqual(clock, {...currentClock(), paused, timerId: paused ? 0 : 42,
+      assert.deepEqual(clock, {...currentClock(), paused, displayOnly: false, timerId: paused ? 0 : 42,
         initialMs: 600000, msWhite: 600000, msBlack: 600000, incMs: 5000,
         tickingFor: turn, lastTickAt: 5678});
     }
@@ -52,7 +51,7 @@ test('changing time control resets both actual clocks and preserves running/paus
   assert.equal(clock.incMs, 0, 'A zero increment replaces the old increment');
 });
 
-test('invalid, stopped or untimed controls are rejected before changing any clock state', () => {
+test('invalid or stopped controls are rejected before changing any clock state', () => {
   for (const value of [null, {}, {minutes: '5', incrementSeconds: 3},
     {minutes: 0, incrementSeconds: 3}, {minutes: 1000, incrementSeconds: 3},
     {minutes: 2.5, incrementSeconds: 3}, {minutes: NaN, incrementSeconds: 3},
@@ -63,7 +62,7 @@ test('invalid, stopped or untimed controls are rejected before changing any cloc
     assert.throws(() => resetClockControl(clock, value, 'w', 6000));
     assert.deepEqual(clock, currentClock());
   }
-  for (const overrides of [{active: false}, {mode: 'up'}]) {
+  for (const overrides of [{active: false}, {mode: 'invalid'}]) {
     const clock = {...currentClock(), ...overrides};
     assert.throws(() => resetClockControl(clock, {minutes: 5, incrementSeconds: 3}, 'w', 6000));
     assert.deepEqual(clock, {...currentClock(), ...overrides});
@@ -74,4 +73,19 @@ test('invalid, stopped or untimed controls are rejected before changing any cloc
     assert.deepEqual(clock, currentClock());
   }
   assert.deepEqual(readClockControl({minutes: 999, incrementSeconds: 60}), {minutes: 999, incrementSeconds: 60});
+});
+
+test('Set time converts an Analysis counter to the actual timed game clock', () => {
+  for (const paused of [true, false]) for (const turn of ['w', 'b']) {
+    const clock = {...currentClock(), mode: 'up', displayOnly: true, paused, incMs: 0};
+    resetClockControl(clock, {minutes: 3, incrementSeconds: 2}, turn, 8000);
+    assert.equal(clock.mode, 'down');
+    assert.equal(clock.displayOnly, false);
+    assert.equal(clock.msWhite, 180000);
+    assert.equal(clock.msBlack, 180000);
+    assert.equal(clock.incMs, 2000);
+    assert.equal(clock.paused, paused);
+    assert.equal(clock.tickingFor, turn);
+    assert.equal(usesClockBudget(clock), true, 'The applied clock replaces the old practice timing budget');
+  }
 });

@@ -1,5 +1,6 @@
 const STORAGE_KEY = 'stockfish-explain.workspace-split';
 const SCALE_KEY = 'stockfish-explain.flat-board-scale';
+const SIDE_KEY = 'stockfish-explain.workspace-side-width';
 const DIVIDER_WIDTH = 16;
 
 // Space here excludes the sidebar, gauge, divider, gaps and outer padding.
@@ -15,6 +16,17 @@ export function fitSplit(space, requested) {
   return { board, tools: available - board };
 }
 
+// Leave room for both the board and analysis when enlarging the clock pane.
+export function sidebarBounds(space) {
+  const available = Math.max(0, Number.isFinite(space) ? space : 0);
+  const max = Math.min(560, Math.max(0, available - 580));
+  return { min: Math.min(220, max), max };
+}
+export function fitSidebar(space, requested) {
+  const { min, max } = sidebarBounds(space);
+  return Math.round(Math.max(min, Math.min(max, Number.isFinite(requested) ? requested : 280)));
+}
+
 export function fitBoardHeight(width, viewportHeight, headerBottom, navHeight, topGap = 24) {
   const top = Math.max(0, headerBottom) + topGap;
   const height = Math.max(1, Math.floor(Math.min(width, viewportHeight - top - navHeight - 20)));
@@ -24,7 +36,8 @@ export function fitBoardHeight(width, viewportHeight, headerBottom, navHeight, t
 export function installWorkspaceSplit(board) {
   const layout = board.rootEl.closest('.uniboard');
   const tools = layout?.querySelector(':scope > .tools');
-  if (!layout || !tools) return null;
+  const side = layout?.querySelector(':scope > .side');
+  if (!layout || !tools || !side) return null;
   const initialWidth = board.rootEl.getBoundingClientRect().width;
   const divider = document.createElement('div');
   divider.className = 'workspace-divider';
@@ -37,30 +50,60 @@ export function installWorkspaceSplit(board) {
   divider.tabIndex = 0;
   tools.id ||= 'study-tools';
   layout.insertBefore(divider, tools);
-  let ratio = null, squareScale = 1;
+  const leftDivider = document.createElement('div');
+  leftDivider.className = 'workspace-divider workspace-left-divider';
+  leftDivider.id = 'workspace-left-divider';
+  leftDivider.setAttribute('role', 'separator');
+  leftDivider.setAttribute('aria-orientation', 'vertical');
+  leftDivider.setAttribute('aria-label', 'Resize clock pane and board');
+  leftDivider.setAttribute('aria-controls', 'study-side board');
+  leftDivider.title = 'Drag left or right to resize the clock pane and board. Double-click to reset.';
+  leftDivider.tabIndex = 0;
+  side.insertAdjacentElement('afterend', leftDivider);
+  let ratio = null, squareScale = 1, sideWidth = null;
   try {
     const saved = Number(localStorage.getItem(STORAGE_KEY));
     if (saved > 0 && saved < 1) ratio = saved;
     const savedScale = Number(localStorage.getItem(SCALE_KEY));
     if (savedScale >= 0.35 && savedScale <= 1) squareScale = savedScale;
+    const savedSide = Number(localStorage.getItem(SIDE_KEY));
+    if (savedSide >= 220 && savedSide <= 560) sideWidth = savedSide;
   } catch {}
-  let drag = null, frame = 0, pendingWidth = null, lastWidth = 0, fittedHeight = 0;
+  let drag = null, frame = 0, pendingWidth = null, pendingSide = null, lastWidth = 0, fittedHeight = 0;
   const isActive = () => window.innerWidth >= 800 && !document.body.classList.contains('mobile-mode');
+  const hasSidebar = () => isActive() && window.innerWidth >= 1260 && !document.body.classList.contains('left-pane-hidden');
   const using3D = () => board.rootEl.parentElement.classList.contains('using-3d');
-  const space = () => {
+  const contentSpace = () => {
     const css = getComputedStyle(layout);
     const wide = window.innerWidth >= 1260;
-    const hasSidebar = wide && !document.body.classList.contains('left-pane-hidden');
-    const sidebar = hasSidebar ? layout.querySelector(':scope > .side').getBoundingClientRect().width : 0;
     return layout.clientWidth - parseFloat(css.paddingLeft) - parseFloat(css.paddingRight)
-      - sidebar - (wide ? 28 : 24) - DIVIDER_WIDTH - parseFloat(css.columnGap) * (hasSidebar ? 4 : 3);
+      - (wide ? 28 : 24) - DIVIDER_WIDTH * (hasSidebar() ? 2 : 1)
+      - parseFloat(css.columnGap) * (hasSidebar() ? 5 : 3);
   };
+  const space = () => contentSpace() - (hasSidebar() ? side.getBoundingClientRect().width : 0);
   function save() {
     if (ratio != null) try { localStorage.setItem(STORAGE_KEY, String(ratio)); } catch {}
     try { localStorage.setItem(SCALE_KEY, String(squareScale)); } catch {}
+    if (sideWidth != null) try { localStorage.setItem(SIDE_KEY, String(sideWidth)); } catch {}
   }
-  function apply(requested) {
+  function apply(requested, requestedSide = null) {
     if (!isActive()) return;
+    if (hasSidebar()) {
+      const currentSide = side.getBoundingClientRect().width;
+      const defaultSide = Math.max(220, Math.min(280, window.innerWidth * 0.22));
+      const fittedSide = fitSidebar(contentSpace(), requestedSide ?? sideWidth ?? defaultSide);
+      if (requestedSide != null) {
+        sideWidth = fittedSide;
+        // Keep the analysis width steady until the board reaches its fit limit.
+        requested = board.rootEl.parentElement.getBoundingClientRect().width + currentSide - fittedSide;
+      }
+      layout.style.setProperty('--split-side-width', fittedSide + 'px');
+      const bounds = sidebarBounds(contentSpace());
+      leftDivider.setAttribute('aria-valuemin', String(bounds.min));
+      leftDivider.setAttribute('aria-valuemax', String(bounds.max));
+      leftDivider.setAttribute('aria-valuenow', String(fittedSide));
+      leftDivider.setAttribute('aria-valuetext', `Clock pane ${fittedSide} pixels`);
+    }
     const available = space();
     const { board: width, tools: right } = fitSplit(available, requested ?? (ratio == null ? initialWidth : available * ratio));
     if (ratio == null) ratio = width / available;
@@ -97,18 +140,24 @@ export function installWorkspaceSplit(board) {
     squareScale = Math.max(0.35, Math.min(1, requested / fittedHeight));
     apply();
   }
-  function schedule(requested = null) {
+  function schedule(requested = null, requestedSide = null) {
     pendingWidth = requested;
+    pendingSide = requestedSide;
     if (frame) return;
-    frame = requestAnimationFrame(() => { frame = 0; const next = pendingWidth; pendingWidth = null; apply(next); });
+    frame = requestAnimationFrame(() => {
+      frame = 0;
+      const next = pendingWidth, nextSide = pendingSide;
+      pendingWidth = pendingSide = null;
+      apply(next, nextSide);
+    });
   }
   function finish(event) {
     if (!drag || (event?.pointerId != null && event.pointerId !== drag.id)) return;
-    if (frame) { cancelAnimationFrame(frame); frame = 0; apply(pendingWidth); pendingWidth = null; }
-    const id = drag.id;
+    if (frame) { cancelAnimationFrame(frame); frame = 0; apply(pendingWidth, pendingSide); pendingWidth = pendingSide = null; }
+    const { id, handle } = drag;
     drag = null;
     document.body.classList.remove('board-split-dragging');
-    if (divider.hasPointerCapture(id)) divider.releasePointerCapture(id);
+    if (handle.hasPointerCapture(id)) handle.releasePointerCapture(id);
     save();
     window.dispatchEvent(new Event('resize'));
   }
@@ -116,22 +165,48 @@ export function installWorkspaceSplit(board) {
     const active = isActive();
     layout.classList.toggle('split-layout', active);
     if (!active) { finish(); return; }
+    if (drag?.handle === leftDivider && !hasSidebar()) finish();
     schedule();
   }
   divider.addEventListener('pointerdown', event => {
     if (!isActive() || event.button !== 0) return;
     event.preventDefault();
     divider.focus();
-    drag = { id: event.pointerId, x: event.clientX, width: board.rootEl.parentElement.getBoundingClientRect().width };
+    drag = { id: event.pointerId, handle: divider, x: event.clientX, width: board.rootEl.parentElement.getBoundingClientRect().width };
     divider.setPointerCapture(event.pointerId);
     document.body.classList.add('board-split-dragging');
   });
   divider.addEventListener('pointermove', event => {
-    if (drag?.id === event.pointerId) schedule(drag.width + event.clientX - drag.x);
+    if (drag?.handle === divider && drag.id === event.pointerId) schedule(drag.width + event.clientX - drag.x);
   });
-  for (const name of ['pointerup', 'pointercancel', 'lostpointercapture']) divider.addEventListener(name, finish);
+  leftDivider.addEventListener('pointerdown', event => {
+    if (!hasSidebar() || event.button !== 0) return;
+    event.preventDefault();
+    leftDivider.focus();
+    drag = { id: event.pointerId, handle: leftDivider, x: event.clientX, width: side.getBoundingClientRect().width };
+    leftDivider.setPointerCapture(event.pointerId);
+    document.body.classList.add('board-split-dragging');
+  });
+  leftDivider.addEventListener('pointermove', event => {
+    if (drag?.handle === leftDivider && drag.id === event.pointerId)
+      schedule(null, drag.width + event.clientX - drag.x);
+  });
+  for (const handle of [divider, leftDivider])
+    for (const name of ['pointerup', 'pointercancel', 'lostpointercapture']) handle.addEventListener(name, finish);
   window.addEventListener('blur', () => finish());
   divider.addEventListener('dblclick', () => { ratio = 0.58; apply(); save(); });
+  leftDivider.addEventListener('dblclick', () => {
+    apply(null, Math.max(220, Math.min(280, window.innerWidth * 0.22))); save();
+  });
+  leftDivider.addEventListener('keydown', event => {
+    if (!hasSidebar()) return;
+    const width = side.getBoundingClientRect().width;
+    const step = event.shiftKey ? 40 : 16, bounds = sidebarBounds(contentSpace());
+    const targets = { ArrowLeft: width - step, ArrowRight: width + step, Home: bounds.min, End: bounds.max };
+    if (!(event.key in targets)) return;
+    event.preventDefault(); event.stopPropagation();
+    apply(null, targets[event.key]); save();
+  });
   divider.addEventListener('keydown', event => {
     const width = board.rootEl.parentElement.getBoundingClientRect().width;
     const step = event.shiftKey ? 40 : 16;

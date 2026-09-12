@@ -72,6 +72,7 @@ import { install3DBoard } from './board-3d.js';
 import { installWorkspaceSplit } from './workspace-split.js';
 import { installBoardResizeHandle } from './board-resize.js';
 import { installLeftPaneToggle } from './left-pane.js';
+import { installClockPresentation } from './clock-presentation.js';
 
 // Expose Chess to eval-graph's computeDivision helper — avoids a
 // circular import while still letting it replay SAN to count pieces
@@ -2152,7 +2153,7 @@ async function main() {
     initialMs: 0,
     displayOnly: false,
     // Tournament designs now share the viewer's saved clock appearance.
-    // The older digital/analog clocks remain available through their buttons.
+    // The older digital/analog clocks remain available in the same selector.
     style: localStorage.getItem('stockfish-explain.clock-presentation-v2') || 'atelier',
   };
   const hardwareClock = createClockHardwareBridge({clock,turn:()=>board.chess.turn(),render:()=>renderClock(),expired:loser=>{
@@ -2544,15 +2545,16 @@ async function main() {
     queueMicrotask(renderClock);
   });
   function canSetClockTimeControl() {
-    return clock.active && clock.mode === 'down' && !window.__practiceStarting &&
+    return clock.active && !window.__practiceStarting && !board.interactionLocked &&
       !document.body.classList.contains('practice-finished') && !board.chess.isGameOver();
   }
   board.setClockTimeControl = value => {
-    if (!canSetClockTimeControl()) throw new Error('Start an active timed game before setting the clock.');
+    if (!canSetClockTimeControl()) throw new Error('Add a clock to an unfinished position before setting its time.');
     // Keep the current position, turn, interval and pause state. Reset the actual
     // timekeeper, so flag fall and per-move increments use the new control too.
     const control = resetClockControl(clock, value, board.chess.turn(), Date.now());
     hardwareClock.restart();
+    if (!clock.timerId) clock.timerId = setInterval(clockTick, 100);
     const mode = document.getElementById('practice-clock-mode');
     const preset = document.getElementById('practice-clock-preset');
     const minutes = document.getElementById('practice-clock-minutes');
@@ -2588,32 +2590,7 @@ async function main() {
     renderClock();
   });
 
-  // Clock style switcher — persists the choice to localStorage and
-  // re-renders immediately so the user sees the chosen skin.
-  (() => {
-    const switcher = document.getElementById('clock-style-switcher');
-    if (!switcher) return;
-    const applyActive = () => {
-      switcher.querySelectorAll('.clock-style-btn').forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.style === clock.style);
-      });
-      renderClock();
-    };
-    switcher.addEventListener('click', (ev) => {
-      const btn = ev.target.closest('.clock-style-btn');
-      if (!btn) return;
-      clock.style = btn.dataset.style;
-      try { localStorage.setItem('stockfish-explain.clock-style', clock.style); } catch {}
-      try { localStorage.setItem('stockfish-explain.clock-presentation-v2', clock.style); } catch {}
-      applyActive();
-    });
-    board.addEventListener('clock-design-request', () => {
-      clock.style = 'atelier';
-      try { localStorage.setItem('stockfish-explain.clock-presentation-v2', clock.style); } catch {}
-      applyActive();
-    });
-    applyActive();
-  })();
+  installClockPresentation(board, clock, renderClock);
 
   // Untimed-increment enable toggle — enables the seconds input.
   (() => {
