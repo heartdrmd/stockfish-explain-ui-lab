@@ -1,6 +1,7 @@
 // Position only: keep the same clock element and its existing game timer.
 export function installFloatingClock(card, host) {
   const grip = document.getElementById('clock-float-drag');
+  const toolbarToggle = document.getElementById('btn-move-clock');
   const panel = host.closest?.('.tools');
   if (!grip || !panel) return;
   const key = 'stockfish-explain.floating-clock-position';
@@ -62,6 +63,11 @@ export function installFloatingClock(card, host) {
     grip.setAttribute('aria-pressed', String(enabled));
     grip.setAttribute('aria-label', enabled ? 'Stop moving clock' : 'Enable clock move mode');
     grip.title = enabled ? 'Move mode on · drag the clock, click here to turn off' : 'Enable Move mode · move the clock without rotating it';
+    if (toolbarToggle) {
+      toolbarToggle.setAttribute('aria-pressed', String(enabled));
+      toolbarToggle.setAttribute('aria-label', enabled ? 'Finish moving clock' : 'Move clock');
+      toolbarToggle.title = enabled ? 'Move mode on · drag the clock, then click here to finish' : 'Move clock · click, then drag the clock without rotating it';
+    }
     card.classList.toggle('clock-move-mode', enabled);
     if (!enabled) finish();
   }
@@ -69,6 +75,7 @@ export function installFloatingClock(card, host) {
     if (frame) return;
     frame = requestAnimationFrame(() => {
       frame = 0;
+      if (toolbarToggle) toolbarToggle.disabled = !active() || !card.querySelector('canvas');
       if (active()) {
         const face = card.querySelector('.game-clock');
         const naturalWidth = parseFloat(face?.style.width || '300');
@@ -93,6 +100,9 @@ export function installFloatingClock(card, host) {
   setMoveMode(false);
   grip.addEventListener('click', () => {
     if (skipClick) { skipClick = false; return; }
+    if (active()) setMoveMode(!moveMode);
+  });
+  toolbarToggle?.addEventListener('click', () => {
     if (active()) setMoveMode(!moveMode);
   });
   card.addEventListener('pointerdown', event => {

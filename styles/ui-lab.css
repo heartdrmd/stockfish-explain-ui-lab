@@ -741,6 +741,7 @@ body.dividers-hidden .workspace-divider::after{display:none!important}
 }
 
 .clock-move-mode #clock-float-drag{background:#506c3a!important;border-color:#d6df83!important;color:#fffac5!important;box-shadow:0 0 0 2px #d6df8344,0 0 14px #c4dc7166}
+#btn-move-clock[aria-pressed=true]{background:#506c3a!important;border-color:#d6df83!important;color:#fffac5!important;box-shadow:0 0 0 2px #d6df8344,0 0 14px #c4dc7166}
 .clock-move-mode .clock-live-canvas canvas{cursor:move!important}
 
 @media(min-width:800px){
