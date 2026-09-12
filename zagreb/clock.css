@@ -1,6 +1,8 @@
 .viewport-actions .clock-free-toggle { display:flex; align-items:center; justify-content:center; border-radius:4px; cursor:pointer; }
 .viewport-actions .clock-free-toggle[aria-pressed=true] { color:#fffac5; background:#506c3a; border-color:#d6df83; box-shadow:0 0 0 2px #d6df8344,0 0 14px #c4dc7166; }
 .clock-free-position { z-index:6; }
+/* Keep the toolbar clickable even during a clock resize/reposition frame. */
+.scene-wrap:has(.clock-free-toggle) .viewport-actions { z-index:7; }
 .clock-free-moving canvas { cursor:grab!important; touch-action:none; }
 .clock-free-dragging canvas { cursor:grabbing!important; }
 .clock-control-dialog {
