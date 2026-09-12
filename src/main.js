@@ -395,6 +395,7 @@ async function main() {
   installRightPaneToggle();
   installDividerToggle();
   const workspaceSplit = installWorkspaceSplit(board);
+  board.workspaceLayout = workspaceSplit;
   installNativeBoardPan(board, workspaceSplit);
 
   wireTabs();

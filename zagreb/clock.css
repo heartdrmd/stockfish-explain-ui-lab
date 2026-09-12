@@ -1063,6 +1063,23 @@
 .watch-pane .watch-player-identity { flex-wrap:wrap; }
 .watch-pane .game-clock-fit { max-width:100%; }
 
+.watch-preview-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:10px 0}
+.watch-preview{display:flex;flex-direction:column;gap:5px;min-width:0;text-align:left;border:1px solid #586b51;border-radius:5px;background:#1c2a22;padding:8px}
+.watch-preview:hover{border-color:#d2c08a;background:#2b3c2c}
+.watch-preview-caption{display:flex;gap:8px;align-items:center;font-size:12px}
+.watch-preview-caption>b{color:#b8c797}
+.watch-preview-caption>span{margin-left:auto;color:#aaba99;font-size:9px}
+.watch-preview-player{font-size:11px;overflow-wrap:anywhere}
+.watch-mini-board{display:grid;grid-template-columns:repeat(8,1fr);width:100%;aspect-ratio:1;overflow:hidden;border-radius:2px}
+.watch-mini-board>span{aspect-ratio:1;min-width:0;display:grid;place-items:center}
+.watch-mini-board .light{background:#f0d9b5}.watch-mini-board .dark{background:#b58863}
+.watch-mini-board img{width:100%;height:100%;object-fit:contain}
+.watch-mini-unavailable{display:grid;place-items:center;aspect-ratio:1;background:#263529;font-size:11px}
+.watch-panel:has(.watch-preview-list){width:min(530px,calc(100vw - 24px))}
+
+.play-side-rail .watch-notation{height:100%;max-height:none}
+.play-side-rail .watch-players strong{white-space:normal;overflow-wrap:anywhere}
+
 .watch-pane .fullscreen-analysis { padding:10px; border:1px solid #81917a55; border-radius:6px; background:#15211bf5; color:#e2e8d4; max-height:min(36dvh,330px); overflow:auto; }
 .watch-pane .fullscreen-analysis header { display:flex; align-items:center; justify-content:space-between; font-size:14px; gap:6px; margin-bottom:6px; }
 .watch-pane .fullscreen-analysis button,.watch-pane .fullscreen-analysis select { min-height:28px; border:1px solid #81917a55; border-radius:4px; background:#24332b; color:inherit; font:inherit; font-size:12px; padding:4px 6px; }

@@ -87,6 +87,7 @@ export function installWorkspaceSplit(board) {
     if (ratio != null) try { localStorage.setItem(STORAGE_KEY, String(ratio)); } catch {}
     try { localStorage.setItem(SCALE_KEY, String(squareScale)); } catch {}
     if (sideWidth != null) try { localStorage.setItem(SIDE_KEY, String(sideWidth)); } catch {}
+    board.dispatchEvent(new Event('workspace-layout-change'));
   }
   function apply(requested, requestedSide = null) {
     if (!isActive()) return;
@@ -237,6 +238,11 @@ export function installWorkspaceSplit(board) {
   updateLayout();
   return {
     isActive, setBoardSize: apply, resizeFromCorner, save,
+    capture: () => ({ratio,sideWidth,squareScale}),
+    restore: value => {
+      ratio=value.ratio;sideWidth=value.sideWidth;squareScale=value.squareScale;
+      apply();save();updateLayout();
+    },
     restoreScale: value => { if(value>=35&&value<=100){squareScale=value/100;apply();save();} },
     getCornerSize: () => (using3D() ? board.rootEl.parentElement : board.rootEl).getBoundingClientRect().width,
   };

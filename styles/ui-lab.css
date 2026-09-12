@@ -840,3 +840,7 @@ body.watch-mode .uniboard > :is(#study-side,#study-tools) { position:sticky!impo
   body.watch-mode:not(.left-pane-hidden):not(.right-pane-hidden):not(.mobile-mode) .uniboard.split-layout { grid-template-columns:var(--split-side-width,220px) 16px 24px var(--split-board-width) 16px minmax(0,1fr); grid-template-areas:"side left-divider gauge board divider tools"; }
   body.watch-mode:not(.left-pane-hidden).right-pane-hidden:not(.mobile-mode) .uniboard.split-layout { grid-template-columns:var(--split-side-width,220px) 16px 24px var(--split-board-width); grid-template-areas:"side left-divider gauge board"; }
 }
+
+/* Saved fullscreen layouts also work when the browser cannot grant native fullscreen. */
+body.presentation-fullscreen { overflow:hidden; }
+#zagreb-board.presentation-fullscreen { position:fixed!important; inset:0!important; width:100vw!important; height:100dvh!important; max-width:none!important; max-height:none!important; z-index:10000; }

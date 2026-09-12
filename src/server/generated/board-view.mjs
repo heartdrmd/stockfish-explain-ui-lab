@@ -5243,6 +5243,29 @@ function validClockLayouts(value) {
 	return !!value && typeof value === "object" && !Array.isArray(value) && Object.entries(value).every(([key, views]) => isClockLayoutKey(key) && validClock3DViews(views));
 }
 //#endregion
+//#region lib/saved-layout.ts
+var finite = (v, min, max) => typeof v === "number" && Number.isFinite(v) && v >= min && v <= max;
+function validWorkspaceLayout(v) {
+	const s = v;
+	return !!s && [
+		"left",
+		"right",
+		"dividers"
+	].every((k) => typeof s[k] === "boolean") && (s.ratio === null || finite(s.ratio, .01, .99)) && (s.sideWidth === null || finite(s.sideWidth, 0, 560)) && finite(s.squareScale, .35, 1);
+}
+function validBoardLayout(v) {
+	const s = v, vector = (v) => Array.isArray(v) && v.length === 3 && v.every((n) => finite(n, -9.999, 9.999));
+	return !!s && [
+		"3d",
+		"classic",
+		"materials"
+	].includes(s.display) && ["white", "black"].includes(s.orientation) && ["orbit", "pan"].includes(s.navigation) && !!s.camera && vector(s.camera.position) && vector(s.camera.target) && (s.camera.autoFraming == null || typeof s.camera.autoFraming === "boolean") && finite(s.flatScale, 35, 100) && finite(s.flatPan, -50, 50) && finite(s.flatPanY, -50, 50);
+}
+function validSavedLayout(v) {
+	const s = v;
+	return !!s && typeof s.expanded === "boolean" && (s.window == null || validBoardLayout(s.window)) && (s.fullscreen == null || validBoardLayout(s.fullscreen)) && (s.workspace == null || validWorkspaceLayout(s.workspace));
+}
+//#endregion
 //#region lib/flip-camera.ts
 function cameraFacesBlack(camera) {
 	return camera.position[2] < camera.target[2];
@@ -5261,6 +5284,13 @@ function savedBoardOrientation(saved) {
 }
 function validateView(raw) {
 	const s = raw;
+	if (s?.layout != null && !validSavedLayout(s.layout)) throw new Error("Invalid saved board layout.");
+	if (s?.analysisDisplay != null && ![
+		"off",
+		"lines",
+		"evaluation"
+	].includes(s.analysisDisplay)) throw new Error("Invalid analysis display.");
+	if (s?.showGraph != null && typeof s.showGraph !== "boolean") throw new Error("Invalid graph visibility.");
 	if (s?.cameraDefaultRevision != null && (typeof s.cameraDefaultRevision !== "string" || s.cameraDefaultRevision.length > 80)) throw new Error("Invalid camera default revision.");
 	if (!s || typeof s.name !== "string" || !s.name.trim() || s.name.length > 80 || !["studio", "board"].includes(s.mode) || ![
 		"king",

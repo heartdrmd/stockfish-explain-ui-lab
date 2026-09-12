@@ -88,6 +88,16 @@ export function install3DBoard(board) {
   const gaugeControl = document.getElementById('eval-gauge-control');
   let enabled = false, ready = false, busy = false, scheduled = false, lastState = '', lastOverlay = '';
   let viewRevision = 0;
+  function publishWorkspace() {
+    const split=board.workspaceLayout?.capture();
+    if (!split) return;
+    const workspace={...split,left:!document.body.classList.contains('left-pane-hidden'),
+      right:!document.body.classList.contains('right-pane-hidden'),dividers:!document.body.classList.contains('dividers-hidden')};
+    frame.dataset.workspace=JSON.stringify(workspace);
+    if (ready) frame.contentWindow.postMessage({type:'zagreb:workspace-state',workspace},location.origin);
+  }
+  board.addEventListener('workspace-layout-change',publishWorkspace);
+  new MutationObserver(publishWorkspace).observe(document.body,{attributes:true,attributeFilter:['class']});
   let clockStyleReady = false, pendingClockStyle = null;
   const watchButton = document.getElementById('btn-watch');
   let returnToNative = false;
@@ -335,7 +345,26 @@ export function install3DBoard(board) {
       return;
     }
     if (event.data?.type === 'zagreb:account-ready') { syncAccount(); return; }
-    if (event.data?.type === 'zagreb:ready') { ready = true; if(fullscreenButton)fullscreenButton.disabled=false; if(watchButton)watchButton.disabled=false; sync(true); return; }
+    if (event.data?.type === 'zagreb:ready') { ready = true; if(fullscreenButton)fullscreenButton.disabled=false; if(watchButton)watchButton.disabled=false; sync(true); publishWorkspace(); return; }
+    if (event.data?.type === 'zagreb:workspace-restore') {
+      const v=event.data.workspace;
+      if (!v || !['left','right','dividers'].every(k=>typeof v[k]==='boolean') ||
+        !(v.ratio===null || Number.isFinite(v.ratio)&&v.ratio>=.01&&v.ratio<=.99) ||
+        !(v.sideWidth===null || Number.isFinite(v.sideWidth)&&v.sideWidth>=0&&v.sideWidth<=560) ||
+        !Number.isFinite(v.squareScale)||v.squareScale<.35||v.squareScale>1) return;
+      for(const name of ['left','right','dividers']) {
+        const button=document.getElementById(name==='dividers'?'btn-toggle-dividers':`btn-toggle-${name}-pane`);
+        if(button && (button.getAttribute('aria-pressed')==='true')!==v[name])button.click();
+      }
+      board.workspaceLayout?.restore(v);publishWorkspace();return;
+    }
+    if (event.data?.type === 'zagreb:presentation-fullscreen') {
+      if(typeof event.data.expanded!=='boolean')return;
+      frame.classList.toggle('presentation-fullscreen',event.data.expanded);
+      document.body.classList.toggle('presentation-fullscreen',event.data.expanded);
+      if(event.data.expanded && !enabled)setEnabled(true);
+      window.dispatchEvent(new Event('resize'));return;
+    }
     if (event.data?.type === 'zagreb:clock-hardware-model') {
       board.setClockHardwareModel?.(event.data.family); return;
     }

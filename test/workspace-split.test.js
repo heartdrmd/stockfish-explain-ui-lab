@@ -84,9 +84,10 @@ function workspaceFixture(t, saved = new Map()) {
   }
   const flush = () => {const pending=[...frames.values()]; frames.clear(); pending.forEach(cb=>cb());};
   installRightPaneToggle();
-  const split = installWorkspaceSplit({rootEl:root}); flush();
+  const board=Object.assign(new EventTarget(),{rootEl:root});
+  const split = installWorkspaceSplit(board); flush();
   const left = elements.find(el=>el.id==='workspace-left-divider'), right = elements.find(el=>el.id==='workspace-divider');
-  return {left,right,rightToggle,body,win,saved,split,flush, resizeEvents:()=>resizeEvents,
+  return {board,left,right,rightToggle,body,win,saved,split,flush, resizeEvents:()=>resizeEvents,
     height:()=>cssNumber('--split-board-height',600),
     widths:()=>({side:side.getBoundingClientRect().width,board:area.getBoundingClientRect().width}),
     event(handle,type,properties={}) {const event=new Event(type,{cancelable:true}); Object.assign(event,{pointerId:1,clientX:100,button:0,...properties}); handle.dispatchEvent(event);} };
@@ -161,4 +162,13 @@ test('Watch keeps both divider widths and gives the board space only when a pane
   assert.ok(f.widths().board>before.board+16);
   f.event(f.rightToggle,'click');f.flush();
   assert.equal(f.widths().board,before.board+16);
+});
+
+test('saved workspace restores both divider sizes and native board scale together',t=>{
+  const f=workspaceFixture(t);let changes=0;f.board.addEventListener('workspace-layout-change',()=>changes++);
+  const state={ratio:.67,sideWidth:325,squareScale:.62};
+  f.split.restore(state);f.flush();
+  assert.deepEqual(f.split.capture(),state);
+  assert.equal(f.saved.get('stockfish-explain.workspace-side-width'),'325');
+  assert.ok(changes>0,'Viewer autosave receives layout changes');
 });
