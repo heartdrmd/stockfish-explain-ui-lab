@@ -3,7 +3,7 @@
 
 import { api, currentUser }       from './api.js';
 import { frameUpdate, isResizeObserverNotification } from './resize-observer.js';
-import { resetClockControl } from './generated/clock-control.js';
+import { resetClockControl, startUntimedDisplay, usesClockBudget } from './generated/clock-control.js';
 import { Engine, ENGINE_FLAVORS } from './engine.js';
 import { BoardController, toDests as toDestsFrom } from './board.js';
 import { Explainer }              from './explain.js';
@@ -2148,6 +2148,7 @@ async function main() {
     lastTickAt: 0,
     timerId: 0,
     initialMs: 0,
+    displayOnly: false,
     // Tournament designs now share the viewer's saved clock appearance.
     // The older digital/analog clocks remain available through their buttons.
     style: localStorage.getItem('stockfish-explain.clock-presentation-v2') || 'atelier',
@@ -2172,9 +2173,16 @@ async function main() {
   function renderClock() {
     const clockCard = document.getElementById('practice-clock');
     if (clockCard) clockCard.dataset.clockView = clock.style;
+    const available = clockCard?.hidden === false;
+    const canAddUntimedClock = !available && !clock.active && !board.chess.isGameOver() &&
+      !document.body.classList.contains('practice-finished');
+    const addArea = document.getElementById('clock-add-area');
+    const addButton = document.getElementById('btn-add-untimed-clock');
+    if (addArea) addArea.hidden = available;
+    if (addButton) addButton.disabled = !canAddUntimedClock;
     // The immersive board displays this same clock; it never runs a second timer.
     board.studyClock = {
-      available: document.getElementById('practice-clock')?.hidden === false,
+      available, canAddUntimedClock,
       active: clock.active, paused: clock.paused === true, mode: clock.mode,
       whiteMs: clock.msWhite, blackMs: clock.msBlack,
       running: clock.active && !clock.paused ? clock.tickingFor : null,
@@ -2364,6 +2372,7 @@ async function main() {
       glyphAt(240, rightColor);
   }
   function startClock(minutes, incrementSec, mode = 'down') {
+    clock.displayOnly = false;
     clock.active = true;
     clock.mode   = mode;
     clock.initialMs = minutes * 60_000;
@@ -2429,6 +2438,15 @@ async function main() {
   }
   function switchClock() {
     if (!clock.active) return;
+    if (clock.displayOnly) {
+      // A paused counter still follows actual turns without charging any time.
+      clockTick();
+      if (board.chess.isGameOver()) { stopClock(); return; }
+      clock.tickingFor = board.chess.turn();
+      clock.lastTickAt = Date.now();
+      renderClock();
+      return;
+    }
     if (clock.paused) return;  // paused = neither side advances
     const now = Date.now();
     // Apply increment to the side that JUST moved (current tickingFor
@@ -2480,6 +2498,35 @@ async function main() {
   window.__clockStop     = stopClock;
   window.__clockSwitch   = switchClock;
   board.addEventListener('clock-pause-request', togglePauseClock);
+  board.addUntimedClock = () => {
+    if (window.__practiceStarting || board.interactionLocked) throw new Error('Wait for the position to finish loading.');
+    // Repeated requests must never restart a clock or replace a timed game.
+    if (clock.active || document.getElementById('practice-clock')?.hidden === false) return;
+    if (board.chess.isGameOver() || document.body.classList.contains('practice-finished'))
+      throw new Error('Start a new game or study position to add a clock.');
+    startUntimedDisplay(clock, board.chess.turn(), Date.now());
+    const card = document.getElementById('practice-clock');
+    if (card) { card.hidden = false; card.style.display = 'block'; }
+    document.getElementById('clock-format').textContent = 'Untimed · time since added';
+    document.getElementById('clock-add-status').textContent = '';
+    if (clock.timerId) clearInterval(clock.timerId);
+    clock.timerId = setInterval(clockTick, 100);
+    board.dispatchEvent(new Event('clock-design-request'));
+    renderClock();
+  };
+  document.getElementById('btn-add-untimed-clock')?.addEventListener('click', () => {
+    try { board.addUntimedClock(); }
+    catch (error) { document.getElementById('clock-add-status').textContent = error.message; }
+  });
+  board.addEventListener('new-game', () => {
+    if (clock.displayOnly) {
+      stopClock();
+      const card = document.getElementById('practice-clock');
+      if (card) { card.hidden = true; card.style.display = 'none'; }
+      clock.displayOnly = false;
+    }
+    queueMicrotask(renderClock);
+  });
   function canSetClockTimeControl() {
     return clock.active && clock.mode === 'down' && !window.__practiceStarting &&
       !document.body.classList.contains('practice-finished') && !board.chess.isGameOver();
@@ -2515,6 +2562,13 @@ async function main() {
     if (!clock.active) return;
     if (ev?.detail?.bulk) return;  // position-replay event, not a real move
     switchClock();
+  });
+  board.addEventListener('nav', () => {
+    if (!clock.displayOnly || !clock.active) return;
+    clockTick();
+    clock.tickingFor = board.chess.turn();
+    clock.lastTickAt = Date.now();
+    renderClock();
   });
 
   // Clock style switcher — persists the choice to localStorage and
@@ -6227,7 +6281,7 @@ async function main() {
                     // back to the engine's clock so timed games aren't
                     // penalised for variation-mode searches that
                     // weren't really needed. User-requested.
-                    if (wasForced && variationFork?.thinkMs && window.__clock?.active) {
+                    if (wasForced && variationFork?.thinkMs && usesClockBudget(clock)) {
                       try {
                         const cs = window.__clock;
                         // Engine's color = the side that's NOT the user.
@@ -6363,7 +6417,7 @@ async function main() {
     // Clock mode — engine uses ~1/30th of its remaining time per move,
     // with a 300ms floor so it doesn't move instantly in the endgame.
     // Clamped so it never exceeds 12s (keeps practice games flowing).
-    if (clock.active && practiceColor) {
+    if (usesClockBudget(clock) && practiceColor) {
       const engineMs = practiceColor === 'white' ? clock.msBlack : clock.msWhite;
       let budget = Math.max(300, Math.min(12_000, Math.floor(engineMs / 30)));
       // Critical-position boost: if the engine's PREVIOUS search showed

@@ -1,10 +1,40 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readClockControl, resetClockControl } from '../src/generated/clock-control.js';
+import { readClockControl, resetClockControl, startUntimedDisplay, usesClockBudget } from '../src/generated/clock-control.js';
 
 const currentClock = () => ({active: true, mode: 'down', paused: true, timerId: 0,
   initialMs: 300000, msWhite: 243000, msBlack: 289000, incMs: 3000,
   tickingFor: 'w', lastTickAt: 1000, style: 'atelier'});
+
+test('an optional untimed display cannot supply game timing limits or replace a running clock', () => {
+  for (const turn of ['w', 'b']) {
+    const clock = {...currentClock(), active: false};
+    startUntimedDisplay(clock, turn, 6789);
+    assert.equal(clock.mode, 'up');
+    assert.equal(clock.paused, false);
+    assert.equal(clock.displayOnly, true);
+    assert.equal(clock.tickingFor, turn);
+    assert.equal(clock.lastTickAt, 6789);
+    assert.equal(clock.msWhite, 0);
+    assert.equal(clock.msBlack, 0);
+    assert.equal(clock.incMs, 0);
+    assert.equal(clock.initialMs, 0);
+    assert.equal(usesClockBudget(clock), false);
+    assert.throws(() => resetClockControl(clock, {minutes: 1, incrementSeconds: 0}, turn, 7000));
+    const before = {...clock};
+    assert.throws(() => startUntimedDisplay(clock, turn, 9000));
+    assert.deepEqual(clock, before, 'A repeated Add request cannot reset the running counter');
+  }
+  const timed = currentClock();
+  assert.throws(() => startUntimedDisplay(timed, 'w', 6000));
+  assert.deepEqual(timed, currentClock(), 'A countdown and its increment are preserved');
+  assert.equal(usesClockBudget(timed), true);
+  for (const [turn, now] of [['x', 1000], ['w', NaN]]) {
+    const stopped = {...currentClock(), active: false};
+    assert.throws(() => startUntimedDisplay(stopped, turn, now));
+    assert.deepEqual(stopped, {...currentClock(), active: false});
+  }
+});
 
 test('changing time control resets both actual clocks and preserves running/paused state', () => {
   for (const paused of [true, false]) {

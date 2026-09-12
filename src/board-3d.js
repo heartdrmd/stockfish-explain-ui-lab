@@ -189,14 +189,19 @@ export function install3DBoard(board) {
       return;
     }
     // The clock remains usable in the parent pane when native 2D hides this frame.
-    if (event.data?.type === 'zagreb:clock-control') {
+    if (event.data?.type === 'zagreb:clock-control' || event.data?.type === 'zagreb:clock-add') {
       const { requestId } = event.data;
       if (typeof requestId !== 'string' || !requestId.length || requestId.length > 80) return;
       try {
-        const control = readClockControl(event.data.control);
-        if (!control) throw new Error('Use 1–999 whole minutes and 0–60 seconds increment.');
-        if (typeof board.setClockTimeControl !== 'function') throw new Error('The game clock is not ready.');
-        board.setClockTimeControl(control);
+        if (event.data.type === 'zagreb:clock-add') {
+          if (typeof board.addUntimedClock !== 'function') throw new Error('The game clock is not ready.');
+          board.addUntimedClock();
+        } else {
+          const control = readClockControl(event.data.control);
+          if (!control) throw new Error('Use 1–999 whole minutes and 0–60 seconds increment.');
+          if (typeof board.setClockTimeControl !== 'function') throw new Error('The game clock is not ready.');
+          board.setClockTimeControl(control);
+        }
         syncClock();
         frame.contentWindow.postMessage({type: 'zagreb:clock-control-result', requestId, ok: true}, location.origin);
       } catch (error) {

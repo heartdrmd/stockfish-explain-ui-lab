@@ -81,6 +81,18 @@ test('shared clocks use parent time in both board modes and reject foreign contr
   assert.equal(pauseRequests, 2, 'The visible left-pane clock can pause while the board iframe is hidden');
   assert.equal(clockMessages().length, beforeHiddenTick + 1);
   assert.equal(clockMessages().at(-1).message.whiteMs, 280000, 'Native 2D keeps the shared clock current');
+  let addedClocks = 0;
+  board.addUntimedClock = () => addedClocks++;
+  const addPayload = {requestId: 'add-clock-test'};
+  message('zagreb:clock-add', {}, origin, addPayload);
+  message('zagreb:clock-add', frame.contentWindow, 'https://other.example', addPayload);
+  assert.equal(addedClocks, 0);
+  message('zagreb:clock-add', frame.contentWindow, origin, addPayload);
+  assert.equal(addedClocks, 1, 'Adding a count-up clock also works with the iframe hidden in native 2D');
+  assert.equal(sent.at(-1).message.ok, true);
+  board.addUntimedClock = () => { throw new Error('Wait for the position to finish loading.'); };
+  message('zagreb:clock-add', frame.contentWindow, origin, addPayload);
+  assert.equal(sent.at(-1).message.ok, false);
   const changes = [];
   board.setClockTimeControl = control => changes.push(control);
   const payload = {requestId: 'clock-test-1', control: {minutes: 10, incrementSeconds: 5}};

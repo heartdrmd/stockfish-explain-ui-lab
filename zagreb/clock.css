@@ -399,6 +399,200 @@
   stroke-width: 1.2;
   stroke-linejoin: round;
 }
+/* Burgundy moulded housing: the original red and contrast styles stay separate. */
+.game-clock .clock-case[data-clock-style='dgt-classic'] {
+  --clock-display: #aab399;
+  --clock-ink: #242e29;
+  isolation: isolate;
+  padding: 22px 22px 13px;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  filter: drop-shadow(0 7px 4px #0005);
+}
+.game-clock [data-clock-style='dgt-classic']::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: 17px 17px 22px 22px;
+  clip-path: polygon(8% 0, 92% 0, 100% 88%, 97% 98%, 3% 98%, 0 88%);
+  background:
+    repeating-radial-gradient(
+      circle at 30% 25%,
+      #d3a7b013 0 0.5px,
+      #180b180d 0.6px 1.4px,
+      transparent 1.5px 3px
+    ),
+    linear-gradient(
+      90deg,
+      #3a1b29 0,
+      #6d3544 7.5%,
+      transparent 8.5% 91.5%,
+      #4a2332 92%,
+      #321722
+    ),
+    linear-gradient(
+      180deg,
+      #946171 0,
+      #734454 2px,
+      #653141 9px,
+      #592838 85%,
+      #411e2c 86%,
+      #815562 87%,
+      #4b2432 100%
+    );
+  box-shadow:
+    inset 0 1px 0 #c6a0aa,
+    inset 0 -3px 4px #1c0d19a6;
+}
+.game-clock [data-clock-style='dgt-classic'] .clock-paddles {
+  left: 29px;
+  right: 29px;
+  top: -13px;
+  height: 19px;
+  gap: 0;
+  align-items: flex-end;
+}
+.game-clock [data-clock-style='dgt-classic'] .clock-paddles::after {
+  content: '';
+  position: absolute;
+  left: calc(50% - 7px);
+  bottom: -1px;
+  width: 14px;
+  height: 13px;
+  border-radius: 50% 50% 0 0;
+  background: linear-gradient(#eeefeb, #a9ada6);
+  box-shadow: 0 1px 2px #272e2944;
+}
+.game-clock [data-clock-style='dgt-classic'] .clock-paddles i {
+  height: 16px;
+  border: 1px solid #d5d9d0;
+  border-radius: 7px 3px 0 0;
+  background: linear-gradient(180deg, #e3e7e0, #c4c9c0 40%, #9ba398);
+  box-shadow:
+    inset 0 2px 2px #ffffffe0,
+    0 2px 2px #20261f66;
+  transform: rotate(3deg);
+  transform-origin: right bottom;
+}
+.game-clock [data-clock-style='dgt-classic'] .clock-paddles i + i {
+  border-radius: 3px 7px 0 0;
+  transform: rotate(-3deg);
+  transform-origin: left bottom;
+}
+.game-clock [data-clock-style='dgt-classic'] .clock-paddles i.pressed {
+  transform: rotate(0);
+  height: 10px;
+  margin-top: 0;
+}
+.game-clock [data-clock-style='dgt-classic'] .clock-faces {
+  position: relative;
+  border: 2px solid #321d27;
+  border-top-width: 4px;
+  border-radius: 4px;
+  background: linear-gradient(
+    173deg,
+    #bec8ae 0,
+    #aab499 22%,
+    #a0ac90 78%,
+    #b0ba9e
+  );
+  box-shadow:
+    0 0 0 4px #613342,
+    0 -5px 0 4px #946474,
+    inset 0 3px 5px #29362599,
+    inset 0 -1px 1px #d9e2c380;
+}
+.game-clock [data-clock-style='dgt-classic'] .clock-face {
+  padding: 6px 7px 9px;
+}
+.game-clock [data-clock-style='dgt-classic'] .clock-player {
+  font-size: 9px;
+  margin-bottom: 4px;
+}
+.game-clock [data-clock-style='dgt-classic'] .clock-segments {
+  height: 35px;
+  stroke: currentColor;
+  stroke-width: 0.65;
+  stroke-linejoin: round;
+  transform: skewX(-6deg);
+  filter: drop-shadow(0 1px 0.35px #d5dfbd50);
+}
+.game-clock .clock-dgt-controls {
+  position: relative;
+  display: flex;
+  margin: 10px -3px 0;
+  overflow: hidden;
+  border: 1px solid #122038;
+  border-radius: 4px 4px 7px 7px;
+  box-shadow:
+    0 1px 1px #2d1725,
+    inset 0 1px 0 #77899b;
+  background: linear-gradient(#3f5571, #233853 48%, #1e2c44);
+}
+.game-clock .clock-dgt-controls button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  flex: 1;
+  min-width: 0;
+  min-height: 30px;
+  padding: 3px 5px;
+  border: 0;
+  border-radius: 0;
+  color: #e5e8e5;
+  background: transparent;
+  font:
+    500 10px/1 Arial,
+    sans-serif;
+  cursor: pointer;
+}
+.game-clock .clock-dgt-controls button + button {
+  border-left: 1px solid #101c2d;
+}
+.game-clock .clock-dgt-controls button:hover:enabled {
+  background: #c2d3ed16;
+}
+.game-clock .clock-dgt-controls button:active:enabled {
+  background: #070b1640;
+}
+.game-clock .clock-dgt-controls button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.game-clock .clock-dgt-controls button:focus-visible {
+  outline: 2px solid #e0d5aa;
+  outline-offset: -3px;
+}
+.game-clock [data-clock-style='dgt-classic'] .clock-maker {
+  margin: 8px 0 0;
+  font-size: 8px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  color: #d5c7cd;
+  text-align: right;
+}
+.optional-clock-control {
+  padding: 0 12px;
+}
+.optional-clock-control[hidden] {
+  display: none !important;
+}
+.optional-clock-control button {
+  width: 100%;
+  min-height: 36px;
+}
+.optional-clock-control [role='status'] {
+  display: block;
+  margin-top: 5px;
+  font:
+    12px/1.4 Arial,
+    sans-serif;
+}
+
 /* TapNSet-inspired metal body, silver sensors and gray LCD. */
 .game-clock [data-clock-style='zmf-classic'] {
   --clock-display: #939889;

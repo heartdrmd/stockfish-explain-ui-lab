@@ -3596,6 +3596,10 @@ var CLOCK_STYLES = [
 		label: "DGT · high contrast"
 	},
 	{
+		id: "dgt-classic",
+		label: "DGT · classic casing"
+	},
+	{
 		id: "zmf",
 		label: "ZMF · blue LED"
 	},

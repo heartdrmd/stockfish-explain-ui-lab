@@ -1,4 +1,23 @@
 //#region lib/clock-control.ts
+function usesClockBudget(clock) {
+	return clock.active && clock.displayOnly !== true;
+}
+function startUntimedDisplay(clock, turn, now) {
+	if (clock.active) throw new Error("The existing game clock is already running.");
+	if (!["w", "b"].includes(turn) || !Number.isFinite(now)) throw new Error("The board is not ready for a clock.");
+	Object.assign(clock, {
+		active: true,
+		mode: "up",
+		displayOnly: true,
+		paused: false,
+		initialMs: 0,
+		msWhite: 0,
+		msBlack: 0,
+		incMs: 0,
+		tickingFor: turn,
+		lastTickAt: now
+	});
+}
 var CLOCK_CONTROL_PRESETS = [
 	[1, 0],
 	[3, 0],
@@ -36,4 +55,4 @@ function resetClockControl(clock, value, turn, now) {
 	return control;
 }
 //#endregion
-export { CLOCK_CONTROL_PRESETS, readClockControl, resetClockControl };
+export { CLOCK_CONTROL_PRESETS, readClockControl, resetClockControl, startUntimedDisplay, usesClockBudget };
