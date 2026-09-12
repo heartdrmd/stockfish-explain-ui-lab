@@ -14,7 +14,7 @@ test('shared clocks use parent time in both board modes and reject foreign contr
     insertBefore(child) { this.children.push(child); }
     click() { this.dispatchEvent(new Event('click')); }
   }
-  const area = new Element(), nav = new Element(), root = new Element();
+  const area = new Element(), nav = new Element(), root = new Element(), graphButton = new Element();
   area.querySelector = () => nav;
   root.parentElement = area;
   root.offsetWidth = 640;
@@ -24,7 +24,7 @@ test('shared clocks use parent time in both board modes and reject foreign contr
   const origin = 'https://chess.example';
   const globals = {
     document: {
-      body: new Element(), querySelector: () => null, getElementById: () => null,
+      body: new Element(), querySelector: () => null, getElementById: id => id === 'btn-live-graph' ? graphButton : null,
       createElement: () => {
         const element = new Element();
         element.contentWindow = { postMessage: (message, target) => sent.push({message, target}) };
@@ -66,6 +66,27 @@ test('shared clocks use parent time in both board modes and reject foreign contr
   const positions = () => sent.filter(item => item.message.type === 'zagreb:position').map(item => item.message);
   const firstViewRevision = positions().at(-1).viewRevision;
   assert.equal(positions().at(-1).orientation, 'white');
+  board.studyGraph = {available:true, enabled:true, visible:false, points:[{path:'ab', label:'1. e4',value:0,score:'0.00'}]};
+  let graphClicks = 0, graphPath;
+  board.goToPath = path => { graphPath = path; };
+  graphButton.addEventListener('click', () => {
+    graphClicks++; board.studyGraph.visible = !board.studyGraph.visible;
+    board.dispatchEvent(new Event('graph-change'));
+  });
+  const graphRequest = {control:'graph', visible:true};
+  message('zagreb:visibility', {}, origin, graphRequest);
+  assert.equal(graphClicks, 0);
+  message('zagreb:visibility', frame.contentWindow, origin, graphRequest);
+  assert.equal(graphClicks, 1, 'The fullscreen toggle routes through the existing graph button');
+  assert.equal(sent.findLast(item=>item.message.type === 'zagreb:overlay').message.graph.visible, true);
+  message('zagreb:visibility', frame.contentWindow, origin, graphRequest);
+  assert.equal(graphClicks, 1, 'An already visible graph is not toggled off by a repeated request');
+  message('zagreb:navigate', frame.contentWindow, origin, {path:'ab'});
+  assert.equal(graphPath, 'ab', 'Graph clicks can navigate its mainline even outside the displayed variation');
+  board.studyGraph.enabled = false;
+  message('zagreb:visibility', frame.contentWindow, origin, {control:'graph',visible:false});
+  assert.equal(graphClicks, 1, 'Existing practice restrictions still control graph requests');
+  board.studyGraph.visible = false;
   assert.deepEqual(clockMessages().at(-1), {message:{type:'zagreb:clock',...board.studyClock},target:origin});
   message('zagreb:clock-pause', {}, origin);
   message('zagreb:clock-pause', frame.contentWindow, 'https://other.example');

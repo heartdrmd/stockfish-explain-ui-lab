@@ -101,6 +101,7 @@ export function install3DBoard(board) {
       evaluation: score?.fen === board.fen() ? score.evaluation : null,
       evaluationVisible: !gaugeControl?.classList.contains('eval-gauge-hidden'),
       movesVisible: !movesHidden,
+      graph: board.studyGraph,
       moves: movesFor3D(board),
     };
     const serialized = JSON.stringify(overlay);
@@ -110,6 +111,7 @@ export function install3DBoard(board) {
     }
   }
   if (gauge) new MutationObserver(() => syncOverlay()).observe(gauge, {attributes: true, attributeFilter: ['data-evaluation']});
+  board.addEventListener('graph-change', () => syncOverlay());
   if (gaugeControl) new MutationObserver(() => syncOverlay()).observe(gaugeControl, {attributes: true, attributeFilter: ['class']});
   function snapshot() {
     const cg = board.cg.state;
@@ -223,6 +225,9 @@ export function install3DBoard(board) {
     }
     if (event.data?.type === 'zagreb:visibility') {
       if (typeof event.data.visible !== 'boolean') return;
+      if (event.data.control === 'graph' && board.studyGraph?.enabled &&
+          event.data.visible !== board.studyGraph.visible)
+        document.getElementById('btn-live-graph')?.click();
       if (event.data.control === 'moves' && event.data.visible === movesHidden) movesToggle.click();
       if (event.data.control === 'evaluation' && event.data.visible === gaugeControl?.classList.contains('eval-gauge-hidden'))
         document.getElementById('eval-gauge-toggle')?.click();
@@ -233,7 +238,8 @@ export function install3DBoard(board) {
     if (event.data?.type === 'zagreb:navigate') {
       if (busy || board.interactionLocked || window.__practiceStarting) return;
       const path = event.data.path;
-      if (typeof path === 'string' && movesFor3D(board).some(move => move.path === path)) board.goToPath(path);
+      if (typeof path === 'string' && (movesFor3D(board).some(move => move.path === path) ||
+          (board.studyGraph?.visible && board.studyGraph.enabled && board.studyGraph.points.some(point => point.path === path)))) board.goToPath(path);
       return;
     }
     if (event.data?.type !== 'zagreb:move') return;

@@ -56,6 +56,7 @@ function aliasesFor(o) {
 }
 import * as Archive from './game_archive.js';
 import { EvalGraph }     from './eval-graph.js';
+import { studyGraphForBoard } from './board-graph.js';
 import { computeGameStats, renderStatsPanel } from './game-stats.js';
 import * as MoveTime from './movetime.js';
 import * as OpeningVariation from './opening-variation.js';
@@ -11762,7 +11763,19 @@ async function main() {
       graphHeading.textContent = `📈 Evaluation timeline${savedLabel ? ` · ${savedLabel}` : ''}`;
     }
 
+    function publishStudyGraph() {
+      const enabled = !(practiceColor && !document.body.classList.contains('practice-finished'));
+      board.studyGraph = studyGraphForBoard(board, fenEvalCache, !card.hidden, enabled);
+      btn.setAttribute('aria-pressed', String(board.studyGraph.visible));
+      btn.setAttribute('aria-label', board.studyGraph.visible ? 'Hide graph' : 'Show graph');
+      btn.title = enabled ? 'Show or hide evaluation graph' : 'Graph unlocks when the practice game ends';
+      const navButton = document.getElementById('nav-graph');
+      navButton?.classList.toggle('active', board.studyGraph.visible);
+      navButton?.setAttribute('aria-pressed', String(board.studyGraph.visible));
+      board.dispatchEvent(new Event('graph-change'));
+    }
     function update() {
+      publishStudyGraph();
       if (card.hidden) return;
       const plies = pliesFromBoard();
       const stats = computeGameStats(plies);
@@ -11877,6 +11890,7 @@ async function main() {
       }
       btn.classList.remove('live-graph-active');
       if (graph) { graph.destroy(); graph = null; }
+      publishStudyGraph();
     }
 
     // Visibility is not layout state. A review graph that is temporarily
@@ -11934,7 +11948,12 @@ async function main() {
       rafPending = true;
       requestAnimationFrame(() => { rafPending = false; update(); });
     }
-    board.addEventListener('move', requestUpdate);
+    for (const name of ['move', 'nav', 'undo', 'new-game', 'tree-changed'])
+      board.addEventListener(name, requestUpdate);
+    new MutationObserver(() => {
+      const enabled = !(practiceColor && !document.body.classList.contains('practice-finished'));
+      if (enabled !== board.studyGraph?.enabled) requestUpdate();
+    }).observe(document.body, {attributes:true, attributeFilter:['class']});
     // applyMobile runs earlier on resize, so this repaint also moves the
     // one CTA between its desktop and phone hosts after rotation/resizing.
     window.addEventListener('resize', requestUpdate);
@@ -11957,8 +11976,9 @@ async function main() {
     function relocateForSidebar() {
       if (!notationSlot) return;
       if (card.classList.contains('review-mode')) return;  // keep docked below board in review
-      if (!card.hidden && card.parentElement !== notationSlot) {
-        notationSlot.appendChild(card);
+      const host = notationSlot.closest('.notation-hidden') ? document.getElementById('study-tools') : notationSlot;
+      if (!card.hidden && host && card.parentElement !== host) {
+        host.appendChild(card);
         card.classList.add('sidebar-docked');
       }
     }
@@ -12002,6 +12022,13 @@ async function main() {
       syncNavGraphBtn();
     }
     window.__showDefaultGraph = maybeShowDefaultGraph;
+    const movesWrap = notationSlot?.closest('.move-list-wrap');
+    let notationHidden = movesWrap?.classList.contains('notation-hidden');
+    if (movesWrap) new MutationObserver(() => {
+      const hidden = movesWrap.classList.contains('notation-hidden');
+      if (hidden !== notationHidden) { notationHidden = hidden; requestUpdate(); }
+    }).observe(movesWrap, {attributes:true, attributeFilter:['class']});
+    publishStudyGraph();
     setTimeout(maybeShowDefaultGraph, 0);
     syncNavGraphBtn();
 

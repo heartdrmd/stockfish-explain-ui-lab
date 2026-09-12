@@ -98,8 +98,7 @@ body.ui-lab #global-ai-spend-lock {
   box-shadow: none;
 }
 
-/* Graph, Coach, and paid AI are tools, not primary navigation. */
-body.ui-lab.nav-collapsed #btn-live-graph,
+/* Keep the graph toggle reachable beside the other quick controls. */
 body.ui-lab.nav-collapsed #btn-coach,
 body.ui-lab.nav-collapsed #global-ai-spend-lock {
   display: none !important;
