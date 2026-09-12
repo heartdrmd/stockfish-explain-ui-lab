@@ -149,8 +149,8 @@ export function install3DBoard(board) {
   }
   const scheduleFrameSize = frameUpdate(sizeFrame);
   new ResizeObserver(scheduleFrameSize).observe(board.rootEl);
-  toggle.addEventListener('click', () => {
-    enabled = !enabled;
+  function setEnabled(value) {
+    enabled = value;
     frame.hidden = !enabled;
     board.rootEl.style.visibility = enabled ? 'hidden' : '';
     board.rootEl.inert = enabled;
@@ -159,15 +159,17 @@ export function install3DBoard(board) {
     toggle.textContent = enabled ? '2D board' : '3D board';
     if (enabled && !frame.src) frame.src = '/zagreb/?embed=1';
     scheduleFrameSize(); sync(true);
-  });
+  }
+  toggle.addEventListener('click', () => setEnabled(!enabled));
   const restartOpening = () => {
     if (window.__practiceStarting || board.interactionLocked) return;
     document.getElementById('btn-practice-again')?.click();
   };
   restart.addEventListener('click', restartOpening);
   window.addEventListener('message', async event => {
-    if (event.origin !== location.origin || event.source !== frame.contentWindow || !enabled) return;
+    if (event.origin !== location.origin || event.source !== frame.contentWindow) return;
     if (event.data?.type === 'zagreb:ready') { ready = true; sync(true); return; }
+    if (!enabled) return;
     if (event.data?.type === 'zagreb:flip') {
       const orientation = event.data.orientation;
       if (!['white', 'black'].includes(orientation)) return;
@@ -198,4 +200,8 @@ export function install3DBoard(board) {
       await board._onUserMove(uci.slice(0, 2), uci.slice(2, 4), {via: '3d-board', promotion: uci[4]});
     } finally { busy = false; sync(true); }
   });
+  // Start the viewer after its bridge is listening. It restores the complete
+  // last-used appearance and camera automatically from its saved preferences.
+  // Switching to 2D is temporary; the next visit always opens in 3D.
+  setEnabled(true);
 }
