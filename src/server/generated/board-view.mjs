@@ -1,4 +1,4 @@
-//#region node_modules/chess.js/dist/esm/chess.js
+//#region ../zagreb-viewer/node_modules/chess.js/dist/esm/chess.js
 function rootNode(comment) {
 	return comment !== null ? {
 		comment,
@@ -3588,6 +3588,14 @@ var PIECE_NAMES = [
 //#region lib/study-clock.ts
 var CLOCK_STYLES = [
 	{
+		id: "dgt-3000-3d",
+		label: "DGT 3000 · Atelier 3D"
+	},
+	{
+		id: "zmf-pro-3d",
+		label: "ZMF TapNSet Pro · Atelier 3D"
+	},
+	{
 		id: "dgt",
 		label: "DGT · red LCD"
 	},
@@ -3604,10 +3612,6 @@ var CLOCK_STYLES = [
 		label: "DGT 3000 · high contrast"
 	},
 	{
-		id: "dgt-3000-3d",
-		label: "DGT 3000 · 3D"
-	},
-	{
 		id: "zmf",
 		label: "ZMF · blue LED"
 	},
@@ -3618,10 +3622,6 @@ var CLOCK_STYLES = [
 	{
 		id: "zmf-pro",
 		label: "ZMF TapNSet Pro · metal"
-	},
-	{
-		id: "zmf-pro-3d",
-		label: "ZMF TapNSet Pro · 3D"
 	},
 	{
 		id: "wood",
@@ -3734,7 +3734,12 @@ function validateView(raw) {
 		"club",
 		"strong"
 	].includes(s.practice.level))) throw new Error("Invalid practice settings.");
-	if (s.viewing && (s.viewing.showClock != null && typeof s.viewing.showClock !== "boolean" || s.viewing.flatStyle != null && !["classic", "materials"].includes(s.viewing.flatStyle) || s.viewing.flatScale != null && !range(s.viewing.flatScale, 35, 100) || s.viewing.railOrder != null && !["clock-first", "moves-first"].includes(s.viewing.railOrder) || s.viewing.clockStyle != null && !CLOCK_STYLES.some((style) => style.id === s.viewing.clockStyle) || s.viewing.clock3D != null && !validClock3DViews(s.viewing.clock3D) || !range(s.viewing.knightAngle, -180, 180) || s.viewing.pieceScales != null && (typeof s.viewing.pieceScales !== "object" || Array.isArray(s.viewing.pieceScales) || !Object.entries(s.viewing.pieceScales).every(([name, scale]) => PIECE_NAMES.includes(name) && range(scale, 60, 120))) || s.viewing.knightScale != null && !range(s.viewing.knightScale, 60, 120) || s.viewing.lowerControls != null && typeof s.viewing.lowerControls !== "boolean" || s.viewing.upperControls != null && typeof s.viewing.upperControls !== "boolean" || !range(s.viewing.perspective, 25, 55) || !["comfortable", "maximum"].includes(s.viewing.framing) || typeof s.viewing.coordinates !== "boolean")) throw new Error("Invalid viewing settings.");
+	if (s.viewing && (s.viewing.showClock != null && typeof s.viewing.showClock !== "boolean" || s.viewing.flatStyle != null && !["classic", "materials"].includes(s.viewing.flatStyle) || s.viewing.flatScale != null && !range(s.viewing.flatScale, 35, 100) || s.viewing.clockPlacement != null && !["left", "right"].includes(s.viewing.clockPlacement) || s.viewing.clockSide != null && ![
+		"board",
+		"player",
+		"white",
+		"black"
+	].includes(s.viewing.clockSide) || s.viewing.railOrder != null && !["clock-first", "moves-first"].includes(s.viewing.railOrder) || s.viewing.clockStyle != null && !CLOCK_STYLES.some((style) => style.id === s.viewing.clockStyle) || s.viewing.clock3D != null && !validClock3DViews(s.viewing.clock3D) || !range(s.viewing.knightAngle, -180, 180) || s.viewing.pieceScales != null && (typeof s.viewing.pieceScales !== "object" || Array.isArray(s.viewing.pieceScales) || !Object.entries(s.viewing.pieceScales).every(([name, scale]) => PIECE_NAMES.includes(name) && range(scale, 60, 120))) || s.viewing.knightScale != null && !range(s.viewing.knightScale, 60, 120) || s.viewing.lowerControls != null && typeof s.viewing.lowerControls !== "boolean" || s.viewing.upperControls != null && typeof s.viewing.upperControls !== "boolean" || !range(s.viewing.perspective, 25, 55) || !["comfortable", "maximum"].includes(s.viewing.framing) || typeof s.viewing.coordinates !== "boolean")) throw new Error("Invalid viewing settings.");
 	if (s.navigation != null && !["orbit", "pan"].includes(s.navigation) || s.showEvaluation != null && typeof s.showEvaluation !== "boolean" || s.showMoves != null && typeof s.showMoves !== "boolean") throw new Error("Invalid board controls.");
 	return {
 		...s,

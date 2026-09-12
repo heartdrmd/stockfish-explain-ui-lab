@@ -209,6 +209,12 @@ export function install3DBoard(board) {
     }
     if (event.data?.type === 'zagreb:account-ready') { syncAccount(); return; }
     if (event.data?.type === 'zagreb:ready') { ready = true; sync(true); return; }
+    if (event.data?.type === 'zagreb:clock-hardware-model') {
+      board.setClockHardwareModel?.(event.data.family); return;
+    }
+    if (event.data?.type === 'zagreb:clock-hardware') {
+      board.clockHardwareInput?.(event.data.key,event.data.phase); return;
+    }
     if (event.data?.type === 'zagreb:clock-design') {
       board.dispatchEvent(new Event('clock-design-request'));
       return;

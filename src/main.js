@@ -1,3 +1,4 @@
+import { createClockHardwareBridge } from './clock-hardware-bridge.js';
 // main.js — entry point. Wires UI controls, engine events, and the
 // engine ↔ board loop.
 
@@ -2154,6 +2155,12 @@ async function main() {
     // The older digital/analog clocks remain available through their buttons.
     style: localStorage.getItem('stockfish-explain.clock-presentation-v2') || 'atelier',
   };
+  const hardwareClock = createClockHardwareBridge({clock,turn:()=>board.chess.turn(),render:()=>renderClock(),expired:loser=>{
+    stopClock();
+    try { finishPracticeGame(loser==='white'?'0-1':'1-0', `${loser==='white'?'White':'Black'} ran out of time.`); } catch {}
+  }});
+  board.setClockHardwareModel=family=>hardwareClock.model(family);
+  board.clockHardwareInput=(key,phase)=>hardwareClock.input(key,phase);
   function formatClockTime(ms) {
     if (ms == null || ms < 0) ms = 0;
     const totalFloor = Math.floor(ms / 1000);
@@ -2184,10 +2191,11 @@ async function main() {
     // The immersive board displays this same clock; it never runs a second timer.
     board.studyClock = {
       available, canAddUntimedClock,
+      playerSide: practiceColor==='black'?'b':'w', hardware: clock.hardware,
       active: clock.active, paused: clock.paused === true, mode: clock.mode,
       whiteMs: clock.msWhite, blackMs: clock.msBlack,
       running: clock.active && !clock.paused ? clock.tickingFor : null,
-      label: document.getElementById('clock-format')?.textContent || '',
+      label: clock.hardwareLabel || document.getElementById('clock-format')?.textContent || '',
       control: {minutes: clock.initialMs / 60000, incrementSeconds: clock.incMs / 1000},
       canSetTimeControl: canSetClockTimeControl(),
     };
@@ -2373,6 +2381,7 @@ async function main() {
       glyphAt(240, rightColor);
   }
   function startClock(minutes, incrementSec, mode = 'down') {
+    clock.paused = false;
     clock.displayOnly = false;
     clock.active = true;
     clock.mode   = mode;
@@ -2393,6 +2402,7 @@ async function main() {
         : 'w';
     } catch { clock.tickingFor = 'w'; }
     clock.lastTickAt = Date.now();
+    hardwareClock.restart();
     const clockCard = document.getElementById('practice-clock');
     if (clockCard) clockCard.hidden = false;
     const fmt = document.getElementById('clock-format');
@@ -2410,6 +2420,7 @@ async function main() {
     renderClock();
   }
   function stopClock() {
+    hardwareClock.stop();
     clock.active = false;
     clock.tickingFor = null;
     clock.paused = false;
@@ -2424,6 +2435,7 @@ async function main() {
   // timerId is cleared; switchClock early-exits while paused.
   function togglePauseClock() {
     if (!clock.active) return;
+    if (hardwareClock.pause()) { if(!clock.timerId)clock.timerId=setInterval(clockTick,100); return; }
     const btn = document.getElementById('btn-clock-pause');
     if (!clock.paused) {
       clock.paused = true;
@@ -2439,6 +2451,7 @@ async function main() {
   }
   function switchClock() {
     if (!clock.active) return;
+    if (hardwareClock.moved()) return;
     if (clock.displayOnly) {
       // A paused counter still follows actual turns without charging any time.
       clockTick();
@@ -2474,6 +2487,7 @@ async function main() {
   // ever gets cleared unexpectedly.
   function clockTick() {
     if (!clock.active || !clock.tickingFor) return;
+    if (hardwareClock.tick()) { renderClock(); return; }
     if (clock.paused) return;
     const now = Date.now();
     const elapsed = now - clock.lastTickAt;
@@ -2506,6 +2520,7 @@ async function main() {
     if (board.chess.isGameOver() || document.body.classList.contains('practice-finished'))
       throw new Error('Start a new game or study position to add a clock.');
     startUntimedDisplay(clock, board.chess.turn(), Date.now());
+    hardwareClock.restart();
     const card = document.getElementById('practice-clock');
     if (card) { card.hidden = false; card.style.display = 'block'; }
     document.getElementById('clock-format').textContent = 'Untimed · time since added';
@@ -2537,6 +2552,7 @@ async function main() {
     // Keep the current position, turn, interval and pause state. Reset the actual
     // timekeeper, so flag fall and per-move increments use the new control too.
     const control = resetClockControl(clock, value, board.chess.turn(), Date.now());
+    hardwareClock.restart();
     const mode = document.getElementById('practice-clock-mode');
     const preset = document.getElementById('practice-clock-preset');
     const minutes = document.getElementById('practice-clock-minutes');

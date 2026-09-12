@@ -107,6 +107,21 @@ test('shared clocks use parent time in both board modes and reject foreign contr
   assert.equal(pauseRequests, 0);
   message('zagreb:clock-pause');
   assert.equal(pauseRequests, 1);
+  const hardwareRequests = [];
+  board.setClockHardwareModel = family => hardwareRequests.push({family});
+  board.clockHardwareInput = (key, phase) => hardwareRequests.push({key, phase});
+  for (const [type, payload] of [
+    ['zagreb:clock-hardware-model', {family:'dgt'}],
+    ['zagreb:clock-hardware', {key:'menu', phase:'down'}],
+  ]) {
+    message(type, {}, origin, payload);
+    message(type, frame.contentWindow, 'https://other.example', payload);
+  }
+  assert.equal(hardwareRequests.length, 0, 'Foreign frames cannot operate physical clock controls');
+  message('zagreb:clock-hardware-model', frame.contentWindow, origin, {family:'dgt'});
+  message('zagreb:clock-hardware', frame.contentWindow, origin, {key:'menu',phase:'down'});
+  message('zagreb:clock-hardware', frame.contentWindow, origin, {key:'menu',phase:'up'});
+  assert.deepEqual(hardwareRequests, [{family:'dgt'}, {key:'menu',phase:'down'}, {key:'menu',phase:'up'}]);
   toggle.click();
   assert.equal(controlsButton.hidden, true, 'Native 2D has no viewer toolbar to collapse');
   assert.equal(positions().at(-1).viewRevision, firstViewRevision, 'Hiding 3D does not request a camera change');
