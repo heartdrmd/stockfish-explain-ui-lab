@@ -325,6 +325,10 @@
       </div>
       <!-- The chosen clock is the first card in the left pane. -->
       <div class="side-card practice-card" id="practice-clock" hidden>
+        <button type="button" id="clock-float-drag" class="clock-float-drag"
+                aria-label="Move floating clock" aria-describedby="clock-float-drag-help"
+                title="Drag to move clock. Arrow keys move it; double-click or Home resets its position.">⠿</button>
+        <span id="clock-float-drag-help" class="sr-only">Use arrow keys to move the clock, Shift for fine adjustments, or Home to reset.</span>
         <div class="clock-header">
           <select class="clock-style-select" id="clock-style-switcher" aria-label="Clock appearance">
             <option value="atelier">Tournament clock</option>

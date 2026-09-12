@@ -5,12 +5,15 @@
 body.ui-lab {
   overflow-x: clip;
 }
-body.ui-lab .uniboard { background: #151c1a; }
-body.ui-lab #practice-clock {
-  background: transparent;
+.uniboard { --board-surround: #151c1a; background: var(--board-surround); }
+#practice-clock {
+  background: var(--board-surround, #151c1a);
   border-color: transparent;
+  border-radius: 0;
   box-shadow: none;
 }
+.clock-float-drag { display: none; }
+#clock-float-drag-help { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 
 .board-3d-frame{position:absolute;top:0;left:0;border:0;z-index:2;background:#151c1a;border-radius:4px}
 .board-3d-frame[hidden]{display:none}
@@ -591,7 +594,27 @@ body.right-pane-hidden .uniboard > #workspace-divider { display: none !important
     z-index: 32;
     overflow: auto;
     scrollbar-gutter: auto;
+    background: var(--board-surround);
+    translate: var(--clock-float-x, 0px) var(--clock-float-y, 0px);
   }
+  body.clock-docked-right.right-pane-hidden:not(.mobile-mode) .clock-float-drag {
+    display: grid;
+    place-items: center;
+    width: 36px;
+    height: 28px;
+    margin: 0 0 4px;
+    padding: 0;
+    border: 1px solid #81917a55;
+    border-radius: 4px;
+    background: var(--board-surround);
+    color: #cbd5c2;
+    font-size: 19px;
+    cursor: grab;
+    touch-action: none;
+    user-select: none;
+  }
+  .clock-float-drag:focus-visible { outline: 2px solid #ecd89e; outline-offset: 2px; }
+  body.clock-floating-dragging .clock-float-drag { cursor: grabbing !important; }
   body.clock-docked-right.right-pane-hidden:not(.mobile-mode) .uniboard > .tools > :not(#clock-right-host) {
     display: none !important;
   }

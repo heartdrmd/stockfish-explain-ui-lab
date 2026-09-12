@@ -1,8 +1,11 @@
+import { installFloatingClock } from './clock-float.js';
+
 export function installClockDock(board) {
   const card=document.getElementById('practice-clock'), right=document.getElementById('clock-right-host');
   if (!card || !right) return;
   const home=document.createComment('Clock returns here');
   card.before(home);
+  installFloatingClock(card, right);
   let previous='left';
   board.setClockDock=dock=>{
     if (!['left','right'].includes(dock) || dock===previous) return;
