@@ -5,6 +5,11 @@ import { cleanBoardChanges, applyBoardChanges } from '../src/server/board-settin
 const view=JSON.parse(await readFile(new URL('./fixtures/board-view.json',import.meta.url),'utf8'));
 test('every 3D control survives the server validator unchanged',()=> {
   assert.deepEqual(cleanBoardChanges({latest:view,save:view}),{latest:view,save:view});
+  for (const pieceMotionMs of [0,60,100,150]) {
+    const animated={...view,viewing:{...view.viewing,pieceMotionMs}};
+    assert.deepEqual(cleanBoardChanges({latest:animated,save:animated}),{latest:animated,save:animated});
+  }
+  assert.throws(()=>cleanBoardChanges({latest:{...view,viewing:{...view.viewing,pieceMotionMs:2000}}}));
   assert.throws(()=>cleanBoardChanges({latest:{...view,camera:{position:[NaN,0,0],target:[0,0,0]}}}));
   assert.throws(()=>cleanBoardChanges({latest:{...view,appearance:{...view.appearance,blackPieceLight:{preset:'bad',intensity:132}}}}));
   assert.throws(()=>cleanBoardChanges({remove:'bad-id'}));

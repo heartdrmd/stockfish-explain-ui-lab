@@ -5140,6 +5140,29 @@ var PIECE_NAMES = [
 	"pawn"
 ];
 //#endregion
+//#region lib/piece-motion.ts
+var PIECE_MOTION_OPTIONS = [
+	{
+		ms: 0,
+		label: "Off · instant"
+	},
+	{
+		ms: 60,
+		label: "Extra quick · 0.06s"
+	},
+	{
+		ms: 100,
+		label: "Quick · 0.10s"
+	},
+	{
+		ms: 150,
+		label: "Gentle · 0.15s"
+	}
+];
+function isPieceMotionMs(value) {
+	return PIECE_MOTION_OPTIONS.some((option) => option.ms === value);
+}
+//#endregion
 //#region lib/clock-styles.ts
 var CLOCK_STYLES = [
 	{
@@ -5362,7 +5385,7 @@ function validateView(raw) {
 		"club",
 		"strong"
 	].includes(s.practice.level))) throw new Error("Invalid practice settings.");
-	if (s.viewing && (s.viewing.showAnalysis != null && typeof s.viewing.showAnalysis !== "boolean" || s.viewing.showClock != null && typeof s.viewing.showClock !== "boolean" || s.viewing.flatStyle != null && !["classic", "materials"].includes(s.viewing.flatStyle) || s.viewing.flatScale != null && !range(s.viewing.flatScale, 35, 100) || s.viewing.flatPanY != null && !range(s.viewing.flatPanY, -50, 50) || s.viewing.flatPan != null && !range(s.viewing.flatPan, -50, 50) || s.viewing.clockPlacement != null && !["left", "right"].includes(s.viewing.clockPlacement) || s.viewing.clockSide != null && ![
+	if (s.viewing && (s.viewing.pieceMotionMs != null && !isPieceMotionMs(s.viewing.pieceMotionMs) || s.viewing.showAnalysis != null && typeof s.viewing.showAnalysis !== "boolean" || s.viewing.showClock != null && typeof s.viewing.showClock !== "boolean" || s.viewing.flatStyle != null && !["classic", "materials"].includes(s.viewing.flatStyle) || s.viewing.flatScale != null && !range(s.viewing.flatScale, 35, 100) || s.viewing.flatPanY != null && !range(s.viewing.flatPanY, -50, 50) || s.viewing.flatPan != null && !range(s.viewing.flatPan, -50, 50) || s.viewing.clockPlacement != null && !["left", "right"].includes(s.viewing.clockPlacement) || s.viewing.clockSide != null && ![
 		"board",
 		"player",
 		"white",
