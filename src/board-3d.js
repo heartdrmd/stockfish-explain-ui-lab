@@ -46,6 +46,7 @@ export function install3DBoard(board) {
   frame.title = 'Interactive 3D practice board';
   frame.allow = 'fullscreen';
   frame.hidden = true;
+  frame.addEventListener('load', () => area.classList.toggle('board-settings-open', false));
   area.insertBefore(frame, board.rootEl);
   const toggle = document.createElement('button');
   toggle.className = 'nav-btn board-render-toggle';
@@ -298,6 +299,11 @@ export function install3DBoard(board) {
   window.addEventListener('chess:account-change', syncAccount);
   window.addEventListener('message', async event => {
     if (event.origin !== location.origin || event.source !== frame.contentWindow) return;
+    if (event.data?.type === 'zagreb:settings-layer') {
+      if (typeof event.data.open === 'boolean')
+        area.classList.toggle('board-settings-open', event.data.open);
+      return;
+    }
     if (event.data?.type === 'zagreb:backdrop') {
       if(!/^#[0-9a-f]{6}$/i.test(event.data.color||''))return;
       backdrop=event.data.color;

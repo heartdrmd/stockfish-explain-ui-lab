@@ -23,6 +23,9 @@ body.watch-mode .eval-gauge-control { visibility: hidden; pointer-events: none; 
 
 .board-3d-frame{position:absolute;top:0;left:0;border:0;z-index:2;background:#151c1a;border-radius:4px}
 .board-3d-frame[hidden]{display:none}
+/* An iframe's settings cannot out-rank a host clock by their own z-index.
+   Raise its stacking context only while a settings pane/menu is open. */
+body.ui-lab .uniboard .board-area.using-3d.board-settings-open{z-index:60}
 .board-render-toggle,.board-restart-opening{font-size:12px!important;white-space:nowrap;padding:0 9px!important;width:auto!important;min-height:36px}
 .board-render-toggle[aria-pressed=true]{color:#ecd895!important;background:#2a4037!important}
 .board-area.using-3d .board-nav{position:relative;z-index:3;flex-wrap:wrap;gap:3px}

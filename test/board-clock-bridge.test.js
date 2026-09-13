@@ -65,6 +65,17 @@ test('shared clocks use parent time in both board modes and reject foreign contr
   }
   const clockMessages = () => sent.filter(item => item.message.type === 'zagreb:clock');
   message('zagreb:ready');
+  const layers = [];
+  area.classList.toggle = (name, value) => { if (name === 'board-settings-open') layers.push(value); };
+  message('zagreb:settings-layer', {}, origin, {open:true});
+  message('zagreb:settings-layer', frame.contentWindow, 'https://other.example', {open:true});
+  message('zagreb:settings-layer', frame.contentWindow, origin, {open:'true'});
+  assert.deepEqual(layers, [], 'Only the board frame can raise its settings');
+  message('zagreb:settings-layer', frame.contentWindow, origin, {open:true});
+  message('zagreb:settings-layer', frame.contentWindow, origin, {open:false});
+  message('zagreb:settings-layer', frame.contentWindow, origin, {open:true});
+  frame.dispatchEvent(new Event('load'));
+  assert.deepEqual(layers, [true, false, true, false], 'Closing settings or reloading restores the usual clock layering');
   const panMessages = () => sent.filter(item => item.message.type === 'zagreb:pan-board');
   function panKey(closest = () => null) {
     const event = new Event('keydown', {cancelable: true});
