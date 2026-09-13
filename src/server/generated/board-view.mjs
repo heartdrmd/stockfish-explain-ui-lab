@@ -5486,6 +5486,11 @@ function savedBoardOrientation(saved) {
 }
 function validateView(raw) {
 	const s = raw;
+	if (s?.watchNotationDisplay != null && ![
+		"full",
+		"players",
+		"hidden"
+	].includes(s.watchNotationDisplay)) throw new Error("Invalid watch notation display.");
 	if (s?.layout != null && !validSavedLayout(s.layout)) throw new Error("Invalid saved board layout.");
 	if (s?.analysisDisplay != null && ![
 		"off",

@@ -14,6 +14,12 @@ test('every 3D control survives the server validator unchanged',()=> {
     assert.deepEqual(cleanBoardChanges({latest:animated,save:animated}),{latest:animated,save:animated});
   }
   assert.throws(()=>cleanBoardChanges({latest:{...view,viewing:{...view.viewing,pieceMotionMs:2000}}}));
+  for (const watchNotationDisplay of ['full','players','hidden']) {
+    const selected={...view,watchNotationDisplay,showMoves:watchNotationDisplay==='full'};
+    assert.deepEqual(cleanBoardChanges({latest:selected,save:selected}),{latest:selected,save:selected});
+  }
+  for (const watchNotationDisplay of ['off',true,2])
+    assert.throws(()=>cleanBoardChanges({latest:{...view,watchNotationDisplay}}));
   for (const pieceVisibility of [false, true]) for (const pieceVisibilityMm of [3, 5]) for (const pieceVisibilityScope of ['royals','all']) {
     const visible={...view,viewing:{...view.viewing,pieceVisibility,pieceVisibilityMm,pieceVisibilityScope}};
     assert.deepEqual(cleanBoardChanges({latest:visible,save:visible}),{latest:visible,save:visible});
