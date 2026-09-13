@@ -5,6 +5,10 @@ import { cleanBoardChanges, applyBoardChanges } from '../src/server/board-settin
 const view=JSON.parse(await readFile(new URL('./fixtures/board-view.json',import.meta.url),'utf8'));
 test('every 3D control survives the server validator unchanged',()=> {
   assert.deepEqual(cleanBoardChanges({latest:view,save:view}),{latest:view,save:view});
+  for (const collection of ['piatigorsky','leuchars-cook','b-and-co']) {
+    const selected={...view,appearance:{...view.appearance,collection}};
+    assert.deepEqual(cleanBoardChanges({latest:selected,save:selected}),{latest:selected,save:selected});
+  }
   for (const pieceMotionMs of [0,60,100,150]) {
     const animated={...view,viewing:{...view.viewing,pieceMotionMs}};
     assert.deepEqual(cleanBoardChanges({latest:animated,save:animated}),{latest:animated,save:animated});

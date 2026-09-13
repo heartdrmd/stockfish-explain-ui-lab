@@ -70,5 +70,77 @@
   "bauhaus/pawn": {
     "triangles": 188,
     "height_mm": 24.0
+  },
+  "piatigorsky/king": {
+    "triangles": 42000,
+    "height_mm": 107.5
+  },
+  "piatigorsky/queen": {
+    "triangles": 42000,
+    "height_mm": 95.6
+  },
+  "piatigorsky/bishop": {
+    "triangles": 42000,
+    "height_mm": 77.0
+  },
+  "piatigorsky/knight": {
+    "triangles": 149999,
+    "height_mm": 72.8
+  },
+  "piatigorsky/rook": {
+    "triangles": 39534,
+    "height_mm": 64.3
+  },
+  "piatigorsky/pawn": {
+    "triangles": 42000,
+    "height_mm": 49.1
+  },
+  "leuchars-cook/king": {
+    "triangles": 42000,
+    "height_mm": 101.2
+  },
+  "leuchars-cook/queen": {
+    "triangles": 42000,
+    "height_mm": 75.7
+  },
+  "leuchars-cook/bishop": {
+    "triangles": 42000,
+    "height_mm": 69.5
+  },
+  "leuchars-cook/knight": {
+    "triangles": 149996,
+    "height_mm": 61.6
+  },
+  "leuchars-cook/rook": {
+    "triangles": 41134,
+    "height_mm": 55.4
+  },
+  "leuchars-cook/pawn": {
+    "triangles": 42000,
+    "height_mm": 49.3
+  },
+  "b-and-co/king": {
+    "triangles": 42000,
+    "height_mm": 98.1
+  },
+  "b-and-co/queen": {
+    "triangles": 42000,
+    "height_mm": 83.4
+  },
+  "b-and-co/bishop": {
+    "triangles": 42000,
+    "height_mm": 77.9
+  },
+  "b-and-co/knight": {
+    "triangles": 149999,
+    "height_mm": 66.9
+  },
+  "b-and-co/rook": {
+    "triangles": 39600,
+    "height_mm": 57.8
+  },
+  "b-and-co/pawn": {
+    "triangles": 42000,
+    "height_mm": 52.3
   }
 }

@@ -5128,6 +5128,43 @@ var LIGHT_PRESETS = [
 		}
 	}
 ];
+var COLLECTIONS = [
+	{
+		id: "zagreb",
+		label: "Zagreb",
+		detail: "The original carved collection: bowed knights, rounded bishops and contrasting finials."
+	},
+	{
+		id: "piatigorsky",
+		label: "Piatigorsky Cup",
+		detail: "Tall, slender columns, cushioned bases and flowing-maned knights. A study of the Piatigorsky Cup reproduction."
+	},
+	{
+		id: "leuchars-cook",
+		label: "Leuchars Cook · 1849–50",
+		detail: "Broad turned feet, deeply cleft mitres and open-mouthed Cook knights with short ridged manes."
+	},
+	{
+		id: "b-and-co",
+		label: "B & Co · 19th century",
+		detail: "Slender stems above wide ogee bases, upright arched knights and deeply carved chest flutes."
+	},
+	{
+		id: "staunton",
+		label: "Staunton",
+		detail: "A classic tournament study with cross-topped kings, split bishop mitres and carved horses."
+	},
+	{
+		id: "dubrovnik",
+		label: "Dubrovnik",
+		detail: "Broad rounded bases, upright horses and contrasting bishop finials, inspired by the 1950 family."
+	},
+	{
+		id: "bauhaus",
+		label: "Bauhaus",
+		detail: "A geometric study inspired by Hartwig: cubes, diagonals, spheres and L-shaped knights."
+	}
+];
 ({ ...DEFAULT_PIECE_LIGHT }), PIECE_FINISHES.find((p) => p.id === "classic-v2"), BOARD_FINISHES.find((p) => p.id === "graphite"), { ...LIGHT_PRESETS[0].rig };
 //#endregion
 //#region lib/view-settings.ts
@@ -5360,12 +5397,7 @@ function validateView(raw) {
 	].includes(p.grainPattern));
 	const range = (n, min, max) => Number.isFinite(n) && n >= min && n <= max;
 	if (!a || [a.whitePieceLight, a.blackPieceLight].some((light) => light != null && (!PIECE_LIGHT_PRESETS.some((p) => p.id === light.preset) || !range(light.intensity, -100, 500))) || !pair(a.pieces) || !pair(a.board) || !range(a.brightness, 50, 115) || !range(a.grain, 0, 180) || !range(a.polish, 0, 100) || !["detail", "original"].includes(a.quality) || !LIGHT_PRESETS.map((p) => p.id).includes(a.lighting)) throw new Error("Invalid materials.");
-	if (a.collection && ![
-		"zagreb",
-		"staunton",
-		"dubrovnik",
-		"bauhaus"
-	].includes(a.collection) || a.boardShape && ![
+	if (a.collection && !COLLECTIONS.some((c) => c.id === a.collection) || a.boardShape && ![
 		"classic",
 		"slim",
 		"floating"
