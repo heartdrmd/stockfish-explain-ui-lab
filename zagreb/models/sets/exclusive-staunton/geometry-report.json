@@ -1,32 +1,44 @@
 {
   "king": {
     "height_mm": 101.6,
+    "master_triangles": 219484,
     "triangles": 48000,
-    "master_triangles": 215388
+    "detail_triangles": 120000,
+    "original_triangles": 219484
   },
   "queen": {
     "height_mm": 81.3,
+    "master_triangles": 276892,
     "triangles": 48000,
-    "master_triangles": 271772
+    "detail_triangles": 120000,
+    "original_triangles": 276892
   },
   "bishop": {
     "height_mm": 74.3,
+    "master_triangles": 201738,
     "triangles": 48000,
-    "master_triangles": 201924
+    "detail_triangles": 120000,
+    "original_triangles": 201738
   },
   "knight": {
     "height_mm": 71.0,
-    "triangles": 149998,
-    "master_triangles": 554527
+    "master_triangles": 1065904,
+    "triangles": 150000,
+    "detail_triangles": 320000,
+    "original_triangles": 750000
   },
   "rook": {
     "height_mm": 62.5,
+    "master_triangles": 150944,
     "triangles": 48000,
-    "master_triangles": 144776
+    "detail_triangles": 120000,
+    "original_triangles": 150944
   },
   "pawn": {
     "height_mm": 58.0,
+    "master_triangles": 120096,
     "triangles": 48000,
-    "master_triangles": 120096
+    "detail_triangles": 120000,
+    "original_triangles": 120096
   }
 }

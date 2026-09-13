@@ -5132,7 +5132,7 @@ var COLLECTIONS = [
 	{
 		id: "zagreb",
 		label: "Zagreb",
-		detail: "Refined rounded crowns, compact stepped rooks and elongated bishops, with the original carved knight."
+		detail: "Rounded scalloped crowns, slender tapered rooks and full oval bishops, with the original carved knight."
 	},
 	{
 		id: "exclusive-staunton",
