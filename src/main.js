@@ -6,7 +6,7 @@ import { installNotationInput, isHistoryInputTarget } from './generated/notation
 import { api, currentUser }       from './api.js';
 import { frameUpdate, isResizeObserverNotification } from './resize-observer.js';
 import { resetClockControl, startUntimedDisplay, usesClockBudget, clockControlLabel } from './generated/clock-control.js';
-import { Engine, ENGINE_FLAVORS } from './engine.js';
+import { Engine, ENGINE_FLAVORS, engineDownloadUrls } from './engine.js';
 import { BoardController, toDests as toDestsFrom } from './board.js';
 import { Explainer }              from './explain.js';
 import { Chess }                  from '../vendor/chess.js/chess.js';
@@ -10693,20 +10693,7 @@ async function main() {
   const btnPreload = document.getElementById('btn-preload-engines');
   if (btnPreload) {
     const ALL_ENGINE_URLS = (() => {
-      const urls = [];
-      const nnueSeen = new Set();
-      for (const spec of Object.values(ENGINE_FLAVORS)) {
-        urls.push('/' + spec.js);
-        urls.push('/' + spec.js.replace(/\.js$/, '.wasm'));
-        if (spec.externalNnue) {
-          for (const path of Object.values(spec.externalNnue)) {
-            if (nnueSeen.has(path)) continue;
-            nnueSeen.add(path);
-            urls.push('/' + path);
-          }
-        }
-      }
-      return urls;
+      return [...new Set(Object.values(ENGINE_FLAVORS).flatMap(engineDownloadUrls))];
     })();
     btnPreload.addEventListener('click', async () => {
       const orig = btnPreload.textContent;

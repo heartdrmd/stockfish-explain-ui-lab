@@ -22,56 +22,10 @@
        API break. ~80 KB gzipped. -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.js" defer></script>
 
-  <!-- Preload the engine the user will actually boot — the inline
-       script runs synchronously BEFORE the HTML parser moves on to the
-       body, so the fetches start before anything else loads.
-       Reads the persisted flavor (localStorage) or falls back to lite.
-       fetchpriority=high nudges Chrome to prioritise these above
-       later script/css. crossorigin is required because the same
-       files are later fetched from a cross-origin-isolated worker;
-       without it the browser double-fetches. -->
-  <script>
-    (function preloadEngine() {
-      try {
-        var flavor = localStorage.getItem('stockfish-explain.engine-flavor') || 'lite';
-        // iPhone/iPad Safari has a much tighter WebContent memory ceiling.
-        // Never preload a persisted 108 MB or pthread build there: the
-        // download + WASM heap can kill the page before main.js gets a chance
-        // to migrate the preference to the safe single-thread engine.
-        if (/iPhone|iPad|iPod/i.test(navigator.userAgent)) flavor = 'lite-single';
-        // If a previously-saved flavor crashed boot, bootEngine will
-        // reset it to the default on next load; we still preload what
-        // it would actually try first.
-        var base = 'assets/stockfish/stockfish-';
-        var map = {
-          'lite':               '18-lite',
-          'lite-single':        '18-lite-single',
-          'full':               '18',
-          'stock-single':       'stock-single',
-          'kaufman':            'kaufman',             'kaufman-single':        'kaufman-single',         'kaufman-lite-single':        'kaufman-lite-single',
-          'classical':          'classical',           'classical-single':      'classical-single',       'classical-lite-single':      'classical-lite-single',
-          'alphazero':          'alphazero',           'alphazero-single':      'alphazero-single',       'alphazero-lite-single':      'alphazero-lite-single',
-          'avrukh':             'avrukh',              'avrukh-single':         'avrukh-single',          'avrukh-lite-single':         'avrukh-lite-single',
-          'avrukhplus':         'avrukhplus',          'avrukhplus-single':     'avrukhplus-single',      'avrukhplus-lite':            'avrukhplus-lite',   'avrukhplus-lite-single': 'avrukhplus-lite-single'
-        };
-        var name = map[flavor] || '18-lite';
-        var jsHref   = base + name + '.js';
-        var wasmHref = base + name + '.wasm';
-        function add(href, type) {
-          var link = document.createElement('link');
-          link.rel = 'preload';
-          link.as = 'fetch';
-          link.href = href;
-          link.crossOrigin = 'anonymous';
-          if (type) link.type = type;
-          link.setAttribute('fetchpriority', 'high');
-          document.head.appendChild(link);
-        }
-        add(jsHref);
-        add(wasmHref, 'application/wasm');
-      } catch (e) { /* localStorage blocked? just skip preload */ }
-    })();
-  </script>
+  <!-- The engine wrapper loads the actual selected flavor after its device and
+       saved-setting checks. Speculative preloads used a separate, outdated
+       flavor map and could download an unused engine. Explicit "Preload engines"
+       remains available and uses the same versioned URLs as normal engine boot. -->
 </head>
 <body>
   <header class="site-header">

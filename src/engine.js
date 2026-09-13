@@ -5,6 +5,8 @@
 //   - lite:        7 MB, multi-thread (needs COOP/COEP headers)
 //   - full:      108 MB, full NNUE, multi-thread (strongest)
 
+import { assetUrl } from './asset-url.js';
+
 export const ENGINE_FLAVORS = {
   // ─── Lichess Stockfish 18 — full bignet, FULL THROTTLE policy ───
   //
@@ -159,6 +161,14 @@ export const ENGINE_FLAVORS = {
   },
 };
 
+export function engineDownloadUrls(spec) {
+  const script = spec.js.replace(/\?.*$/, '');
+  const files = spec.externalNnue
+    ? [spec.js, script.replace(/[^/]+$/, 'sf_18.js'), script.replace(/[^/]+$/, 'sf_18.wasm'), ...Object.values(spec.externalNnue)]
+    : [spec.js, script.replace(/\.js$/, '.wasm')];
+  return [...new Set(files.map(assetUrl))];
+}
+
 export class Engine extends EventTarget {
   constructor() {
     super();
@@ -229,7 +239,7 @@ export class Engine extends EventTarget {
     }
 
     this.flavor = flavor;
-    this.scriptPath = spec.js;
+    this.scriptPath = assetUrl(spec.js);
     // Default: HALF the hardware cores (rounded down, min 1, capped at
     // the 32-thread WASM pthread pool ceiling). User-preferred rule —
     // keeps the UI thread responsive on every machine size:
@@ -377,8 +387,8 @@ export class Engine extends EventTarget {
     //     flavor kicks in.
     if (spec.externalNnue) {
       // Fire both fetches inside the shim, in parallel.
-      this._send('__sfw_load_small ' + spec.externalNnue.small);
-      this._send('__sfw_load_big '   + spec.externalNnue.big);
+      this._send('__sfw_load_small ' + assetUrl(spec.externalNnue.small));
+      this._send('__sfw_load_big '   + assetUrl(spec.externalNnue.big));
       // BLOCKING wait for the BIG net ack. requiresBigNetForPractice.
       // E2: also watch for LSF_NNUE_FAIL index=0 so a failed big-net
       // fetch rejects immediately (→ terminate + fallback) instead of

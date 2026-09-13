@@ -35,6 +35,7 @@ import { wireVariations } from './src/server/variations.js';
 import { wireLibrary } from './src/server/library.js';
 import { wireBoardSettings } from './src/server/board-settings.js';
 import { wireSync } from './src/server/sync.js';
+import { installAssetCache } from './src/server/asset-cache.js';
 import {
   AI_SPEND_COOKIE,
   aiSpendStampCT,
@@ -414,6 +415,7 @@ app.use((req, res, next) => {
 
 // ───── static site ─────
 // Served after the API routes so /api/* takes precedence.
+await installAssetCache(app, __dirname);
 app.use(express.static(__dirname, {
   index: 'index.html',
   setHeaders: (res, filePath) => {
