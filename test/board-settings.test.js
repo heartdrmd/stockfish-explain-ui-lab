@@ -14,11 +14,11 @@ test('every 3D control survives the server validator unchanged',()=> {
     assert.deepEqual(cleanBoardChanges({latest:animated,save:animated}),{latest:animated,save:animated});
   }
   assert.throws(()=>cleanBoardChanges({latest:{...view,viewing:{...view.viewing,pieceMotionMs:2000}}}));
-  for (const pieceVisibility of [false, true]) for (const pieceVisibilityMm of [3, 5]) {
-    const visible={...view,viewing:{...view.viewing,pieceVisibility,pieceVisibilityMm}};
+  for (const pieceVisibility of [false, true]) for (const pieceVisibilityMm of [3, 5]) for (const pieceVisibilityScope of ['royals','all']) {
+    const visible={...view,viewing:{...view.viewing,pieceVisibility,pieceVisibilityMm,pieceVisibilityScope}};
     assert.deepEqual(cleanBoardChanges({latest:visible,save:visible}),{latest:visible,save:visible});
   }
-  for (const invalid of [{pieceVisibility:'yes'},{pieceVisibilityMm:4},{pieceVisibilityMm:'3'}])
+  for (const invalid of [{pieceVisibility:'yes'},{pieceVisibilityMm:4},{pieceVisibilityMm:'3'},{pieceVisibilityScope:'pawns'},{pieceVisibilityScope:5}])
     assert.throws(()=>cleanBoardChanges({latest:{...view,viewing:{...view.viewing,...invalid}}}));
   assert.throws(()=>cleanBoardChanges({latest:{...view,camera:{position:[NaN,0,0],target:[0,0,0]}}}));
   assert.throws(()=>cleanBoardChanges({latest:{...view,appearance:{...view.appearance,blackPieceLight:{preset:'bad',intensity:132}}}}));
