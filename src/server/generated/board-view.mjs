@@ -5301,6 +5301,37 @@ var COLLECTIONS = [
 ];
 ({ ...DEFAULT_PIECE_LIGHT }), { ...DEFAULT_BOARD_LIGHT }, PIECE_FINISHES.find((p) => p.id === "classic-v2"), BOARD_FINISHES.find((p) => p.id === "graphite"), { ...LIGHT_PRESETS[0].rig };
 //#endregion
+//#region lib/piece-motion.ts
+var PIECE_MOTION_OPTIONS = [
+	{
+		ms: 0,
+		label: "Off · instant"
+	},
+	{
+		ms: 60,
+		label: "Extra quick · 0.06s"
+	},
+	{
+		ms: 100,
+		label: "Quick · 0.10s"
+	},
+	{
+		ms: 150,
+		label: "Gentle · 0.15s"
+	},
+	{
+		ms: 200,
+		label: "Smooth · 0.20s"
+	},
+	{
+		ms: 300,
+		label: "Relaxed · 0.30s"
+	}
+];
+function isPieceMotionMs(value) {
+	return PIECE_MOTION_OPTIONS.some((option) => option.ms === value);
+}
+//#endregion
 //#region lib/square-highlight-settings.ts
 var SQUARE_HIGHLIGHT_STYLES = [
 	{
@@ -5340,29 +5371,6 @@ var PIECE_NAMES = [
 	"pawn"
 ];
 ({ ...DEFAULT_SQUARE_HIGHLIGHT });
-//#endregion
-//#region lib/piece-motion.ts
-var PIECE_MOTION_OPTIONS = [
-	{
-		ms: 0,
-		label: "Off · instant"
-	},
-	{
-		ms: 60,
-		label: "Extra quick · 0.06s"
-	},
-	{
-		ms: 100,
-		label: "Quick · 0.10s"
-	},
-	{
-		ms: 150,
-		label: "Gentle · 0.15s"
-	}
-];
-function isPieceMotionMs(value) {
-	return PIECE_MOTION_OPTIONS.some((option) => option.ms === value);
-}
 //#endregion
 //#region lib/clock-styles.ts
 var CLOCK_STYLES = [

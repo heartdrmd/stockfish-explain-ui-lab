@@ -9,7 +9,7 @@ test('every 3D control survives the server validator unchanged',()=> {
     const selected={...view,appearance:{...view.appearance,collection}};
     assert.deepEqual(cleanBoardChanges({latest:selected,save:selected}),{latest:selected,save:selected});
   }
-  for (const pieceMotionMs of [0,60,100,150]) {
+  for (const pieceMotionMs of [0,60,100,150,200,300]) {
     const animated={...view,viewing:{...view.viewing,pieceMotionMs}};
     assert.deepEqual(cleanBoardChanges({latest:animated,save:animated}),{latest:animated,save:animated});
   }
