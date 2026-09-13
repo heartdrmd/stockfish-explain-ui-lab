@@ -342,7 +342,7 @@ export function install3DBoard(board) {
       }
       return;
     }
-    if (board.watchActive && ['zagreb:move','zagreb:restart','zagreb:navigate','zagreb:analysis','zagreb:flip',
+    if (board.watchActive && ['zagreb:move','zagreb:restart','zagreb:navigate','zagreb:navigate-step','zagreb:analysis','zagreb:flip',
       'zagreb:clock-hardware','zagreb:clock-hardware-model','zagreb:clock-pause','zagreb:clock-control','zagreb:clock-add','zagreb:clock-design'].includes(event.data?.type)) return;
     if (event.data?.type === 'zagreb:board-controls-state') {
       if (typeof event.data.visible !== 'boolean' || typeof event.data.ready !== 'boolean') return;
@@ -458,6 +458,12 @@ export function install3DBoard(board) {
       return;
     }
     if (event.data?.type === 'zagreb:restart') { restartOpening(); return; }
+    if (event.data?.type === 'zagreb:navigate-step') {
+      if (busy || board.interactionLocked || window.__practiceStarting) return;
+      if (event.data.direction === -1) board.backward();
+      else if (event.data.direction === 1) board.forward();
+      return;
+    }
     if (event.data?.type === 'zagreb:navigate') {
       if (busy || board.interactionLocked || window.__practiceStarting) return;
       const path = event.data.path;

@@ -836,6 +836,9 @@ body.presentation-fullscreen .uniboard .board-area { position:static!important; 
 /* The native notation dock stays at the right edge; the clock can move freely. */
 #notation-right-dock>.move-list-wrap{display:flex;flex-direction:column;flex:1;min-height:0;height:100%;max-height:none;margin:0;overflow:hidden;background:var(--board-surround,#151c1a);border:1px solid #81917a55;border-radius:5px}
 #notation-right-dock .move-list-wrap>#move-list{flex:1;min-height:0;overflow:auto;max-height:none}
+#notation-right-dock .move-list-header{flex:0 0 auto}
+/* Leave notation readable when the graph and its statistics are also open. */
+#notation-right-dock .notation-graph-slot{flex:0 1 auto;min-height:0;max-height:45%;overflow:auto;overscroll-behavior:contain}
 body.presentation-fullscreen .notation-right-dock{display:none!important}
 /* Keep the engine scroller above the independently anchored notation. */
 @media(min-width:800px){

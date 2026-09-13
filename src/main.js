@@ -1,4 +1,5 @@
 import { createClockHardwareBridge } from './clock-hardware-bridge.js';
+import { installNotationInput, isHistoryInputTarget } from './generated/notation-input.js';
 // main.js — entry point. Wires UI controls, engine events, and the
 // engine ↔ board loop.
 
@@ -6761,36 +6762,12 @@ async function main() {
     board.dispatchEvent(new CustomEvent('nav', { detail: { path, live: true } }));
   }
 
-  // Desktop wheel ownership in the right column:
-  //   • pointer inside notation -> notation only (even at its boundaries)
-  //   • pointer below notation (graph/stats/input) -> complete tools column
-  // Native scroll chaining differs between browsers when a nested scroller
-  // is empty or already at an edge, so make the user's intended target
-  // explicit instead of relying on propagation heuristics.
-  const moveListWrap = ui.moveList?.closest('.move-list-wrap');
-  const rightTools = ui.moveList?.closest('.tools');
-  const wheelDeltaPixels = (event, viewportHeight) => {
-    if (event.deltaMode === 1) return event.deltaY * 20; // lines
-    if (event.deltaMode === 2) return event.deltaY * viewportHeight; // pages
-    return event.deltaY; // pixels / trackpad
-  };
-  ui.moveList?.addEventListener('wheel', (event) => {
-    if (event.ctrlKey || document.body.classList.contains('mobile-mode')) return;
-    event.preventDefault();
-    event.stopPropagation();
-    ui.moveList.scrollTop += wheelDeltaPixels(event, ui.moveList.clientHeight);
-  }, { passive: false });
-  moveListWrap?.addEventListener('wheel', (event) => {
-    if (event.ctrlKey || document.body.classList.contains('mobile-mode')) return;
-    if (event.target?.closest?.('#move-list')) return;
-    event.preventDefault();
-    event.stopPropagation();
-    if (rightTools) {
-      const below = rightTools.querySelector('.clock-below-scroll');
-      const scroller = below && getComputedStyle(below).display !== 'contents' ? below : rightTools;
-      scroller.scrollTop += wheelDeltaPixels(event, scroller.clientHeight);
-    }
-  }, { passive: false });
+  // The same wheel behavior in docked and fullscreen notation. Broadcasts
+  // own their separate history; the viewer handles those instead.
+  installNotationInput(document, direction => direction < 0 ? board.backward() : board.forward(), {
+    keyboard: false, selector: '#move-list,.move-list-header',
+    enabled: () => !board.watchActive && !board.interactionLocked && !window.__practiceStarting,
+  });
 
   // Right-click context menu on a move node
   function openMoveContextMenu(e, path) {
@@ -6920,9 +6897,10 @@ async function main() {
   // key table. Inactive when typing in an input / textarea / select or
   // when a modifier key other than Shift is held.
   document.addEventListener('keydown', (e) => {
-    const tag = (e.target.tagName || '').toLowerCase();
-    if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+    if (e.defaultPrevented || isHistoryInputTarget(e.target)) return;
     if (e.ctrlKey || e.metaKey || e.altKey) return;
+    if (['ArrowLeft','ArrowRight'].includes(e.key) &&
+        (e.shiftKey || board.watchActive || board.interactionLocked || window.__practiceStarting)) return;
     switch (e.key) {
       // Navigation — lila uses ← / → / j / k / home / end / ↑ / ↓.
       case 'ArrowLeft':  case 'k': case 'K': board.backward(); e.preventDefault(); break;
