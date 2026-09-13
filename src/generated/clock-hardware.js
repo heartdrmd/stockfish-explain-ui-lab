@@ -128,7 +128,7 @@ var ClockHardware = class {
 		this.correctionMoves = pair(0);
 		this.correctionStages = pair(0);
 		this.powerAt = -Infinity;
-		this.family = family;
+		this.family = this.timingFamily = family;
 		this.config = family === "dgt" ? dgtPreset(1) : {
 			...base(),
 			sound: true
@@ -139,23 +139,32 @@ var ClockHardware = class {
 			if (v?.version === 1) {
 				this.option = Math.max(1, Math.min(30, Math.round(v.option || 1)));
 				if (validConfig(v.config)) this.config = copy(v.config);
-				for (const [key, value] of Object.entries(v.manual || {})) if (+key >= 26 && +key <= 30 && validConfig(value)) this.manual[+key] = copy(value);
+				for (const [key, value] of Object.entries(v.manual || {})) if ((family === "dgt" && +key >= 26 && +key <= 30 || family === "zmf" && +key >= 1 && +key <= 3) && validConfig(value)) this.manual[+key] = copy(value);
 			}
 		} catch {}
 		this.reset();
 		if (family === "dgt") this.phase = "option";
 	}
 	adoptGame(clock) {
-		this.untimed = clock.mode === "up";
+		const program = clock.control?.program;
+		if (program && validConfig(program.config)) {
+			this.config = copy(program.config);
+			this.timingFamily = program.family;
+			this.option = program.slot || (program.family === "dgt" ? 26 : 1);
+			if (program.slot) this.manual[program.slot] = copy(program.config);
+			this.reset();
+		}
+		this.untimed = clock.mode === "up" && !program;
 		this.gameBound = true;
 		const c = base();
 		c.periods = [period(clock.control?.minutes || 5, clock.mode === "up" ? "UPCNT" : clock.control?.incrementSeconds ? "FISCH" : "TIME", clock.control?.incrementSeconds || 0)];
 		c.freeze = clock.mode === "down";
 		c.sound = this.config.sound;
 		c.leds = this.config.leds;
-		this.config = c;
+		if (!program) this.config = c;
 		this.times = [clock.blackMs, clock.whiteMs];
 		this.turnStart = [...this.times];
+		this.delay = [...this.config.periods[0].extra];
 		this.lever = clock.running === "b" ? 0 : 1;
 		this.pausedLever = this.lever;
 		this.started = true;
@@ -230,7 +239,7 @@ var ClockHardware = class {
 			return;
 		}
 		if (p.method === "UPCNT") {
-			this.times[s] = this.family === "zmf" ? Math.max(-6e5, old - dt) : old + dt;
+			this.times[s] = this.timingFamily === "zmf" ? Math.max(-6e5, old - dt) : old + dt;
 			return;
 		}
 		if (p.method === "HOURGLASS") {
@@ -245,7 +254,7 @@ var ClockHardware = class {
 		if (this.times[s] > 0) return;
 		const next = this.config.periods[this.stages[s] + 1];
 		if (next && p.moves === 0) {
-			const targets = this.family === "zmf" || [
+			const targets = this.timingFamily === "zmf" || [
 				"BYO",
 				"CAN-BYO",
 				"UPCNT"
@@ -260,7 +269,7 @@ var ClockHardware = class {
 			this.periodFlag = s;
 			this.periodFlagUntil = this.now + 3e5;
 			if (this.current().method === "UPCNT") {
-				this.times[s] = this.family === "zmf" ? Math.max(-6e5, this.times[s]) : Math.abs(this.times[s]);
+				this.times[s] = this.timingFamily === "zmf" ? Math.max(-6e5, this.times[s]) : Math.abs(this.times[s]);
 				return;
 			}
 			if (this.times[s] <= 0) this.elapse(0);
@@ -384,6 +393,7 @@ var ClockHardware = class {
 					return;
 				}
 				this.untimed = false;
+				this.timingFamily = "dgt";
 				this.config = dgtPreset(this.option);
 				this.reset();
 			}
@@ -448,7 +458,7 @@ var ClockHardware = class {
 			this.stages[pressed]++;
 			this.stageMoves[pressed] = 0;
 			const next = this.current(pressed);
-			this.times[pressed] += this.initial(next, pressed) - (p.method === "FISCH" && this.config.increment === "PRE" ? p.extra[pressed] : 0);
+			this.times[pressed] += this.initial(next, pressed) - (p.method === "FISCH" && this.config.increment === "PRE" || p.method === "DELAY" ? p.extra[pressed] : 0);
 		}
 		this.lever = other(pressed);
 		this.delay[this.lever] = this.current().extra[this.lever];
@@ -587,8 +597,8 @@ var ClockHardware = class {
 		return [
 			"HH:MM HH:MM",
 			"MM:SS MM:SS",
-			`DEL ${this.draft.delayDisplay} ${String(this.draft.periods[0].extra[0] / 1e3).padStart(2, "0")}`,
-			`INC - ${this.draft.periods[0].extra[0] / 1e3}`,
+			`DEL ${this.draft.delayDisplay} ${String(this.draft.periods[0].method === "US-DLY" ? this.draft.periods[0].extra[0] / 1e3 : 0).padStart(2, "0")}`,
+			`INC - ${this.draft.periods[0].method === "FISCH" ? this.draft.periods[0].extra[0] / 1e3 : 0}`,
 			"P-00 000",
 			"HOGL 000",
 			`INC ${this.draft.increment}-`,
@@ -627,14 +637,14 @@ var ClockHardware = class {
 		}, {
 			id: "delay",
 			label: "Delay seconds",
-			value: p.extra[0] / 1e3,
+			value: p.method === "US-DLY" ? p.extra[0] / 1e3 : 0,
 			max: 60,
 			width: 2
 		}];
 		if (s === "increment") return [{
 			id: "bonus",
 			label: "Increment seconds",
-			value: p.extra[0] / 1e3,
+			value: p.method === "FISCH" ? p.extra[0] / 1e3 : 0,
 			max: 60,
 			width: 2
 		}];
@@ -679,6 +689,7 @@ var ClockHardware = class {
 				max: 999,
 				width: 3
 			}];
+			if (count === 0) return fields.slice(0, 1);
 			const second = this.draft.periods[1] || period(30);
 			if (count < 100) fields.push({
 				id: "tournamentMoves1",
@@ -753,8 +764,11 @@ var ClockHardware = class {
 			case "delay":
 			case "bonus":
 				this.draft.periods.forEach((p) => {
-					p.method = f.id === "delay" ? "US-DLY" : "FISCH";
-					p.extra = pair(value * 1e3);
+					const method = f.id === "delay" ? "US-DLY" : "FISCH";
+					if (value > 0 || p.method === method) {
+						p.method = value > 0 ? method : "TIME";
+						p.extra = pair(value * 1e3);
+					}
 				});
 				break;
 			case "increment":
@@ -772,7 +786,8 @@ var ClockHardware = class {
 			case "tournamentCount":
 				this.tournamentCount = value;
 				this.draft.counter = value < 100;
-				this.draft.tournament = true;
+				this.draft.tournament = value !== 0;
+				if (value === 0) this.draft.periods = this.draft.periods.slice(0, 1);
 				p.moves = value < 100 ? value : 0;
 				break;
 			case "tournamentMoves1":
@@ -876,6 +891,7 @@ var ClockHardware = class {
 			this.digit = 0;
 			this.field++;
 			if (this.field >= this.fields().length) if (this.family === "zmf" && this.phase === "setup") {
+				if (this.zmfSection === "tournament") this.draft.periods = this.draft.periods.slice(0, this.tournamentCount === 0 ? 1 : this.tournamentCount === 101 || this.tournamentCount < 100 && this.draft.periods[1]?.moves > 0 ? 3 : 2);
 				this.zmfEditing = false;
 				this.zmfMenu = this.zmfMenu === -1 ? 11 : this.zmfMenu;
 				this.field = 0;
@@ -910,8 +926,10 @@ var ClockHardware = class {
 			return;
 		}
 		this.untimed = this.untimed && JSON.stringify(c.periods) === JSON.stringify(this.config.periods);
+		this.timingFamily = this.family;
+		if (this.family === "zmf" && (this.option < 1 || this.option > 3)) this.option = 1;
 		this.config = c;
-		if (this.family === "dgt") this.manual[this.option] = copy(c);
+		if (this.family === "dgt" && this.option >= 26 || this.family === "zmf" && this.option <= 3) this.manual[this.option] = copy(c);
 		this.reset();
 		this.revision++;
 	}
@@ -925,7 +943,7 @@ var ClockHardware = class {
 			editing: false,
 			off: this.phase === "off",
 			lever: this.lever,
-			leds: this.config.leds
+			leds: this.config.leds && running
 		};
 		if (this.showMoves || this.now < this.movesUntil) {
 			display.left = String(this.config.counter ? this.moves[0] : this.stages[0] + 1).padStart(3, "0");
@@ -983,6 +1001,7 @@ var ClockHardware = class {
 		else {
 			const p = this.current();
 			display.footer = [
+				this.current().method === "TIME" ? "" : this.current().method,
 				this.config.freeze ? "FREEZE" : "",
 				this.config.sound ? "♪" : "",
 				`P${this.stages[0] + 1}/${this.stages[1] + 1}`,

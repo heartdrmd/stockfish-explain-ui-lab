@@ -5,7 +5,7 @@ import { installNotationInput, isHistoryInputTarget } from './generated/notation
 
 import { api, currentUser }       from './api.js';
 import { frameUpdate, isResizeObserverNotification } from './resize-observer.js';
-import { resetClockControl, startUntimedDisplay, usesClockBudget } from './generated/clock-control.js';
+import { resetClockControl, startUntimedDisplay, usesClockBudget, clockControlLabel } from './generated/clock-control.js';
 import { Engine, ENGINE_FLAVORS } from './engine.js';
 import { BoardController, toDests as toDestsFrom } from './board.js';
 import { Explainer }              from './explain.js';
@@ -2206,7 +2206,7 @@ async function main() {
       whiteMs: clock.msWhite, blackMs: clock.msBlack,
       running: clock.active && !clock.paused ? clock.tickingFor : null,
       label: clock.hardwareLabel || document.getElementById('clock-format')?.textContent || '',
-      control: {minutes: clock.initialMs / 60000, incrementSeconds: clock.incMs / 1000},
+      control: clock.timeControl || {minutes: clock.initialMs / 60000, incrementSeconds: clock.incMs / 1000},
       canSetTimeControl: canSetClockTimeControl(),
     };
     board.dispatchEvent(new Event('clock-change'));
@@ -2401,6 +2401,7 @@ async function main() {
     clock.msWhite = mode === 'up' ? 0 : clock.initialMs;
     clock.msBlack = mode === 'up' ? 0 : clock.initialMs;
     clock.incMs   = incrementSec * 1000;
+    clock.timeControl = undefined;
     // Whose clock ticks at start depends on whose actual move it is,
     // NOT a hardcoded 'w'. When the chosen opening ends on White's
     // move (odd half-move count), it's Black to move → Black's clock
@@ -2579,7 +2580,7 @@ async function main() {
       preset.dispatchEvent(new Event('change'));
     }
     const label = document.getElementById('clock-format');
-    if (label) label.textContent = `${control.minutes}+${control.incrementSeconds} time control · set on clock`;
+    if (label) label.textContent = `${clockControlLabel(control)} · set on clock`;
     renderClock();
     return control;
   };

@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createClockHardwareBridge } from "../src/clock-hardware-bridge.js";
-function harness() {
+function harness(options={}) {
   let at = 1000,
     turn = "w",
     flags = [];
@@ -21,7 +21,7 @@ function harness() {
     now: () => at,
     render() {},
     expired: (side) => flags.push(side),
-    storage: {
+    storage: options.storage || {
       getItem() {
         return null;
       },
@@ -190,4 +190,40 @@ test("Play or a ZMF sensor cannot restart a clock frozen by flag fall", () => {
   h.b.input("left", "down"); h.b.input("left", "up");
   assert.equal(h.clock.paused, true);
   assert.deepEqual(h.flags, ["white"]);
+});
+
+test('full program and partially elapsed delay survive DGT, ZMF and minimal appearances', async()=>{
+ const {resetClockControl,controlFromProgram}=await import('../src/generated/clock-control.js');
+ const {dgtPreset}=await import('../src/generated/clock-hardware.js');
+ const h=harness(),config=dgtPreset(22);config.periods[0].extra=[5000,5000];
+ resetClockControl(h.clock,controlFromProgram({family:'dgt',config,slot:26}),'w',1000);
+ h.b.model('dgt');h.advance(3000);assert.equal(h.clock.msWhite,300000);
+ h.b.model('zmf');h.advance(1000);assert.equal(h.clock.msWhite,300000);
+ h.b.model(undefined);h.advance(2000);assert.equal(h.clock.msWhite,299000);
+ h.b.model('dgt');assert.deepEqual(h.clock.timeControl.program.config,config);
+ h.turn('b');h.b.moved();h.advance(4000);assert.equal(h.clock.msBlack,300000);
+ h.advance(2000);assert.equal(h.clock.msBlack,299000);
+});
+test('setting staged control keeps individual times, stages and memories through case changes',async()=>{
+ const {resetClockControl,controlFromProgram}=await import('../src/generated/clock-control.js');
+ const {dgtPreset}=await import('../src/generated/clock-hardware.js');
+ const h=harness(),config=dgtPreset(13);config.periods[0].time=[20000,10000];config.periods[0].moves=1;
+ resetClockControl(h.clock,controlFromProgram({family:'dgt',config,slot:29}),'w',1000);
+ h.b.model('dgt');h.advance(1000);h.turn('b');h.b.moved();
+ const remaining=h.clock.msWhite;assert.ok(remaining>1800000);h.b.model('zmf');
+ assert.equal(h.clock.msWhite,remaining);assert.match(h.clock.hardware.display.footer,/P1\/2/);
+});
+
+test('program memory belongs to the programming model and retains other slots',async()=>{
+ const {resetClockControl,controlFromProgram}=await import('../src/generated/clock-control.js');
+ const {dgtPreset}=await import('../src/generated/clock-hardware.js');
+ const store=new Map(),h=harness({storage:{getItem:key=>store.get(key)||null,setItem:(key,value)=>store.set(key,value)}});
+ h.b.model('zmf');
+ for(const slot of [26,27]){
+  resetClockControl(h.clock,controlFromProgram({family:'dgt',config:dgtPreset(slot===26?22:10),slot}),'w',1000);h.b.restart();
+ }
+ const saved=JSON.parse(store.get('stockfish.clock-hardware-v1:dgt'));
+ assert.equal(saved.manual[26].periods[0].method,'US-DLY');
+ assert.equal(saved.manual[27].periods[0].method,'FISCH');
+ assert.deepEqual(Object.keys(saved.manual),['26','27']);
 });
