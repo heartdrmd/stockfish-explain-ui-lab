@@ -4656,6 +4656,50 @@ function gameAt(line) {
 //#region lib/piece-lighting.ts
 var PIECE_LIGHT_PRESETS = [
 	{
+		id: "overhead",
+		label: "Overhead",
+		direction: [
+			0,
+			1,
+			0
+		],
+		color: "#f5f3ee",
+		fill: .35
+	},
+	{
+		id: "even",
+		label: "Even",
+		direction: [
+			0,
+			1,
+			.2
+		],
+		color: "#f0f3f5",
+		fill: .85
+	},
+	{
+		id: "front",
+		label: "Front softbox",
+		direction: [
+			0,
+			.6,
+			1
+		],
+		color: "#f7ecdc",
+		fill: .3
+	},
+	{
+		id: "overcast",
+		label: "Overcast daylight",
+		direction: [
+			-.2,
+			1,
+			.3
+		],
+		color: "#e7efff",
+		fill: .75
+	},
+	{
 		id: "studio",
 		label: "Studio",
 		direction: [
@@ -4758,6 +4802,11 @@ var PIECE_LIGHT_PRESETS = [
 var DEFAULT_PIECE_LIGHT = {
 	preset: "studio",
 	intensity: 0
+};
+var DEFAULT_BOARD_LIGHT = {
+	preset: "overhead",
+	intensity: 0,
+	reflections: 100
 };
 //#endregion
 //#region lib/appearance.ts
@@ -5126,6 +5175,86 @@ var LIGHT_PRESETS = [
 			warmth: 15,
 			softness: 60
 		}
+	},
+	{
+		id: "overhead",
+		label: "Overhead",
+		description: "High light, compact shadows",
+		brightness: 80,
+		rig: {
+			key: 90,
+			fill: 24,
+			rim: 45,
+			reflections: 45,
+			direction: 0,
+			height: 85,
+			warmth: 15,
+			softness: 85
+		}
+	},
+	{
+		id: "even",
+		label: "Even",
+		description: "Gentle light on every side",
+		brightness: 80,
+		rig: {
+			key: 55,
+			fill: 46,
+			rim: 30,
+			reflections: 48,
+			direction: 0,
+			height: 65,
+			warmth: 12,
+			softness: 100
+		}
+	},
+	{
+		id: "front",
+		label: "Front softbox",
+		description: "Faces and carving from the front",
+		brightness: 78,
+		rig: {
+			key: 86,
+			fill: 22,
+			rim: 38,
+			reflections: 45,
+			direction: 0,
+			height: 32,
+			warmth: 28,
+			softness: 85
+		}
+	},
+	{
+		id: "overcast",
+		label: "Overcast daylight",
+		description: "Cool, diffuse and restrained",
+		brightness: 78,
+		rig: {
+			key: 58,
+			fill: 55,
+			rim: 30,
+			reflections: 38,
+			direction: -15,
+			height: 70,
+			warmth: 0,
+			softness: 100
+		}
+	},
+	{
+		id: "night",
+		label: "Night rim",
+		description: "Low light with cool edges",
+		brightness: 68,
+		rig: {
+			key: 40,
+			fill: 4,
+			rim: 110,
+			reflections: 30,
+			direction: 145,
+			height: 30,
+			warmth: 0,
+			softness: 70
+		}
 	}
 ];
 var COLLECTIONS = [
@@ -5170,7 +5299,7 @@ var COLLECTIONS = [
 		detail: "A geometric study inspired by Hartwig: cubes, diagonals, spheres and L-shaped knights."
 	}
 ];
-({ ...DEFAULT_PIECE_LIGHT }), PIECE_FINISHES.find((p) => p.id === "classic-v2"), BOARD_FINISHES.find((p) => p.id === "graphite"), { ...LIGHT_PRESETS[0].rig };
+({ ...DEFAULT_PIECE_LIGHT }), { ...DEFAULT_BOARD_LIGHT }, PIECE_FINISHES.find((p) => p.id === "classic-v2"), BOARD_FINISHES.find((p) => p.id === "graphite"), { ...LIGHT_PRESETS[0].rig };
 //#endregion
 //#region lib/view-settings.ts
 var PIECE_NAMES = [
@@ -5406,7 +5535,7 @@ function validateView(raw) {
 		"classic",
 		"slim",
 		"floating"
-	].includes(a.boardShape) || a.toneMapping && !["aces", "agx"].includes(a.toneMapping) || a.whiteLightness != null && !range(a.whiteLightness, 40, 200) || a.blackLightness != null && !range(a.blackLightness, 40, 200) || a.darkReflections != null && !range(a.darkReflections, 20, 120) || a.contactShadows != null && !range(a.contactShadows, 0, 150)) throw new Error("Invalid rendering settings.");
+	].includes(a.boardShape) || a.toneMapping && !["aces", "agx"].includes(a.toneMapping) || a.whiteLightness != null && !range(a.whiteLightness, 40, 200) || a.blackLightness != null && !range(a.blackLightness, 40, 200) || a.darkReflections != null && !range(a.darkReflections, 20, 120) || a.contactShadows != null && !range(a.contactShadows, 0, 150) || a.boardLight != null && (!PIECE_LIGHT_PRESETS.some((p) => p.id === a.boardLight.preset) || !range(a.boardLight.intensity, -100, 200) || !range(a.boardLight.reflections, 0, 150))) throw new Error("Invalid rendering settings.");
 	if (!a.light || !Object.entries({
 		key: [20, 140],
 		fill: [0, 60],

@@ -22,10 +22,10 @@
   },
   "knight": {
     "height_mm": 71.0,
-    "master_triangles": 1065904,
-    "triangles": 150000,
-    "detail_triangles": 320000,
-    "original_triangles": 750000
+    "master_triangles": 566165,
+    "triangles": 149986,
+    "detail_triangles": 319979,
+    "original_triangles": 566165
   },
   "rook": {
     "height_mm": 62.5,
