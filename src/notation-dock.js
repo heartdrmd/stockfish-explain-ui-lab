@@ -1,27 +1,27 @@
-// Reuse the live move list so navigation, annotations and the graph retain
-// their existing handlers. In 2D it follows the clock, including its float.
+// Keep the existing live list and its handlers in an independent right dock.
 export function installNotationDock(card, right) {
-  const moves = document.querySelector('.move-list-wrap');
-  const area = document.querySelector('.board-area');
-  const below = right.closest('.tools')?.querySelector('.clock-below-scroll');
-  if (!moves || !area || !below) return;
-  const home = document.createComment('Notation returns here');
-  moves.before(home);
-  let frame = 0;
-  const update = () => {
-    frame = 0;
-    const flat = !area.classList.contains('using-3d') || document.body.classList.contains('inline-flat-board');
-    const dock = flat && !document.body.classList.contains('watch-mode') && !document.body.classList.contains('mobile-mode');
-    if (document.body.classList.contains('notation-follows-clock') !== dock)
-      document.body.classList.toggle('notation-follows-clock', dock);
-    if (!dock) { if (moves.previousSibling !== home) home.after(moves); return; }
-    if (document.body.classList.contains('clock-docked-right')) {
-      if (below.firstChild !== moves) below.prepend(moves);
-    } else if (moves.previousSibling !== card) card.after(moves);
+  const moves=document.querySelector('.move-list-wrap');
+  const below=right.closest('.tools')?.querySelector('.clock-below-scroll');
+  if(!moves || !below)return;
+  const home=document.createComment('Notation returns here');moves.before(home);
+  const dock=document.createElement('div');dock.className='notation-right-dock';dock.id='notation-right-dock';dock.hidden=true;document.body.append(dock);
+  let frame=0;
+  const update=()=>{
+    frame=0;
+    const active=!document.body.classList.contains('watch-mode') && !document.body.classList.contains('mobile-mode') && !document.body.classList.contains('presentation-fullscreen');
+    if(document.body.classList.contains('notation-follows-clock'))document.body.classList.remove('notation-follows-clock');
+    const detached=active && document.body.classList.contains('right-pane-hidden');
+    dock.hidden=!detached || moves.classList.contains('notation-hidden');
+    const clockSlot=document.body.classList.contains('clock-docked-right') && !document.body.classList.contains('clock-presentation-hidden') && !card.hidden ? Math.min(card.getBoundingClientRect().height,window.innerHeight*.45)+12 : 0;
+    dock.style.setProperty('--notation-dock-top',`${Math.max(0,document.querySelector('.site-header')?.getBoundingClientRect().bottom||68)+12+clockSlot}px`);
+    if(detached){if(moves.parentNode!==dock)dock.append(moves);}
+    else if(active){if(moves.parentNode!==below)below.prepend(moves);}
+    else if(moves.previousSibling!==home)home.after(moves);
   };
-  const queue = () => { if (!frame) frame = requestAnimationFrame(update); };
-  const observer = new MutationObserver(queue);
-  observer.observe(document.body, { attributes: true, attributeFilter: ['class'] });
-  observer.observe(area, { attributes: true, attributeFilter: ['class'] });
-  update();
+  const queue=()=>{if(!frame)frame=requestAnimationFrame(update);};
+  const observer=new MutationObserver(queue);
+  observer.observe(document.body,{attributes:true,attributeFilter:['class']});
+  observer.observe(moves,{attributes:true,attributeFilter:['class']});
+  new ResizeObserver(queue).observe(card);
+  window.addEventListener('resize',queue);update();
 }

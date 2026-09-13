@@ -39,11 +39,13 @@ export function installFloatingClock(card, host) {
     card.style.setProperty('--clock-dock-y',`${offset.y}px`);
     const availableHeight = `${Math.max(120, window.innerHeight - Math.max(8,card.getBoundingClientRect().top) - 48)}px`;
     if(card.style.getPropertyValue('--clock-available-height') !== availableHeight)card.style.setProperty('--clock-available-height', availableHeight);
-    host.style.height = active() && !floating() ? `${Math.max(0,card.getBoundingClientRect().height+offset.y)}px` : '';
+    host.style.height = active() && !floating() ? `${Math.max(0,card.getBoundingClientRect().height)}px` : '';
   }
   function move(x, y, remember = false) {
     const rect = (floating() ? panel : card).getBoundingClientRect();
     const baseX = rect.left - offset.x, baseY = rect.top - offset.y;
+    const canvas = card.querySelector('canvas')?.getBoundingClientRect();
+    const above = canvas ? Math.max(0, rect.top - canvas.top) : 0;
     const header = document.querySelector('.site-header')?.getBoundingClientRect();
     let top = Math.max(8, (header?.bottom || 0) + 8);
     // A transparent clock canvas must never cover the embedded board toolbar.
@@ -54,6 +56,7 @@ export function installFloatingClock(card, host) {
       if(baseX+x < f.left+t.right && baseX+x+rect.width > f.left+t.left)
         top=Math.max(top,f.top+t.bottom+8);
     }
+    top += above;
     // Keep the grip and clock reachable after a resize or a settings change.
     const maxX = Math.max(8, window.innerWidth - rect.width - 8);
     const maxY = Math.max(top, window.innerHeight - rect.height - 8);
