@@ -14,6 +14,14 @@ test('every 3D control survives the server validator unchanged',()=> {
     assert.deepEqual(cleanBoardChanges({latest:animated,save:animated}),{latest:animated,save:animated});
   }
   assert.throws(()=>cleanBoardChanges({latest:{...view,viewing:{...view.viewing,pieceMotionMs:2000}}}));
+  for (const style of ['outline','fill','corners','classic']) for (const strength of [0,60,100]) {
+    const highlighted={...view,viewing:{...view.viewing,squareHighlight:{style,color:'#29abc4',strength}}};
+    assert.deepEqual(cleanBoardChanges({latest:highlighted,save:highlighted}),{latest:highlighted,save:highlighted});
+  }
+  for (const squareHighlight of [false,[],{}, {style:'bad',color:'#abcdef',strength:60},
+    {style:'outline',color:'red',strength:60}, {style:'outline',color:'#abcdef',strength:-1},
+    {style:'outline',color:'#abcdef',strength:101}, {style:'outline',color:'#abcdef',strength:'60'}])
+    assert.throws(()=>cleanBoardChanges({latest:{...view,viewing:{...view.viewing,squareHighlight}}}));
   for (const watchNotationDisplay of ['full','players','hidden']) {
     const selected={...view,watchNotationDisplay,showMoves:watchNotationDisplay==='full'};
     assert.deepEqual(cleanBoardChanges({latest:selected,save:selected}),{latest:selected,save:selected});

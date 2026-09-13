@@ -5301,6 +5301,35 @@ var COLLECTIONS = [
 ];
 ({ ...DEFAULT_PIECE_LIGHT }), { ...DEFAULT_BOARD_LIGHT }, PIECE_FINISHES.find((p) => p.id === "classic-v2"), BOARD_FINISHES.find((p) => p.id === "graphite"), { ...LIGHT_PRESETS[0].rig };
 //#endregion
+//#region lib/square-highlight-settings.ts
+var SQUARE_HIGHLIGHT_STYLES = [
+	{
+		id: "outline",
+		label: "Outline + soft fill"
+	},
+	{
+		id: "fill",
+		label: "Soft fill"
+	},
+	{
+		id: "corners",
+		label: "Corners only"
+	},
+	{
+		id: "classic",
+		label: "Original fill"
+	}
+];
+var DEFAULT_SQUARE_HIGHLIGHT = {
+	style: "outline",
+	color: "#c5a857",
+	strength: 60
+};
+function validSquareHighlight(value) {
+	const v = value;
+	return !!v && !Array.isArray(v) && SQUARE_HIGHLIGHT_STYLES.some((s) => s.id === v.style) && typeof v.color === "string" && /^#[0-9a-f]{6}$/i.test(v.color) && Number.isFinite(v.strength) && v.strength >= 0 && v.strength <= 100;
+}
+//#endregion
 //#region lib/view-settings.ts
 var PIECE_NAMES = [
 	"king",
@@ -5310,6 +5339,7 @@ var PIECE_NAMES = [
 	"rook",
 	"pawn"
 ];
+({ ...DEFAULT_SQUARE_HIGHLIGHT });
 //#endregion
 //#region lib/piece-motion.ts
 var PIECE_MOTION_OPTIONS = [
@@ -5556,7 +5586,7 @@ function validateView(raw) {
 		"club",
 		"strong"
 	].includes(s.practice.level))) throw new Error("Invalid practice settings.");
-	if (s.viewing && (s.viewing.largeBishopFinial != null && typeof s.viewing.largeBishopFinial !== "boolean" || s.viewing.pieceVisibility != null && typeof s.viewing.pieceVisibility !== "boolean" || s.viewing.pieceVisibilityMm != null && ![3, 5].includes(s.viewing.pieceVisibilityMm) || s.viewing.pieceVisibilityScope != null && !["royals", "all"].includes(s.viewing.pieceVisibilityScope) || s.viewing.pieceMotionMs != null && !isPieceMotionMs(s.viewing.pieceMotionMs) || s.viewing.showAnalysis != null && typeof s.viewing.showAnalysis !== "boolean" || s.viewing.showClock != null && typeof s.viewing.showClock !== "boolean" || s.viewing.flatStyle != null && !["classic", "materials"].includes(s.viewing.flatStyle) || s.viewing.flatScale != null && !range(s.viewing.flatScale, 35, 100) || s.viewing.flatPanY != null && !range(s.viewing.flatPanY, -50, 50) || s.viewing.flatPan != null && !range(s.viewing.flatPan, -50, 50) || s.viewing.clockPlacement != null && !["left", "right"].includes(s.viewing.clockPlacement) || s.viewing.clockSide != null && ![
+	if (s.viewing && (s.viewing.largeBishopFinial != null && typeof s.viewing.largeBishopFinial !== "boolean" || s.viewing.pieceVisibility != null && typeof s.viewing.pieceVisibility !== "boolean" || s.viewing.pieceVisibilityMm != null && ![3, 5].includes(s.viewing.pieceVisibilityMm) || s.viewing.pieceVisibilityScope != null && !["royals", "all"].includes(s.viewing.pieceVisibilityScope) || s.viewing.pieceMotionMs != null && !isPieceMotionMs(s.viewing.pieceMotionMs) || s.viewing.squareHighlight != null && !validSquareHighlight(s.viewing.squareHighlight) || s.viewing.showAnalysis != null && typeof s.viewing.showAnalysis !== "boolean" || s.viewing.showClock != null && typeof s.viewing.showClock !== "boolean" || s.viewing.flatStyle != null && !["classic", "materials"].includes(s.viewing.flatStyle) || s.viewing.flatScale != null && !range(s.viewing.flatScale, 35, 100) || s.viewing.flatPanY != null && !range(s.viewing.flatPanY, -50, 50) || s.viewing.flatPan != null && !range(s.viewing.flatPan, -50, 50) || s.viewing.clockPlacement != null && !["left", "right"].includes(s.viewing.clockPlacement) || s.viewing.clockSide != null && ![
 		"board",
 		"player",
 		"white",
