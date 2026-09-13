@@ -5132,7 +5132,12 @@ var COLLECTIONS = [
 	{
 		id: "zagreb",
 		label: "Zagreb",
-		detail: "The original carved collection: bowed knights, rounded bishops and contrasting finials."
+		detail: "Refined rounded crowns, compact stepped rooks and elongated bishops, with the original carved knight."
+	},
+	{
+		id: "exclusive-staunton",
+		label: "New Exclusive Staunton",
+		detail: "A study of The Chess Store’s New Exclusive: tall columns, a flared cross, deeply cleft bishops and upright knights with carved chest flutes."
 	},
 	{
 		id: "piatigorsky",
@@ -5397,7 +5402,7 @@ function validateView(raw) {
 	].includes(p.grainPattern));
 	const range = (n, min, max) => Number.isFinite(n) && n >= min && n <= max;
 	if (!a || [a.whitePieceLight, a.blackPieceLight].some((light) => light != null && (!PIECE_LIGHT_PRESETS.some((p) => p.id === light.preset) || !range(light.intensity, -100, 500))) || !pair(a.pieces) || !pair(a.board) || !range(a.brightness, 50, 115) || !range(a.grain, 0, 180) || !range(a.polish, 0, 100) || !["detail", "original"].includes(a.quality) || !LIGHT_PRESETS.map((p) => p.id).includes(a.lighting)) throw new Error("Invalid materials.");
-	if (a.collection && !COLLECTIONS.some((c) => c.id === a.collection) || a.boardShape && ![
+	if (a.collection && !COLLECTIONS.some((c) => c.id === a.collection) || a.kingTop != null && !["point", "cross"].includes(a.kingTop) || a.boardShape && ![
 		"classic",
 		"slim",
 		"floating"

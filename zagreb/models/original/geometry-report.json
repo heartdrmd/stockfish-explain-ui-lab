@@ -1,26 +1,30 @@
 {
   "King": {
-    "source_triangles": 146624,
-    "web_triangles": 146624
+    "source_triangles": 311680,
+    "web_triangles": 311680
   },
   "Queen": {
-    "source_triangles": 159408,
-    "web_triangles": 159408
+    "source_triangles": 815124,
+    "web_triangles": 815124
   },
   "Bishop": {
-    "source_triangles": 119648,
-    "web_triangles": 119648
+    "source_triangles": 240416,
+    "web_triangles": 240416
   },
   "Knight": {
     "source_triangles": 963472,
     "web_triangles": 963472
   },
   "Rook": {
-    "source_triangles": 83140,
-    "web_triangles": 83140
+    "source_triangles": 222672,
+    "web_triangles": 222672
   },
   "Pawn": {
-    "source_triangles": 63200,
-    "web_triangles": 63200
+    "source_triangles": 152864,
+    "web_triangles": 152864
+  },
+  "King-Cross": {
+    "source_triangles": 274476,
+    "web_triangles": 274476
   }
 }
