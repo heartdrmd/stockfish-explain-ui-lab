@@ -1056,7 +1056,7 @@
 .watch-pane-clock:not(:empty) { margin-bottom:16px; }
 .watch-pane-clock:empty,.watch-pane-analysis:empty { display:none; }
 .watch-pane-analysis { flex:0 1 auto; max-height:34%; overflow:auto; }
-.watch-pane-moves { flex:1 1 0; min-height:0; display:flex; }
+.watch-pane-moves { flex:0 1 auto; height:calc(40dvh - 12px); max-height:calc(40dvh - 12px); margin-top:auto; min-height:0; display:flex; overflow:hidden; }
 .watch-pane .watch-notation { display:flex; flex-direction:column; flex:1; width:100%; min-width:0; min-height:0; height:100%; max-height:none; padding:12px; margin:0; border:1px solid #70826055; border-radius:5px; background:#1a261fe8; box-sizing:border-box; color:#dce4d2; font:14px/1.5 Arial,sans-serif; }
 .watch-pane .watch-notation h3 { display:flex; justify-content:space-between; align-items:center; margin:0 0 8px; font:600 13px/1.5 Arial,sans-serif; flex-shrink:0; }
 .watch-pane .watch-notation h3 button { border:0; background:transparent; color:inherit; cursor:pointer; padding:4px; }
@@ -1085,7 +1085,9 @@
 .play-side-rail .watch-players strong{white-space:normal;overflow-wrap:anywhere}
 
 /* Independent right-edge dock when the app's right pane is hidden. */
-.notation-right-dock{position:fixed;top:var(--notation-dock-top,80px);right:16px;bottom:12px;width:clamp(260px,26vw,440px);max-width:calc(100vw - 32px);z-index:31;display:flex;flex-direction:column;min-height:0;pointer-events:auto}
+.notation-right-dock{position:fixed;top:max(60dvh,var(--notation-dock-top,80px));right:16px;bottom:12px;width:clamp(260px,26vw,440px);max-width:calc(100vw - 32px);z-index:31;display:flex;flex-direction:column;min-height:0;pointer-events:auto}
+.watch-right-dock{top:var(--notation-dock-top,80px);pointer-events:none}
+.watch-right-dock :is(.watch-pane-analysis,.watch-pane-moves){pointer-events:auto}
 .notation-right-dock[hidden]{display:none!important}
 .notation-right-dock>.watch-pane{height:100%;min-height:0}
 

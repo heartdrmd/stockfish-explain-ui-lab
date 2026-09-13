@@ -834,3 +834,12 @@ body.presentation-fullscreen .uniboard .board-area { position:static!important; 
 #notation-right-dock>.move-list-wrap{display:flex;flex-direction:column;flex:1;min-height:0;height:100%;max-height:none;margin:0;overflow:hidden;background:var(--board-surround,#151c1a);border:1px solid #81917a55;border-radius:5px}
 #notation-right-dock .move-list-wrap>#move-list{flex:1;min-height:0;overflow:auto;max-height:none}
 body.presentation-fullscreen .notation-right-dock{display:none!important}
+/* Keep the engine scroller above the independently anchored notation. */
+@media(min-width:800px){
+  body.ui-lab.notation-bottom-docked:not(.right-pane-hidden):not(.mobile-mode) .uniboard > .tools{
+    height:calc(60dvh - var(--split-top,68px) - 12px);max-height:calc(60dvh - var(--split-top,68px) - 12px);overflow:visible;
+  }
+  body.notation-bottom-docked:not(.right-pane-hidden):not(.mobile-mode) .clock-below-scroll{
+    display:flex;flex-direction:column;gap:12px;flex:1 1 0;min-height:0;overflow:auto;overscroll-behavior:contain;
+  }
+}
