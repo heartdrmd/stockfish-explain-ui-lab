@@ -36,4 +36,10 @@ test('one selector keeps every design, lists 3D first and preserves the running 
   assert.equal(select.value,'dgt-3000-3d','An explicit fullscreen choice updates the same dropdown');
   assert.equal(saved.get('stockfish-explain.clock-presentation-v2'),'atelier');
   assert.equal(time(),before,'Style changes never reset time or pause the game');
+  for(const style of ['dgt-3000-3d-blue','zmf-pro-3d-blue']) {
+    assert.ok(select.options.some(option=>option.value===style));
+    select.value=style;select.dispatchEvent(new Event('change'));
+    assert.equal(requests.at(-1),style);
+    assert.equal(time(),before,'The extra blue display styles also preserve the running clock');
+  }
 });

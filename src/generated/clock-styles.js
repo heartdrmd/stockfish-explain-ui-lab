@@ -9,6 +9,14 @@ var CLOCK_STYLES = [
 		label: "ZMF TapNSet Pro · Atelier 3D"
 	},
 	{
+		id: "dgt-3000-3d-blue",
+		label: "DGT 3000 · 3D blue active side"
+	},
+	{
+		id: "zmf-pro-3d-blue",
+		label: "ZMF TapNSet Pro · 3D blue active side"
+	},
+	{
 		id: "dgt",
 		label: "DGT · red LCD"
 	},
@@ -48,5 +56,11 @@ var CLOCK_STYLES = [
 function isClockStyle(value) {
 	return CLOCK_STYLES.some((style) => style.id === value);
 }
+function is3DClockStyle(style) {
+	return style === "dgt-3000-3d" || style === "zmf-pro-3d" || isBlueActiveClockStyle(style);
+}
+function isBlueActiveClockStyle(style) {
+	return style === "dgt-3000-3d-blue" || style === "zmf-pro-3d-blue";
+}
 //#endregion
-export { CLOCK_STYLES, isClockStyle };
+export { CLOCK_STYLES, is3DClockStyle, isBlueActiveClockStyle, isClockStyle };

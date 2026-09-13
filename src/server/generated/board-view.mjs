@@ -5151,6 +5151,14 @@ var CLOCK_STYLES = [
 		label: "ZMF TapNSet Pro · Atelier 3D"
 	},
 	{
+		id: "dgt-3000-3d-blue",
+		label: "DGT 3000 · 3D blue active side"
+	},
+	{
+		id: "zmf-pro-3d-blue",
+		label: "ZMF TapNSet Pro · 3D blue active side"
+	},
+	{
 		id: "dgt",
 		label: "DGT · red LCD"
 	},

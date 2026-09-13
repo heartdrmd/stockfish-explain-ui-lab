@@ -827,6 +827,9 @@
 .game-clock .clock-rendered-screen .clock-readout { flex: 1; min-height: 0; display: flex; }
 .game-clock .clock-rendered-screen .clock-segments { height: 100%; stroke: currentColor; stroke-width: 1.7; stroke-linejoin: round; transform: skewX(-5deg); }
 .clock-rendered-screen.is-low { color: #641d16; }
+.clock-rendered-screen.blue-active { background:linear-gradient(#08121e,#10243a);color:#68bdff; }
+.clock-rendered-screen.blue-active .clock-segments { filter:drop-shadow(0 0 2px #3899de80); }
+.clock-rendered-screen.blue-active.is-low { color:#ffc1aa; }
 .clock-rendered-keys { position: absolute; left: 13.1562%; top: 74.2637%; width: 73.6876%; height: 7.1118%; }
 .game-clock .clock-rendered-keys .clock-dgt-controls { margin: 0; height: 100%; background: transparent; border: 0; box-shadow: none; overflow: visible; }
 .game-clock .clock-rendered-keys .clock-dgt-controls button { position: relative; min-height: 0; height: 100%; padding: 0; background: transparent; border: 0; }
