@@ -765,7 +765,7 @@ body.ui-lab #btn-board-fullscreen{order:7;min-width:36px;padding-inline:8px}
 .clock-below-scroll{display:contents}
 @media(min-width:800px){
   body.clock-docked-right:not(.right-pane-hidden):not(.clock-presentation-hidden):not(.mobile-mode) .uniboard > .tools:has(#practice-clock:not([hidden])){
-    height:calc(100dvh - var(--split-top,68px) - 12px);overflow:visible;scrollbar-gutter:auto;gap:14px;
+    height:calc(100dvh - var(--split-top,68px) - 12px);overflow:visible;scrollbar-gutter:auto;gap:28px;
   }
   body.clock-docked-right:not(.right-pane-hidden):not(.clock-presentation-hidden):not(.mobile-mode) .tools:has(#practice-clock:not([hidden])) > .clock-below-scroll{
     display:flex;flex-direction:column;gap:12px;flex:1 1 0;min-height:0;overflow:auto;overscroll-behavior:contain;padding-right:4px;

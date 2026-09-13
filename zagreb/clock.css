@@ -978,15 +978,18 @@
 .watch-player-identity { display:flex; align-items:center; gap:5px; min-width:0; flex:1; }
 .watch-players strong { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font:650 15px/1.4 Arial,sans-serif; }
 .watch-player-title { color:#dec589; font:700 10px/1.3 Arial,sans-serif; border:1px solid #dec58955; border-radius:2px; padding:1px 3px; flex-shrink:0; }
-.watch-player-rating { font:15.6px/1.3 Arial,sans-serif; color:#a7b49d; }
+.watch-player-rating { font:700 15.6px/1.3 Arial,sans-serif; color:#fff; }
 .watch-players .watch-follow-player { padding:4px; border:0; background:transparent; color:#aaba99; flex-shrink:0; border-radius:3px; }
 .watch-follow-player:hover { background:#41523a; }
 .watch-status>.watch-game-control { display:flex; align-items:center; gap:7px; margin:4px 0 1px; padding:6px 8px; border-radius:4px; background:#aec38116; }
 .watch-game-control>strong { color:#e3eacb; font:700 18px/1.3 Arial,sans-serif; }
 .watch-game-control>span { margin-left:auto; color:#a8ba94; letter-spacing:.07em; font:700 9px/1.2 Arial,sans-serif; }
-.watch-player-side { width:9px; height:9px; border-radius:50%; flex-shrink:0; border:1px solid #9ba88e; }
+.watch-player-side { width:13.5px; height:13.5px; box-sizing:border-box; border-radius:50%; flex-shrink:0; border:1px solid #b3bea8; }
 .watch-player-side.white { background:#ede5ce; }
 .watch-player-side.black { background:#20251f; }
+.watch-status>.watch-game-result { display:flex; align-items:center; gap:12px; margin-top:8px; padding:10px 12px; border:1px solid #b5c58a80; border-radius:4px; background:#b5c58a20; color:#f2f5e9; }
+.watch-game-result b { font:700 22px/1.2 Arial,sans-serif; white-space:nowrap; }
+.watch-game-result strong { font:700 15px/1.3 Arial,sans-serif; }
 .watch-notation h3 { flex-shrink:0; margin:0 0 3px; font-size:11px; }
 .watch-notation h3 button { display:grid; place-items:center; width:24px; height:22px; border:0; border-radius:3px; background:transparent; cursor:pointer; }
 .watch-move-list { min-height:0; overflow:auto; overscroll-behavior:contain; scrollbar-width:thin; flex:1 1 auto; }
@@ -1050,6 +1053,7 @@
 /* Normal Watch uses the available app panes; these rules also ship with clock.css. */
 .watch-pane { display:flex; flex-direction:column; gap:12px; width:100%; height:var(--watch-pane-height,calc(100dvh - 100px)); min-height:0; color:#dce4d2; }
 .watch-pane-clock { flex:0 0 auto; max-height:48%; overflow:hidden; }
+.watch-pane-clock:not(:empty) { margin-bottom:16px; }
 .watch-pane-clock:empty,.watch-pane-analysis:empty { display:none; }
 .watch-pane-analysis { flex:0 1 auto; max-height:34%; overflow:auto; }
 .watch-pane-moves { flex:1 1 0; min-height:0; display:flex; }

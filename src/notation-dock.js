@@ -12,7 +12,7 @@ export function installNotationDock(card, right) {
     if(document.body.classList.contains('notation-follows-clock'))document.body.classList.remove('notation-follows-clock');
     const detached=active && document.body.classList.contains('right-pane-hidden');
     dock.hidden=!detached || moves.classList.contains('notation-hidden');
-    const clockSlot=document.body.classList.contains('clock-docked-right') && !document.body.classList.contains('clock-presentation-hidden') && !card.hidden ? Math.min(card.getBoundingClientRect().height,window.innerHeight*.45)+12 : 0;
+    const clockSlot=document.body.classList.contains('clock-docked-right') && !document.body.classList.contains('clock-presentation-hidden') && !card.hidden ? Math.min(card.getBoundingClientRect().height,window.innerHeight*.45)+28 : 0;
     dock.style.setProperty('--notation-dock-top',`${Math.max(0,document.querySelector('.site-header')?.getBoundingClientRect().bottom||68)+12+clockSlot}px`);
     if(detached){if(moves.parentNode!==dock)dock.append(moves);}
     else if(active){if(moves.parentNode!==below)below.prepend(moves);}
