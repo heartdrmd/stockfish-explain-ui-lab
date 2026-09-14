@@ -6767,7 +6767,7 @@ async function main() {
   // The same wheel behavior in docked and fullscreen notation. Broadcasts
   // own their separate history; the viewer handles those instead.
   installNotationInput(document, direction => direction < 0 ? board.backward() : board.forward(), {
-    keyboard: false, selector: '#move-list,.move-list-header',
+    keyboard: false, selector: '#move-list,.move-list-header,#board',
     enabled: () => !board.watchActive && !board.interactionLocked && !window.__practiceStarting,
   });
 
@@ -6847,31 +6847,6 @@ async function main() {
       board.backward();
     });
   }
-
-  // Mouse-wheel on board → navigate history.
-  // DISABLED during an active (not-yet-finished) practice game so an
-  // accidental scroll never looks like a takeback mid-game. Back
-  // button / arrow keys / nav buttons still work, so intentional
-  // navigation is unaffected. Once the game ends (practice-finished
-  // class added) wheel navigation re-enables for post-game review.
-  const boardEl = document.getElementById('board');
-  let wheelCooldown = 0;
-  boardEl.addEventListener('wheel', (e) => {
-    const inActivePractice =
-      document.body.classList.contains('practice-mode') &&
-      !document.body.classList.contains('practice-finished');
-    if (inActivePractice) {
-      e.preventDefault();
-      console.log('[move] scroll-ignored-in-practice', { deltaY: e.deltaY });
-      return;
-    }
-    e.preventDefault();
-    const now = Date.now();
-    if (now - wheelCooldown < 80) return;   // throttle
-    wheelCooldown = now;
-    if (e.deltaY > 0) board.forward();
-    else if (e.deltaY < 0) board.backward();
-  }, { passive: false });
 
   // Keep the board-nav ply indicator live
   const updatePly = () => {
