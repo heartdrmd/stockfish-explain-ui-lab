@@ -18,6 +18,14 @@ test('every 3D control survives the server validator unchanged',()=> {
     const highlighted={...view,viewing:{...view.viewing,squareHighlight:{style,color:'#29abc4',strength}}};
     assert.deepEqual(cleanBoardChanges({latest:highlighted,save:highlighted}),{latest:highlighted,save:highlighted});
   }
+  for (const fillStrength of [0,41,100]) for (const outlineStrength of [0,85,100]) {
+    const highlighted={...view,viewing:{...view.viewing,squareHighlight:{style:'outline',color:'#397bea',strength:fillStrength,fillStrength,outlineStrength}}};
+    assert.deepEqual(cleanBoardChanges({latest:highlighted,save:highlighted}),{latest:highlighted,save:highlighted});
+  }
+  for (const key of ['fillStrength','outlineStrength']) for (const invalid of [-1,101,'60',null]) {
+    const highlighted={...view,viewing:{...view.viewing,squareHighlight:{style:'outline',color:'#397bea',strength:50,[key]:invalid}}};
+    assert.throws(()=>cleanBoardChanges({latest:highlighted}));
+  }
   for (const squareHighlight of [false,[],{}, {style:'bad',color:'#abcdef',strength:60},
     {style:'outline',color:'red',strength:60}, {style:'outline',color:'#abcdef',strength:-1},
     {style:'outline',color:'#abcdef',strength:101}, {style:'outline',color:'#abcdef',strength:'60'}])

@@ -5354,11 +5354,13 @@ var SQUARE_HIGHLIGHT_STYLES = [
 var DEFAULT_SQUARE_HIGHLIGHT = {
 	style: "outline",
 	color: "#c5a857",
-	strength: 60
+	strength: 45,
+	fillStrength: 45,
+	outlineStrength: 85
 };
 function validSquareHighlight(value) {
 	const v = value;
-	return !!v && !Array.isArray(v) && SQUARE_HIGHLIGHT_STYLES.some((s) => s.id === v.style) && typeof v.color === "string" && /^#[0-9a-f]{6}$/i.test(v.color) && Number.isFinite(v.strength) && v.strength >= 0 && v.strength <= 100;
+	return !!v && !Array.isArray(v) && SQUARE_HIGHLIGHT_STYLES.some((s) => s.id === v.style) && typeof v.color === "string" && /^#[0-9a-f]{6}$/i.test(v.color) && Number.isFinite(v.strength) && v.strength >= 0 && v.strength <= 100 && [v.fillStrength, v.outlineStrength].every((n) => n === void 0 || typeof n === "number" && Number.isFinite(n) && n >= 0 && n <= 100);
 }
 //#endregion
 //#region lib/view-settings.ts
