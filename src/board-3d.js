@@ -446,7 +446,7 @@ export function install3DBoard(board) {
           mode === 'lines' ? 'Hide engine lines; keep evaluation on' : mode === 'evaluation' ? 'Turn analysis off' : 'Show Stockfish analysis';
         analysisToggle.setAttribute('aria-label',label); analysisToggle.title=label;
       }
-      const shown = visible && !expanded && !board.watchActive;
+      const shown = visible && (practice || mode !== 'off') && !expanded && !board.watchActive;
       document.body.classList.toggle('compact-analysis-visible',shown);
       return;
     }
