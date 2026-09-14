@@ -25,12 +25,12 @@ export class Explainer {
       // events BEFORE they touch the DOM. This makes lock/pause feel
       // instant even while the worker is still winding down its current
       // search iteration.
-      if (window.__engineMuted) return;
+      if (window.__engineMuted || this.board.practiceEvaluation?.active) return;
       if (e.detail?.fen && e.detail.fen !== this.currentFen) return;
       this._onThinking(e.detail);
     });
     this.engine.addEventListener('bestmove', (e) => {
-      if (window.__engineMuted) return;
+      if (window.__engineMuted || this.board.practiceEvaluation?.active) return;
       if (e.detail?.fen && e.detail.fen !== this.currentFen) return;
       this._onBestmove(e.detail);
     });
@@ -53,6 +53,7 @@ export class Explainer {
   }
 
   showPositionEval(cached = null) {
+    if (this.board.practiceEvaluation?.active) return;
     const hasMate = cached?.mate != null && Number.isFinite(Number(cached.mate));
     const hasCp = cached?.cpWhite != null && Number.isFinite(Number(cached.cpWhite));
     if (!hasMate && !hasCp) {

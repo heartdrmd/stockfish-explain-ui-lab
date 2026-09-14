@@ -92,6 +92,16 @@ export function install3DBoard(board) {
   });
   const gauge = document.getElementById('gauge-black');
   const gaugeControl = document.getElementById('eval-gauge-control');
+  const analysisToggle = document.getElementById('btn-board-analysis');
+  const tools = document.querySelector('.uniboard > .tools');
+  if (tools && !document.getElementById('board-analysis-host')) {
+    const host = document.createElement('div');
+    host.id = 'board-analysis-host'; host.className = 'watch-pane board-analysis-host';
+    tools.prepend(host);
+  }
+  analysisToggle?.addEventListener('click', () => {
+    if (ready) frame.contentWindow.postMessage({type:'zagreb:analysis-toggle'},location.origin);
+  });
   let enabled = false, ready = false, busy = false, scheduled = false, lastState = '', lastOverlay = '';
   let viewRevision = 0;
   function publishWorkspace() {
@@ -193,13 +203,14 @@ export function install3DBoard(board) {
   }
   board.addEventListener('clock-change', syncClock);
   function syncOverlay(force = false) {
-    if (!ready || !enabled) return;
+    if (!ready) return;
     let score;
     try { score = JSON.parse(gauge?.dataset.evaluation || 'null'); } catch {}
     const overlay = {
       type: 'zagreb:overlay', fen: board.fen(),
       // A new board position must never inherit the old position's score.
       evaluation: score?.fen === board.fen() ? score.evaluation : null,
+      evaluationStatus: score?.fen === board.fen() ? score.status || '' : '',
       evaluationVisible: !gaugeControl?.classList.contains('eval-gauge-hidden'),
       movesVisible: !movesHidden,
       graph: board.studyGraph,
@@ -215,6 +226,7 @@ export function install3DBoard(board) {
   if (gauge) new MutationObserver(() => syncOverlay()).observe(gauge, {attributes: true, attributeFilter: ['data-evaluation']});
   board.addEventListener('graph-change', () => syncOverlay());
   board.addEventListener('analysis-change', () => syncOverlay());
+  board.addEventListener('evaluation-change', () => syncOverlay());
   if (gaugeControl) new MutationObserver(() => syncOverlay()).observe(gaugeControl, {attributes: true, attributeFilter: ['class']});
   function snapshot() {
     const cg = board.cg.state;
@@ -421,6 +433,32 @@ export function install3DBoard(board) {
       if (busy) return;
       board.requestAnalysis?.(event.data);
       syncOverlay();
+      return;
+    }
+    if (event.data?.type === 'zagreb:analysis-display-state') {
+      const {visible, available, practice, mode, expanded} = event.data;
+      if (typeof visible !== 'boolean' || typeof available !== 'boolean' || typeof expanded !== 'boolean') return;
+      if (analysisToggle) {
+        analysisToggle.disabled = !available;
+        analysisToggle.setAttribute('aria-pressed',String(practice ? visible : mode !== 'off'));
+        analysisToggle.dataset.analysisMode = practice ? (visible ? 'hints' : 'off') : mode;
+        const label = practice ? (visible ? 'Hide practice hints' : 'Show practice hints') :
+          mode === 'lines' ? 'Hide engine lines; keep evaluation on' : mode === 'evaluation' ? 'Turn analysis off' : 'Show Stockfish analysis';
+        analysisToggle.setAttribute('aria-label',label); analysisToggle.title=label;
+      }
+      const shown = visible && !expanded && !board.watchActive;
+      document.body.classList.toggle('compact-analysis-visible',shown);
+      return;
+    }
+    if (event.data?.type === 'zagreb:analysis-reveal') {
+      if (!board.watchActive && document.body.classList.contains('right-pane-hidden')) document.getElementById('btn-toggle-right-pane')?.click();
+      return;
+    }
+    if (event.data?.type === 'zagreb:board-footprint') {
+      const points = event.data.points;
+      if (!Array.isArray(points) || points.length > 32 || !points.every(p => Number.isFinite(p?.x) && Number.isFinite(p?.y))) return;
+      frame.boardFootprint = points;
+      window.dispatchEvent(new Event('board-footprint-change'));
       return;
     }
     if (event.data?.type === 'zagreb:clock-pause') {

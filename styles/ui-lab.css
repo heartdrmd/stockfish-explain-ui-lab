@@ -749,6 +749,10 @@ body.dividers-hidden .workspace-divider::after{display:none!important}
 .clock-move-mode #clock-float-drag{background:#506c3a!important;border-color:#d6df83!important;color:#fffac5!important;box-shadow:0 0 0 2px #d6df8344,0 0 14px #c4dc7166}
 #btn-move-clock[aria-pressed=true]{background:#506c3a!important;border-color:#d6df83!important;color:#fffac5!important;box-shadow:0 0 0 2px #d6df8344,0 0 14px #c4dc7166}
 .clock-move-mode .clock-live-canvas canvas{cursor:move!important}
+#practice-clock{min-width:0;max-width:100%;container-type:inline-size}
+#practice-clock .clock-side{min-width:0}
+#practice-clock .clock-time{font-size:min(var(--clock-font-size,72px),22cqw)}
+#practice-clock .clock-analog-svg{max-width:100%}
 
 @media(min-width:800px){
   body.clock-docked-right:not(.mobile-mode) #clock-atelier .game-clock-fit{width:100%!important}
@@ -759,6 +763,11 @@ body.dividers-hidden .workspace-divider::after{display:none!important}
 body.native-board-panning,body.native-board-panning #board{cursor:move!important;user-select:none}
 
 body.ui-lab #btn-board-fullscreen{order:7;min-width:36px;padding-inline:8px}
+body.ui-lab #btn-board-analysis{order:7;min-width:36px;padding-inline:8px}
+.board-analysis-host:empty{display:none}
+.board-analysis-host{order:-1;min-width:0;flex:none}
+body.compact-analysis-visible .clock-below-scroll > :is(.engine-power-row,.ceval),
+body.compact-analysis-visible .tools > :is(.engine-power-row,.ceval){display:none}
 @media(min-width:800px){
   body.ui-lab:not(.mobile-mode):has(#clock-position-controls [data-open=true]) .site-header{padding-right:292px}
   body:not(.mobile-mode) .uniboard.split-layout .board-area:not(.using-3d){position:sticky;top:var(--split-top,78px);translate:0 var(--board-pin-y,0px)}

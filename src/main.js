@@ -7,6 +7,7 @@ import { api, currentUser }       from './api.js';
 import { frameUpdate, isResizeObserverNotification } from './resize-observer.js';
 import { resetClockControl, startUntimedDisplay, usesClockBudget, clockControlLabel } from './generated/clock-control.js';
 import { Engine, ENGINE_FLAVORS, engineDownloadUrls } from './engine.js';
+import { installPracticeEvaluation } from './practice-evaluation.js';
 import { BoardController, toDests as toDestsFrom } from './board.js';
 import { Explainer }              from './explain.js';
 import { Chess }                  from '../vendor/chess.js/chess.js';
@@ -15034,6 +15035,11 @@ async function main() {
     hint:ms=>{practiceHintTime.value=String(ms); practiceHintTime.dispatchEvent(new Event('change')); practiceHintButton.click();},
     cancelHint:()=>practiceHintButton.click(),
   });
+  installPracticeEvaluation(board,()=>({
+    practice:!!practiceColor && !document.body.classList.contains('practice-finished'),
+    flavor:engine?.flavor,
+    busy:window.__practiceStarting || board.interactionLocked || window.__practiceReplayInProgress || window.__learnOwnsEngine,
+  }),ui);
   mainInitDone = true;
   if (pendingFireAnalysis) {
     pendingFireAnalysis = false;

@@ -223,7 +223,7 @@ export class Engine extends EventTarget {
     this._livenessTimeoutMs = 2_000;
   }
 
-  async boot({ flavor = 'auto' } = {}) {
+  async boot({ flavor = 'auto', threads } = {}) {
     // Pick flavor
     const threadable = typeof SharedArrayBuffer !== 'undefined'
                     && typeof crossOriginIsolated !== 'undefined' && crossOriginIsolated;
@@ -265,6 +265,7 @@ export class Engine extends EventTarget {
     this.threads = spec.threaded
       ? Math.max(1, Math.min(Math.floor(hw / 2), WASM_THREAD_CAP))
       : 1;
+    if (Number.isInteger(threads) && threads > 0) this.threads=Math.min(this.threads,threads);
 
     try {
       // lichess-org/stockfish-web ships an ES module (uses import.meta).
@@ -1009,7 +1010,7 @@ export class Engine extends EventTarget {
         console.error('[engine] ⚠ MISMATCH: 2 s passed, _doStart fired, but worker emitted ZERO info lines. Worker may be wedged or command gate dropped position/go.', state);
         // Fire a window event so main.js's reactive auto-recovery
         // can pick it up and run the flavor-switch ritual.
-        try { window.dispatchEvent(new CustomEvent('engine-silent-detected', { detail: state })); } catch {}
+        try { if (!this.backgroundEvaluation) window.dispatchEvent(new CustomEvent('engine-silent-detected', { detail: state })); } catch {}
       } else if (this._infoDispatched === 0 && this._infoDropped > 0) {
         console.error('[engine] ⚠ MISMATCH: info lines arriving BUT all dropped by stopRequested guard. Flag stuck true.', state);
       } else {

@@ -1,4 +1,5 @@
 // Position only: keep the same clock element and its existing game timer.
+import {fitClockArea, visibleBoardRight} from './clock-safe-area.js';
 export function installFloatingClock(card, host) {
   const grip = document.getElementById('clock-float-drag');
   const toolbarToggle = document.getElementById('btn-move-clock');
@@ -24,6 +25,12 @@ export function installFloatingClock(card, host) {
     document.body.classList.contains('clock-docked-right') &&
     !document.body.classList.contains('mobile-mode');
   const floating = () => document.body.classList.contains('right-pane-hidden');
+  const safeHorizontal = () => {
+    const bounds=panel.getBoundingClientRect();
+    const right=floating()?window.innerWidth-20:Math.min(window.innerWidth-12,bounds.right);
+    const left=Math.max(visibleBoardRight(document)+16,floating()?8:bounds.left);
+    return {left:Math.min(right,left),right};
+  };
   const save = () => {
     if (!layout || !model) return;
     positions[`${layout}:${model}`] = {...desired};
@@ -45,7 +52,7 @@ export function installFloatingClock(card, host) {
     const rect = (floating() ? panel : card).getBoundingClientRect();
     const baseX = rect.left - offset.x, baseY = rect.top - offset.y;
     const canvas = card.querySelector('canvas')?.getBoundingClientRect();
-    const above = canvas ? Math.max(0, rect.top - canvas.top) : 0;
+    const above = canvas?.width > 0 && canvas?.height > 0 ? Math.max(0, rect.top - canvas.top) : 0;
     const header = document.querySelector('.site-header')?.getBoundingClientRect();
     let top = Math.max(8, (header?.bottom || 0) + 8);
     // A transparent clock canvas must never cover the embedded board toolbar.
@@ -58,11 +65,12 @@ export function installFloatingClock(card, host) {
     }
     top += above;
     // Keep the grip and clock reachable after a resize or a settings change.
-    const maxX = Math.max(8, window.innerWidth - rect.width - 8);
-    const maxY = Math.max(top, window.innerHeight - rect.height - 8);
+    const horizontal=safeHorizontal();
+    const fit=fitClockArea({...horizontal,top,bottom:window.innerHeight-8,width:rect.width,height:rect.height,
+      x:baseX+x,y:baseY+y});
     offset = {
-      x: Math.round(Math.max(8, Math.min(maxX, baseX + x)) - baseX),
-      y: Math.round(Math.max(top, Math.min(maxY, baseY + y)) - baseY),
+      x: Math.round(fit.left-baseX),
+      y: Math.round(fit.top-baseY),
     };
     // A smaller viewport may clamp the display, but must not overwrite where
     // the user placed it in this layout at its usual size.
@@ -101,12 +109,14 @@ export function installFloatingClock(card, host) {
         const ratio = face?.offsetHeight / Math.max(1, naturalWidth) || .75;
         const clockTop = Math.max(8, card.getBoundingClientRect().top);
         const widthForHeight = Math.max(180, (window.innerHeight - clockTop - 64) / ratio + 30);
-        const width = `${Math.round(Math.max(180, Math.min(window.innerWidth * .9, widthForHeight, naturalWidth || 300)))}px`;
+        const safe=safeHorizontal();
+        const width = `${Math.max(1,Math.floor(Math.min(safe.right-safe.left,widthForHeight,naturalWidth||300)))}px`;
+        card.style.visibility=safe.right-safe.left<1?'hidden':'';
         if (panel.style.getPropertyValue('--floating-clock-width') !== width) panel.style.setProperty('--floating-clock-width', width);
         if (card.style.getPropertyValue('--docked-clock-width') !== width) card.style.setProperty('--docked-clock-width', width);
         move(desired.x, desired.y);
       }
-      else {setMoveMode(false);host.style.height='';}
+      else {setMoveMode(false);host.style.height='';card.style.visibility='';}
       const docked = window.innerWidth >= 800 && !document.body.classList.contains('mobile-mode') &&
         document.body.classList.contains('clock-docked-right') && !document.body.classList.contains('right-pane-hidden');
       const top = parseFloat(getComputedStyle(panel).top) || 0;
@@ -163,10 +173,15 @@ export function installFloatingClock(card, host) {
   });
   window.addEventListener('scroll', schedule, {passive:true});
   window.addEventListener('resize', schedule);
+  window.addEventListener('board-footprint-change',schedule);
   window.addEventListener('blur', () => setMoveMode(false));
   document.addEventListener('fullscreenchange', schedule);
   const resize = new ResizeObserver(schedule);
   resize.observe(panel);resize.observe(card);
+  const boardNode=document.getElementById('board');if(boardNode)resize.observe(boardNode);
+  const boardFrame=document.getElementById('zagreb-board');if(boardFrame)resize.observe(boardFrame);
+  const boardLayout=document.querySelector('.uniboard');
+  if(boardLayout)new MutationObserver(schedule).observe(boardLayout,{attributes:true,attributeFilter:['style']});
   new MutationObserver(schedule).observe(card, { attributes: true, attributeFilter: ['hidden'] });
   new MutationObserver(schedule).observe(card, { attributes: true, childList: true, subtree: true, attributeFilter: ['style'] });
   new MutationObserver(schedule).observe(document.body, {attributes:true,attributeFilter:['class']});
