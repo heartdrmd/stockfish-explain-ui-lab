@@ -2,6 +2,11 @@
 import { frameUpdate } from './resize-observer.js';
 import { readClockControl } from './generated/clock-control.js';
 import { isClockStyle } from './generated/clock-styles.js';
+
+export function practiceActionFor3D({ watching, locked, starting, active, finished }) {
+  if (watching || locked || starting) return null;
+  return active && !finished ? 'resign' : 'restart';
+}
 export function lastMoveFor3D(board) {
   // Interaction locks and transient cg.set calls may clear Chessground's mark.
   // The node at the displayed FEN is the durable source of the last move.
@@ -217,6 +222,7 @@ export function install3DBoard(board) {
     const isThinking = document.body.classList.contains('practice-thinking');
     return {
       type: 'zagreb:position', fen: board.fen(),
+      practiceAction: currentPracticeAction(),
       orientation: cg.orientation || board.orientation,
       viewRevision,
       movable: board.interactionLocked || window.__practiceStarting ? 'none' : cg.movable.color || 'none',
@@ -292,6 +298,11 @@ export function install3DBoard(board) {
     if (window.__practiceStarting || board.interactionLocked) return;
     document.getElementById('btn-practice-again')?.click();
   };
+  function currentPracticeAction() {
+    return practiceActionFor3D({ watching: board.watchActive, locked: board.interactionLocked || busy,
+      starting: window.__practiceStarting, active: document.body.classList.contains('practice-mode'),
+      finished: document.body.classList.contains('practice-finished') });
+  }
   restart.addEventListener('click', restartOpening);
   function syncAccount() {
     if (window.__boardAccountReady && frame.contentWindow) frame.contentWindow.postMessage({ type: 'zagreb:account', user: window.__currentUser || null }, location.origin);
@@ -455,6 +466,16 @@ export function install3DBoard(board) {
       if (event.data.control === 'evaluation' && event.data.visible === gaugeControl?.classList.contains('eval-gauge-hidden'))
         document.getElementById('eval-gauge-toggle')?.click();
       syncOverlay();
+      return;
+    }
+    if (event.data?.type === 'zagreb:practice-action') {
+      // Reject stale/double clicks and never let a watched game resign the
+      // suspended practice session. Use the existing result/archive/clock flow.
+      const action = currentPracticeAction();
+      if (!action || event.data.action !== action) return;
+      if (action === 'resign') document.getElementById('btn-resign')?.click();
+      else restartOpening();
+      sync(true);
       return;
     }
     if (event.data?.type === 'zagreb:restart') { restartOpening(); return; }

@@ -21,11 +21,13 @@ test('shared clocks use parent time in both board modes and reject foreign contr
   root.offsetWidth = 640;
   root.offsetHeight = 640;
   const sent = [], frames = [];
+  const resignButton = new Element(), replayButton = new Element();
   const windowTarget = new EventTarget();
   const origin = 'https://chess.example';
   const globals = {
     document: {
       body: new Element(), querySelector: () => null, getElementById: id =>
+        id === 'btn-resign' ? resignButton : id === 'btn-practice-again' ? replayButton :
         id === 'btn-toggle-clock' ? clockButton : id === 'btn-live-graph' ? graphButton : id === 'btn-toggle-board-controls' ? controlsButton : null,
       createElement: () => {
         const element = new Element();
@@ -144,6 +146,30 @@ test('shared clocks use parent time in both board modes and reject foreign contr
   message('zagreb:board-controls-state', frame.contentWindow, origin, {visible:true,ready:true});
   assert.equal(controlsButton.attributes['aria-label'], 'Hide board controls', 'Loading another saved view updates the header toggle');
   const positions = () => sent.filter(item => item.message.type === 'zagreb:position').map(item => item.message);
+  const practiceClasses = new Set(['practice-mode']);
+  document.body.classList.contains = name => practiceClasses.has(name);
+  let resigns = 0, replays = 0;
+  resignButton.addEventListener('click', () => { resigns++; practiceClasses.add('practice-finished'); });
+  replayButton.addEventListener('click', () => replays++);
+  message('zagreb:practice-action', {}, origin, {action:'resign'});
+  message('zagreb:practice-action', frame.contentWindow, 'https://foreign.example', {action:'resign'});
+  message('zagreb:practice-action', frame.contentWindow, origin, {action:'restart'});
+  assert.equal(resigns + replays, 0, 'Foreign and stale actions cannot end or restart a game');
+  board.watchActive = true;
+  message('zagreb:practice-action', frame.contentWindow, origin, {action:'resign'});
+  board.watchActive = false;
+  board.interactionLocked = true;
+  message('zagreb:practice-action', frame.contentWindow, origin, {action:'resign'});
+  board.interactionLocked = false;
+  assert.equal(resigns, 0, 'Watching and locked positions preserve the practice game');
+  message('zagreb:practice-action', frame.contentWindow, origin, {action:'resign'});
+  assert.equal(resigns, 1, 'Resign uses the existing game-end button');
+  assert.equal(positions().at(-1).practiceAction, 'restart', 'The same toolbar slot now offers N');
+  message('zagreb:practice-action', frame.contentWindow, origin, {action:'resign'});
+  assert.equal(resigns, 1, 'A stale R request cannot resign the completed game again');
+  message('zagreb:practice-action', frame.contentWindow, origin, {action:'restart'});
+  assert.equal(replays, 1, 'N uses the existing same-opening replay button');
+  practiceClasses.clear();
   const firstViewRevision = positions().at(-1).viewRevision;
   assert.equal(positions().at(-1).orientation, 'white');
   board.studyGraph = {available:true, enabled:true, visible:false, points:[{path:'ab', label:'1. e4',value:0,score:'0.00'}]};

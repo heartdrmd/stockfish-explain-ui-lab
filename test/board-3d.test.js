@@ -1,7 +1,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {Chess} from '../vendor/chess.js/chess.js';
-import {canAccept3DMove} from '../src/board-3d.js';
+import {canAccept3DMove, practiceActionFor3D} from '../src/board-3d.js';
+test('practice action becomes replay only after the game ends, and is unavailable during watch/setup', () => {
+  assert.equal(practiceActionFor3D({active:true, finished:false}), 'resign');
+  assert.equal(practiceActionFor3D({active:true, finished:true}), 'restart');
+  assert.equal(practiceActionFor3D({active:false}), 'restart');
+  for (const gate of ['watching', 'locked', 'starting']) {
+    for (const finished of [true, false])
+      assert.equal(practiceActionFor3D({active:true, finished, [gate]:true}), null);
+  }
+});
 function controller(fen) { const chess=new Chess(fen);return {chess,fen:()=>chess.fen(),cg:{state:{movable:{color:'both'}}},playerColor:null,interactionLocked:false}; }
 test('3D moves require the current position, legal turn and unlocked parent',()=>{
   const b=controller(), request={fen:b.fen(),uci:'e2e4'};
