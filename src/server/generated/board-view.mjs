@@ -4918,27 +4918,27 @@ var BOARD_FINISHES = [
 	{
 		id: "burl",
 		label: "Walnut burl",
-		light: "#bda17c",
-		dark: "#523322",
-		frame: "#302015",
+		light: "#ccb797",
+		dark: "#6b482f",
+		frame: "#513522",
 		surface: "wood",
 		grainPattern: "burl"
 	},
 	{
 		id: "cocobolo",
 		label: "Cocobolo & maple",
-		light: "#c4ac83",
-		dark: "#6b2f20",
-		frame: "#3c1b12",
+		light: "#c7b799",
+		dark: "#683b2c",
+		frame: "#432519",
 		surface: "wood",
 		grainPattern: "ribbon"
 	},
 	{
 		id: "birdseye",
 		label: "Birdseye maple",
-		light: "#c9b58f",
-		dark: "#594535",
-		frame: "#32271e",
+		light: "#d0bea1",
+		dark: "#594736",
+		frame: "#3b2c20",
 		surface: "wood",
 		grainPattern: "birdseye"
 	},
@@ -4961,65 +4961,65 @@ var BOARD_FINISHES = [
 	{
 		id: "travertine",
 		label: "Travertine & basalt",
-		light: "#b0a18b",
-		dark: "#2a2a28",
-		frame: "#1c1e1c",
+		light: "#bcb4a5",
+		dark: "#323332",
+		frame: "#272927",
 		surface: "stone"
 	},
 	{
 		id: "walnut",
 		label: "Smoked walnut",
-		light: "#af9061",
-		dark: "#422315",
-		frame: "#28150d",
+		light: "#c9b999",
+		dark: "#705442",
+		frame: "#4d3828",
 		surface: "wood"
 	},
 	{
 		id: "ebony",
 		label: "Ebony & maple",
-		light: "#c8b089",
-		dark: "#0c0a08",
-		frame: "#080706",
+		light: "#c9b998",
+		dark: "#24201a",
+		frame: "#181510",
 		surface: "wood"
 	},
 	{
 		id: "rosewood",
 		label: "Rosewood",
-		light: "#b39b77",
-		dark: "#48170f",
-		frame: "#2d0d09",
+		light: "#c6b494",
+		dark: "#633f31",
+		frame: "#40251c",
 		surface: "wood"
 	},
 	{
 		id: "marble",
 		label: "Black marble",
-		light: "#b9b9b2",
-		dark: "#121715",
-		frame: "#0b1110",
+		light: "#c6c5be",
+		dark: "#252a28",
+		frame: "#1a201d",
 		surface: "stone"
 	},
 	{
 		id: "oak",
 		label: "Honey oak",
-		light: "#bda271",
-		dark: "#72502d",
-		frame: "#3c2819",
+		light: "#d0bd9b",
+		dark: "#947650",
+		frame: "#6a5235",
 		surface: "wood"
 	},
 	{
 		id: "olive",
 		label: "Olivewood",
-		light: "#b8ac7b",
-		dark: "#4e5030",
-		frame: "#30301c",
+		light: "#c1b08a",
+		dark: "#46402f",
+		frame: "#302b21",
 		surface: "wood"
 	},
 	{
 		id: "cherry",
 		label: "Cherry",
-		light: "#c6a17f",
-		dark: "#743d2c",
-		frame: "#3c201a",
+		light: "#cbb89d",
+		dark: "#875642",
+		frame: "#5c392c",
 		surface: "wood"
 	},
 	{

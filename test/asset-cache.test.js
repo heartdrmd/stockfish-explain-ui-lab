@@ -22,6 +22,8 @@ async function fixture(t) {
   await put('assets/nnue/big.nnue', 'brain-v1');
   await put('src/main.js', '/* mutable app */');
   await put('zagreb/assets/index-aBcD1234.js', '/* hashed bundle */');
+  await put('zagreb/assets/board-finish-atlas-aBcD1234.webp', 'material-data');
+  await put('zagreb/assets/mutable-board.webp', 'unversioned-material');
   await put('private.env', 'DO NOT SERVE');
   t.after(() => rm(root, { recursive: true, force: true }));
   return { root, put };
@@ -86,6 +88,12 @@ test('long caching is limited to known assets; mutable code and private APIs kee
   assert.equal((await fetch(url+'/api/settings')).headers.get('cache-control'), 'no-store');
   assert.equal((await fetch(url+'/src/main.js')).headers.get('cache-control'), 'no-cache');
   assert.match((await fetch(url+'/zagreb/assets/index-aBcD1234.js')).headers.get('cache-control'), /immutable/);
+  const texture = await fetch(url+'/zagreb/assets/board-finish-atlas-aBcD1234.webp');
+  assert.match(texture.headers.get('cache-control'), /max-age=31536000, immutable/);
+  assert.match(texture.headers.get('content-type'), /image\/webp/);
+  assert.equal(await texture.text(), 'material-data');
+  assert.doesNotMatch((await fetch(url+'/zagreb/assets/mutable-board.webp')).headers.get('cache-control') || '', /immutable/);
+  assert.doesNotMatch((await fetch(url+'/zagreb/assets/missing-aBcD1234.webp')).headers.get('cache-control') || '', /immutable/);
   assert.doesNotMatch((await fetch(url+'/zagreb/assets/missing-aBcD1234.js')).headers.get('cache-control') || '', /immutable/);
   const bad = await fetch(url+'/asset-cache/'+'a'.repeat(64)+'/private.env');
   assert.equal(bad.status, 404); assert.equal(bad.headers.get('cache-control'), 'no-store');

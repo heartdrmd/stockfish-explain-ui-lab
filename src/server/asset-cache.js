@@ -74,7 +74,7 @@ export async function installAssetCache(app, root) {
   app.use(async (req, res, next) => {
     if (req.method !== 'GET' && req.method !== 'HEAD') return next();
     if (pages.has(req.path)) return res.set('Cache-Control', 'no-cache').type('html').send(pages.get(req.path));
-    if (bundles.has(req.path) && /^\/zagreb\/assets\/[^/]+-[\w-]{8,}\.(js|css|woff2)$/.test(req.path)) {
+    if (bundles.has(req.path) && /^\/zagreb\/assets\/[^/]+-[\w-]{8,}\.(js|css|woff2|webp)$/.test(req.path)) {
       res.set('Cache-Control', IMMUTABLE);
       return next();
     }
