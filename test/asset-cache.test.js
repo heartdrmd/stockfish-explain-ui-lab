@@ -58,7 +58,7 @@ test('Garde clock uses immutable content caching and updates independently', asy
   const response = await fetch(first.url + clockPath);
   assert.equal(await response.text(), 'garde-v1');
   assert.match(response.headers.get('cache-control'), /max-age=31536000, immutable/);
-  const cached = await fetch(first.url + clockPath, {headers:{'If-None-Match':response.headers.get('etag')}});
+  const cached = await fetch(first.url + clockPath, {headers:{'If-None-Match':response.headers.get('etag'),'Cache-Control':'max-age=0'}});
   assert.equal(cached.status, 304);
   assert.equal((await cached.arrayBuffer()).byteLength, 0);
   await put('zagreb/clocks/garde-20260915.glb', 'garde-v2');
