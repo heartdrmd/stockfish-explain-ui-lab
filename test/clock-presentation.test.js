@@ -20,6 +20,7 @@ test('one selector keeps every design, lists 3D first and preserves the running 
   installClockPresentation(board,clock,()=>{});
   assert.deepEqual(select.options.slice(0,2).map(option=>option.value),['dgt-3000-3d','zmf-pro-3d']);
   assert.equal(select.options.length,CLOCK_STYLES.length+LEGACY_CLOCK_STYLES.length);
+  assert.equal(select.options[4].value,'garde-3d','Garde is the fifth clock choice');
   assert.equal(select.value,'dgt-classic','Saved viewer appearance selects the matching name');
   const time=()=>JSON.stringify({...clock,style:undefined});
   const before=time();
@@ -36,7 +37,7 @@ test('one selector keeps every design, lists 3D first and preserves the running 
   assert.equal(select.value,'dgt-3000-3d','An explicit fullscreen choice updates the same dropdown');
   assert.equal(saved.get('stockfish-explain.clock-presentation-v2'),'atelier');
   assert.equal(time(),before,'Style changes never reset time or pause the game');
-  for(const style of ['dgt-3000-3d-blue','zmf-pro-3d-blue']) {
+  for(const style of ['dgt-3000-3d-blue','zmf-pro-3d-blue','garde-3d']) {
     assert.ok(select.options.some(option=>option.value===style));
     select.value=style;select.dispatchEvent(new Event('change'));
     assert.equal(requests.at(-1),style);

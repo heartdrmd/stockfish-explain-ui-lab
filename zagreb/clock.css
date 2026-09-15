@@ -879,6 +879,18 @@
 .game-clock .clock-live-error{margin:0;font-size:11px;color:#d4c291}
 
 .clock-view-panel.clock-view-floating{position:fixed;z-index:2147483000;right:auto;width:268px;box-sizing:border-box;transform:none;zoom:1}.clock-view-panel *{box-sizing:border-box}.clock-view-panel :focus-visible{outline:2px solid #d8bf72;outline-offset:2px}
+.game-clock .garde-lcd-below{display:flex;width:94%;margin:7px auto 10px;padding:5px;border:2px solid #50594a;border-radius:4px;background:linear-gradient(#a3af90,#9da88a 35%,#94a080);color:#10170f;box-shadow:0 1px 3px #0004;cursor:pointer}
+.game-clock .garde-lcd-below[aria-disabled=true]{cursor:default}
+.garde-lcd-side{display:block;width:50%;min-width:0;padding:0 5px}
+.garde-lcd-side+.garde-lcd-side{border-left:1px solid #59634f}
+.garde-lcd-heading{display:flex;justify-content:space-between;align-items:center;font:700 8px/1.4 Arial,sans-serif;margin:0 0 3px}
+.garde-lcd-on{background:#10170f;color:#9da88a;padding:0 4px}
+.garde-lcd-side .clock-segments{display:block;color:#10170f;fill:currentColor;stroke:currentColor;stroke-width:1.2;stroke-linejoin:round;width:100%;height:39px}
+.garde-shadow-setting{display:flex;align-items:center;gap:7px;margin:10px 0}
+.garde-load-fallback{display:block;font-size:13px;padding:18px;color:#dbe3d1}
+.garde-load-fallback span{display:block;font:20px monospace;margin:8px 0}
+.game-clock .clock-view-menu{gap:4px}
+.game-clock .clock-live-garde .clock-view-menu{margin-bottom:4px}
 
 /* Physical controls keep the approved casing and use one gesture handler. */
 .clock-real-buttons {position:relative}

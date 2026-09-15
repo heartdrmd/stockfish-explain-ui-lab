@@ -17,6 +17,10 @@ var CLOCK_STYLES = [
 		label: "ZMF TapNSet Pro · 3D blue active side"
 	},
 	{
+		id: "garde-3d",
+		label: "Garde / Eurochron · Atelier 3D"
+	},
+	{
 		id: "dgt",
 		label: "DGT · red LCD"
 	},
@@ -57,10 +61,13 @@ function isClockStyle(value) {
 	return CLOCK_STYLES.some((style) => style.id === value);
 }
 function is3DClockStyle(style) {
-	return style === "dgt-3000-3d" || style === "zmf-pro-3d" || isBlueActiveClockStyle(style);
+	return style === "dgt-3000-3d" || style === "zmf-pro-3d" || style === "garde-3d" || isBlueActiveClockStyle(style);
+}
+function clockModelForStyle(style) {
+	return style === "garde-3d" ? "garde" : typeof style === "string" && style.startsWith("zmf") ? "zmf-pro" : "dgt-3000";
 }
 function isBlueActiveClockStyle(style) {
 	return style === "dgt-3000-3d-blue" || style === "zmf-pro-3d-blue";
 }
 //#endregion
-export { CLOCK_STYLES, is3DClockStyle, isBlueActiveClockStyle, isClockStyle };
+export { CLOCK_STYLES, clockModelForStyle, is3DClockStyle, isBlueActiveClockStyle, isClockStyle };

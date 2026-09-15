@@ -187,7 +187,7 @@ export function installFloatingClock(card, host) {
   new MutationObserver(schedule).observe(document.body, {attributes:true,attributeFilter:['class']});
   schedule();
   return { setLayout(request) {
-    if (!request || !['dgt-3000','zmf-pro'].includes(request.model) ||
+    if (!request || !['dgt-3000','zmf-pro','garde'].includes(request.model) ||
       !/^(fullscreen:(2d|3d)|window:(2d|3d):(left|right):(open|closed):(open|closed))$/.test(request.layout)) return;
     if (request.layout.startsWith('fullscreen:')) {
       finish(); suspended = true; setMoveMode(false); schedule(); return;

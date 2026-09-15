@@ -5393,6 +5393,10 @@ var CLOCK_STYLES = [
 		label: "ZMF TapNSet Pro · 3D blue active side"
 	},
 	{
+		id: "garde-3d",
+		label: "Garde / Eurochron · Atelier 3D"
+	},
+	{
 		id: "dgt",
 		label: "DGT · red LCD"
 	},
@@ -5430,20 +5434,79 @@ var CLOCK_STYLES = [
 	}
 ];
 //#endregion
+//#region lib/garde-settings.ts
+var GARDE_DISPLAYS = [
+	"original",
+	"above",
+	"below"
+];
+var GARDE_WOODS = {
+	original: "Original honey",
+	amber: "Deep amber",
+	walnut: "Walnut tone",
+	rosewood: "Rosewood tone",
+	ebony: "Ebony tone",
+	pale: "Pale timber"
+};
+var GARDE_FINISHES = {
+	worn: "Original varnish",
+	satin: "Satin",
+	matte: "Matte",
+	polished: "Polished"
+};
+var DEFAULT_GARDE = {
+	display: "original",
+	wood: "original",
+	finish: "worn",
+	shade: 100,
+	gloss: 35,
+	glass: 35,
+	glassVisibility: 0,
+	exposure: 100,
+	shadows: true
+};
+function readGardeSettings(value) {
+	const v = value && typeof value === "object" && !Array.isArray(value) ? value : {};
+	const n = (key, min, max) => typeof v[key] === "number" && Number.isFinite(v[key]) ? Math.max(min, Math.min(max, v[key])) : DEFAULT_GARDE[key];
+	return {
+		display: GARDE_DISPLAYS.includes(v.display) ? v.display : "original",
+		wood: Object.hasOwn(GARDE_WOODS, v.wood || "") ? v.wood : "original",
+		finish: Object.hasOwn(GARDE_FINISHES, v.finish || "") ? v.finish : "worn",
+		shade: n("shade", 35, 175),
+		gloss: n("gloss", 0, 100),
+		glass: n("glass", 0, 100),
+		glassVisibility: n("glassVisibility", 0, 100),
+		exposure: n("exposure", 40, 160),
+		shadows: typeof v.shadows === "boolean" ? v.shadows : true
+	};
+}
+function validGardeSettings(value) {
+	if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+	const clean = readGardeSettings(value), v = value;
+	return Object.keys(v).length === Object.keys(clean).length && Object.entries(clean).every(([k, n]) => v[k] === n);
+}
+//#endregion
 //#region lib/clock-3d-settings.ts
 var CLOCK_LIGHTS = [
 	"Studio",
 	"Side",
 	"Daylight",
 	"Warm",
-	"Night"
+	"Night",
+	"Even",
+	"Overhead"
+];
+var CLOCK_MODELS = [
+	"dgt-3000",
+	"zmf-pro",
+	"garde"
 ];
 function validClock3DViews(value) {
 	if (!value || typeof value !== "object" || Array.isArray(value)) return false;
 	return Object.entries(value).every(([model, view]) => {
-		if (!["dgt-3000", "zmf-pro"].includes(model) || !view || typeof view !== "object" || Array.isArray(view)) return false;
+		if (!CLOCK_MODELS.includes(model) || !view || typeof view !== "object" || Array.isArray(view)) return false;
 		const clean = readClock3DView(view);
-		return Object.keys(view).length === Object.keys(clean).length - (view.vertical === void 0 ? 1 : 0) && Object.entries(clean).every(([key, setting]) => key === "vertical" && view[key] === void 0 ? true : view[key] === setting);
+		return Object.keys(view).length === Object.keys(clean).length - (view.vertical === void 0 ? 1 : 0) && Object.entries(clean).every(([key, setting]) => key === "garde" ? validGardeSettings(view[key]) : key === "vertical" && view[key] === void 0 ? true : view[key] === setting);
 	});
 }
 var DEFAULT_CLOCK_3D = {
@@ -5455,10 +5518,12 @@ var DEFAULT_CLOCK_3D = {
 	intensity: 100,
 	fill: 35
 };
+({ ...DEFAULT_CLOCK_3D });
 function readClock3DView(value) {
 	const v = value && typeof value === "object" ? value : {};
 	const num = (key, min, max) => typeof v[key] === "number" && Number.isFinite(v[key]) ? Math.max(min, Math.min(max, v[key])) : DEFAULT_CLOCK_3D[key];
 	return {
+		...v.garde !== void 0 ? { garde: readGardeSettings(v.garde) } : {},
 		...typeof v.dockX === "number" && Number.isFinite(v.dockX) && typeof v.dockY === "number" && Number.isFinite(v.dockY) ? {
 			dockX: Math.max(-1e4, Math.min(1e4, v.dockX)),
 			dockY: Math.max(-1e4, Math.min(1e4, v.dockY))
