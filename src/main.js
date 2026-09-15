@@ -6,7 +6,7 @@ import { installNotationInput, isHistoryInputTarget } from './generated/notation
 import { api, currentUser }       from './api.js';
 import { frameUpdate, isResizeObserverNotification } from './resize-observer.js';
 import { resetClockControl, startUntimedDisplay, usesClockBudget, clockControlLabel } from './generated/clock-control.js';
-import { Engine, ENGINE_FLAVORS, engineDownloadUrls } from './engine.js';
+import { Engine, ENGINE_FLAVORS, engineDownloadUrls, preloadEngineAsset, clearLocalEngineFiles } from './engine.js';
 import { installPracticeEvaluation } from './practice-evaluation.js';
 import { BoardController, toDests as toDestsFrom } from './board.js';
 import { Explainer }              from './explain.js';
@@ -1056,8 +1056,8 @@ async function main() {
         `Initialising <strong>Lichess Stockfish 18</strong>…`,
         0,
         isFirstLichessBoot
-          ? `Loading WASM + neural network. First-time setup — only happens once.`
-          : `Loading neural network (browser cache is used when available).`
+          ? `Loading WASM + neural network. Verified engine files are saved locally when available.`
+          : `Loading neural network (saved local files are used when available).`
       );
 
       const onBootProgress = (ev) => {
@@ -1074,6 +1074,10 @@ async function main() {
           } catch {}
           return;
         }
+        if (d.phase === 'cache-hit') {
+          renderBar(`<strong>${lbl}</strong> loaded from this device (${fmt(d.received)})`, 100, 'No network download needed.');
+          return;
+        }
         if (d.phase === 'loaded') {
           renderBar(
             `<strong>${lbl}</strong> loaded (${fmt(d.received)}) — initialising engine…`,
@@ -1088,7 +1092,7 @@ async function main() {
             (d.total ? ` / ${fmt(d.total)} (${pct}%)` : ' …'),
           pct,
           isFirstLichessBoot
-            ? `First-time setup — only happens once. Your browser will cache it.`
+            ? `Downloading engine files. A verified local copy will be saved when storage is available.`
             : ''
         );
       };
@@ -10649,14 +10653,13 @@ async function main() {
     engine.setMultiPV(+ui.rangeMultipv.value);
   });
 
-  // ───── Preload engines (HTTP-cache warming) ─────
+  // ───── Preload engines (verified NNUE files + HTTP-cache warming) ─────
   // Previous version used a Service Worker to cache engine assets
   // permanently in CacheStorage. That design crashed Chrome's renderer
   // ("Can't open this page / Error 5") on two real users when it served
   // partially-downloaded WASM. The SW at /sw.js now just self-
-  // unregisters on activate, and preload is simple fetch() calls that
-  // let Chrome's normal HTTP cache retain the bytes. Less persistent
-  // but far safer.
+  // unregisters on activate. WASM still uses ordinary HTTP caching;
+  // external NNUE uses its separate, content-verified local file store.
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.getRegistrations?.().then(regs => {
       for (const r of regs) r.unregister().catch(() => {});
@@ -10686,11 +10689,8 @@ async function main() {
           try {
             const ctrl = new AbortController();
             const timer = setTimeout(() => ctrl.abort('timeout'), 4 * 60 * 1000);
-            const resp = await fetch(url, { signal: ctrl.signal });
-            clearTimeout(timer);
-            if (!resp.ok) failed++;
-            // Drain the body so Chrome actually commits it to HTTP cache.
-            await resp.arrayBuffer().catch(() => {});
+            try { await preloadEngineAsset(url, { signal: ctrl.signal }); }
+            finally { clearTimeout(timer); }
           } catch { failed++; }
           done++;
           const failPart = failed ? ` (${failed} skipped)` : '';
@@ -10703,7 +10703,7 @@ async function main() {
         : '✓ Engines warmed';
       btnPreload.title = failed
         ? `${failed} files unavailable on the server — those variants fall back to lite`
-        : 'All engines fetched into Chrome\'s HTTP cache';
+        : 'Engine files loaded; neural networks saved locally when storage is available';
       btnPreload.disabled = false;
       setTimeout(() => { btnPreload.textContent = orig; }, 6000);
     });
@@ -13802,6 +13802,7 @@ async function main() {
   if (btnClearCache) {
     btnClearCache.addEventListener('click', async () => {
       if (!confirm('Wipe cached engine files and reload? Any preloaded engines will need to be re-downloaded.')) return;
+      try { await clearLocalEngineFiles(); } catch {}
       try {
         const keys = await caches.keys();
         await Promise.all(keys.filter(k => k.startsWith('sf-engines-')).map(k => caches.delete(k)));

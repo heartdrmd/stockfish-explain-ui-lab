@@ -230,7 +230,7 @@ app.use((req, res, next) => {
   // on stale versions for up to a year. Use must-revalidate instead
   // (browser sends If-Modified-Since on next visit, gets 304 if
   // unchanged — cheap).
-  if (req.path === '/assets/stockfish-web/lichess-shim.js') {
+  if (['/assets/stockfish-web/lichess-shim.js', '/assets/stockfish-web/nnue-store.js'].includes(req.path)) {
     res.setHeader('Cache-Control', 'public, max-age=0, must-revalidate');
   } else if (req.path.startsWith('/assets/stockfish/') ||
              req.path.startsWith('/assets/stockfish-web/') ||

@@ -74,7 +74,7 @@ test('Practice start reaches a confirmed idle boundary before changing the board
 
 test('repeat engine boots use truthful loading language instead of claiming a download', async () => {
   const main = await readFile(new URL('../src/main.js', import.meta.url), 'utf8');
-  assert.match(main, /Loading neural network \(browser cache is used when available\)/);
+  assert.match(main, /Loading neural network \(saved local files are used when available\)/);
   assert.match(main, /`Loading <strong>\$\{lbl\}<\/strong> \$\{fmt\(d\.received\)\}`/);
   assert.doesNotMatch(main, /`Downloading <strong>\$\{lbl\}/);
 });

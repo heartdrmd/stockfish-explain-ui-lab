@@ -35,6 +35,7 @@
 //     transferable). Don't reuse the Uint8Array after passing.
 
 import Sf18Web from './sf_18.js';
+import { loadNnueBytes } from './nnue-store.js';
 
 let inst = null;
 
@@ -93,46 +94,14 @@ self.onmessage = (e) => {
 // main.js falls back to indeterminate spinner).
 async function loadNnue(url, index /* 0=big, 1=small */) {
   try {
-    const resp = await fetch(url, { credentials: 'omit' });
-    if (!resp.ok) throw new Error('NNUE fetch ' + resp.status + ' ' + url);
-    const total = +(resp.headers.get('content-length') || 0);
-    self.postMessage(
-      `info string LSF_NNUE_FETCH_START index=${index} total=${total} url=${url}`
-    );
-
-    // Stream the body so we can track progress. arrayBuffer() blocks
-    // until the whole download completes, hiding progress entirely.
-    const reader = resp.body?.getReader?.();
-    let buf;
-    if (reader) {
-      const chunks = [];
-      let received = 0;
-      let lastReport = 0;
-      // Throttle progress to one event per 250 ms or every 1 MB,
-      // whichever first — keeps the postMessage stream light.
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        chunks.push(value);
-        received += value.length;
-        const now = Date.now();
-        if (now - lastReport > 250 || received - lastReport > 1_048_576) {
-          self.postMessage(
-            `info string LSF_NNUE_PROGRESS index=${index} received=${received} total=${total}`
-          );
-          lastReport = now;
-        }
-      }
-      // Concatenate into one Uint8Array — setNnueBuffer expects
-      // contiguous memory.
-      buf = new Uint8Array(received);
-      let offset = 0;
-      for (const c of chunks) { buf.set(c, offset); offset += c.length; }
-    } else {
-      // No streaming reader (very old browser?) — fall back to
-      // arrayBuffer with no progress.
-      buf = new Uint8Array(await resp.arrayBuffer());
-    }
+    const buf = await loadNnueBytes(url, { onProgress(event) {
+      if (event.phase === 'fetch-start')
+        self.postMessage(`info string LSF_NNUE_FETCH_START index=${index} total=${event.total} url=${url}`);
+      else if (event.phase === 'progress')
+        self.postMessage(`info string LSF_NNUE_PROGRESS index=${index} received=${event.received} total=${event.total}`);
+      else
+        self.postMessage(`info string LSF_NNUE_CACHE index=${index} status=${event.phase} bytes=${event.received || 0}`);
+    } });
 
     inst.setNnueBuffer(buf, index);
     self.postMessage(

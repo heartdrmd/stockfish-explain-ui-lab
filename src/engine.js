@@ -24,18 +24,17 @@ export const ENGINE_FLAVORS = {
   // always I dont want light".
   //
   // Cold-cache first-visit: ~0.7 MB wasm + 3.4 MB small + 104 MB
-  // big = ~108 MB blocking. Subsequent visits hit disk cache → <1s.
-  // We can show a one-time toast ("downloading engine brain — only
-  // happens once").
+  // big = ~108 MB blocking. Subsequent visits reuse verified local files when storage is available.
+  // Cleared site data or denied storage can still require another download.
   'lichess-full': {
-    // ?v=4 cache-busts a previously-cached shim. Bump if the shim
+    // ?v=5 cache-busts a previously-cached shim. Bump if the shim
     // changes in a way old browsers must not keep using. (server.js
     // also serves this file with must-revalidate, but the query
     // string here forces the cache miss for already-warmed clients
     // who hit the immutable header before the fix.)
-    js: 'assets/stockfish-web/lichess-shim.js?v=4',
+    js: 'assets/stockfish-web/lichess-shim.js?v=5',
     label: 'Lichess Stockfish 18 Full',
-    size: '~108 MB cold-cache · disk-cached after first visit',
+    size: '~108 MB first load · saved locally when available',
     threaded: true,
     requiresBigNetForPractice: true,
     externalNnue: {
@@ -164,9 +163,25 @@ export const ENGINE_FLAVORS = {
 export function engineDownloadUrls(spec) {
   const script = spec.js.replace(/\?.*$/, '');
   const files = spec.externalNnue
-    ? [spec.js, script.replace(/[^/]+$/, 'sf_18.js'), script.replace(/[^/]+$/, 'sf_18.wasm'), ...Object.values(spec.externalNnue)]
+    ? [spec.js, script.replace(/[^/]+$/, 'sf_18.js'), script.replace(/[^/]+$/, 'sf_18.wasm'), script.replace(/[^/]+$/, 'nnue-store.js'), ...Object.values(spec.externalNnue)]
     : [spec.js, script.replace(/\.js$/, '.wasm')];
   return [...new Set(files.map(assetUrl))];
+}
+
+// Manual preload uses the same verified store as the workers. WASM and other
+// variants keep their existing HTTP-cache path.
+const localNnueModule = () => import(assetUrl('assets/stockfish-web/nnue-store.js'));
+export async function preloadEngineAsset(url, { signal } = {}) {
+  if (/\/assets\/nnue\/(big|small)\.nnue(?:[?#]|$)/.test('/' + url)) {
+    await (await localNnueModule()).loadNnueBytes(url, { signal });
+  } else {
+    const response = await fetch(url, { signal });
+    if (!response.ok) throw new Error(`Engine preload failed: ${response.status}`);
+    await response.arrayBuffer();
+  }
+}
+export async function clearLocalEngineFiles() {
+  await (await localNnueModule()).clearNnueStore();
 }
 
 export class Engine extends EventTarget {
@@ -1311,6 +1326,11 @@ export class Engine extends EventTarget {
       const m = /index=(\d+)\s+received=(\d+)\s+total=(\d+)/.exec(line);
       if (m) this.dispatchEvent(new CustomEvent('boot-progress', {
         detail: { phase: 'progress', index: +m[1], received: +m[2], total: +m[3] },
+      }));
+    } else if (line.startsWith('info string LSF_NNUE_CACHE ')) {
+      const m = /index=(\d+)\s+status=([\w-]+)\s+bytes=(\d+)/.exec(line);
+      if (m && m[2] === 'cache-hit') this.dispatchEvent(new CustomEvent('boot-progress', {
+        detail: { phase: 'cache-hit', index: +m[1], received: +m[3], total: +m[3] },
       }));
     } else if (line.startsWith('info string LSF_NNUE_LOADED ')) {
       const m = /index=(\d+)\s+bytes=(\d+)/.exec(line);

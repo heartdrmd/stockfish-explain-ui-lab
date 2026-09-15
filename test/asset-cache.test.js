@@ -17,6 +17,7 @@ async function fixture(t) {
   await put('zagreb/engine/clock.js', 'fetch(new URL("clock.wasm", self.location));');
   await put('zagreb/engine/clock.wasm', 'wasm-v1');
   await put('assets/stockfish-web/lichess-shim.js', 'import "./sf_18.js";');
+  await put('assets/stockfish-web/nnue-store.js', '/* local network store */');
   await put('assets/stockfish-web/sf_18.js', '/* engine */');
   await put('assets/stockfish-web/sf_18.wasm', 'full-v1');
   await put('assets/nnue/big.nnue', 'brain-v1');
@@ -54,10 +55,16 @@ test('engine relative imports and WASM share one version, including when only WA
   const js = before.urls['/assets/stockfish-web/lichess-shim.js'];
   assert.equal(new URL('./sf_18.js', 'https://test'+js).pathname, before.urls['/assets/stockfish-web/sf_18.js']);
   assert.equal(new URL('./sf_18.wasm', 'https://test'+js).pathname, before.urls['/assets/stockfish-web/sf_18.wasm']);
+  assert.equal(new URL('./nnue-store.js', 'https://test'+js).pathname, before.urls['/assets/stockfish-web/nnue-store.js']);
   await put('assets/stockfish-web/sf_18.wasm', 'full-v2');
   const after = await createAssetCatalog(root);
   assert.notEqual(after.urls['/assets/stockfish-web/lichess-shim.js'], js);
   assert.equal(after.urls['/zagreb/engine/clock.js'], before.urls['/zagreb/engine/clock.js']);
+  await put('assets/stockfish-web/nnue-store.js', '/* corrected local store */');
+  const changedStore = await createAssetCatalog(root);
+  assert.notEqual(changedStore.urls['/assets/stockfish-web/lichess-shim.js'], after.urls['/assets/stockfish-web/lichess-shim.js']);
+  assert.equal(changedStore.urls['/assets/nnue/big.nnue'], before.urls['/assets/nnue/big.nnue']);
+  assert.equal(changedStore.urls['/zagreb/models/queen.glb'], before.urls['/zagreb/models/queen.glb']);
 });
 test('real HTTP responses cache exact bytes; HTML refresh discovers a corrected model', async t => {
   const { root, put } = await fixture(t), first = await serve(t, root);
@@ -105,6 +112,7 @@ test('long caching is limited to known assets; mutable code and private APIs kee
 test('explicit preload uses the actual full-engine dependencies, without a nonexistent shim.wasm', () => {
   const urls = engineDownloadUrls(ENGINE_FLAVORS['lichess-full']);
   assert.ok(urls.includes('assets/stockfish-web/sf_18.wasm'));
+  assert.ok(urls.includes('assets/stockfish-web/nnue-store.js'));
   assert.ok(urls.includes('/assets/nnue/big.nnue'));
   assert.ok(!urls.some(url => url.includes('lichess-shim.wasm')));
 });
