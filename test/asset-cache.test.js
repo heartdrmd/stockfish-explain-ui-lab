@@ -14,6 +14,7 @@ async function fixture(t) {
   await put('zagreb/index.html', '<html><head></head><body>3D</body></html>');
   await put('zagreb/models/queen.glb', 'queen-v1');
   await put('zagreb/models/pawn.glb', 'pawn-v1');
+  await put('zagreb/clocks/garde-20260915.glb', 'garde-v1');
   await put('zagreb/engine/clock.js', 'fetch(new URL("clock.wasm", self.location));');
   await put('zagreb/engine/clock.wasm', 'wasm-v1');
   await put('assets/stockfish-web/lichess-shim.js', 'import "./sf_18.js";');
@@ -49,6 +50,22 @@ test('content versions survive deployment timestamps; only changed models get ne
   assert.notEqual(after.urls['/zagreb/models/queen.glb'], before.urls['/zagreb/models/queen.glb']);
   assert.equal(after.urls['/zagreb/models/pawn.glb'], before.urls['/zagreb/models/pawn.glb']);
   assert.equal(after.urls['/assets/nnue/big.nnue'], before.urls['/assets/nnue/big.nnue']);
+});
+test('Garde clock uses immutable content caching and updates independently', async t => {
+  const { root, put } = await fixture(t), first = await serve(t, root);
+  const clockPath = first.catalog.urls['/zagreb/clocks/garde-20260915.glb'];
+  assert.ok(clockPath, 'Clock models must be included in the catalog');
+  const response = await fetch(first.url + clockPath);
+  assert.equal(await response.text(), 'garde-v1');
+  assert.match(response.headers.get('cache-control'), /max-age=31536000, immutable/);
+  const cached = await fetch(first.url + clockPath, {headers:{'If-None-Match':response.headers.get('etag')}});
+  assert.equal(cached.status, 304);
+  assert.equal((await cached.arrayBuffer()).byteLength, 0);
+  await put('zagreb/clocks/garde-20260915.glb', 'garde-v2');
+  const after = await createAssetCatalog(root);
+  assert.notEqual(after.urls['/zagreb/clocks/garde-20260915.glb'], clockPath);
+  assert.equal(after.urls['/zagreb/models/pawn.glb'], first.catalog.urls['/zagreb/models/pawn.glb']);
+  assert.equal(after.urls['/assets/nnue/big.nnue'], first.catalog.urls['/assets/nnue/big.nnue']);
 });
 test('engine relative imports and WASM share one version, including when only WASM changes', async t => {
   const { root, put } = await fixture(t), before = await createAssetCatalog(root);

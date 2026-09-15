@@ -28,7 +28,7 @@ async function filesIn(root, dir) {
 // and mutable application modules never acquire immutable caching here.
 export async function createAssetCatalog(root) {
   const groups = new Map();
-  for (const dir of ['zagreb/models', 'zagreb/engine', 'assets/stockfish', 'assets/stockfish-web', 'assets/nnue']) {
+  for (const dir of ['zagreb/models', 'zagreb/clocks', 'zagreb/engine', 'assets/stockfish', 'assets/stockfish-web', 'assets/nnue']) {
     for (const name of await filesIn(root, dir)) {
       if (!/\.(glb|js|wasm|nnue)$/.test(name)) continue;
       // Workers resolve WASM and helper imports relative to their own URL.
