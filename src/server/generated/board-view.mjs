@@ -5580,7 +5580,7 @@ function validCameraPose(value) {
 }
 function validCameraState(value) {
 	const p = value;
-	return validCameraPose(p) && (p.levelBoard == null || typeof p.levelBoard === "boolean") && (p.levelEdge == null || [
+	return validCameraPose(p) && (p.levelBoard == null || typeof p.levelBoard === "boolean") && (p.roll == null || typeof p.roll === "number" && Number.isFinite(p.roll) && Math.abs(p.roll) <= Math.PI) && (p.levelEdge == null || [
 		"x+",
 		"x-",
 		"z+",
