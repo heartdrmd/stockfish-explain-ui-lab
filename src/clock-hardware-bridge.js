@@ -192,6 +192,13 @@ export function createClockHardwareBridge({
       render();
       return true;
     },
+    followTurn() {
+      if (!engine) return false;
+      engine.advance(now());engine.cancel(now());
+      engine.lever = turn() === 'w' ? 1 : 0;
+      engine.pausedLever = engine.lever;
+      sync();render();return true;
+    },
     moved() {
       if (!engine) return false;
       engine.advance(now());

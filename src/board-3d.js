@@ -235,6 +235,8 @@ export function install3DBoard(board) {
     return {
       type: 'zagreb:position', fen: board.fen(),
       practiceAction: currentPracticeAction(),
+      analysis: !document.body.classList.contains('practice-mode') || document.body.classList.contains('practice-finished'),
+      canUndo: (board.undoCount?.() || 0) > 0,
       orientation: cg.orientation || board.orientation,
       viewRevision,
       movable: board.interactionLocked || window.__practiceStarting ? 'none' : cg.movable.color || 'none',
@@ -264,7 +266,7 @@ export function install3DBoard(board) {
   // cg.set, including opening setup, archive load, variation navigation, and locks.
   const originalSet = board.cg.set.bind(board.cg);
   board.cg.set = config => { const result = originalSet(config); schedule(); return result; };
-  for (const event of ['move', 'nav', 'undo', 'new-game', 'orientation-change', 'tree-changed'])
+  for (const event of ['move', 'nav', 'undo', 'new-game', 'orientation-change', 'tree-changed', 'analysis-ready'])
     board.addEventListener(event, schedule);
   new MutationObserver(schedule).observe(document.body, {attributes: true, attributeFilter: ['class', 'data-practice-color']});
   function sizeFrame() {
@@ -365,7 +367,7 @@ export function install3DBoard(board) {
       }
       return;
     }
-    if (board.watchActive && ['zagreb:move','zagreb:restart','zagreb:navigate','zagreb:navigate-step','zagreb:analysis','zagreb:flip',
+    if (board.watchActive && ['zagreb:move','zagreb:undo','zagreb:restart','zagreb:navigate','zagreb:navigate-step','zagreb:analysis','zagreb:flip',
       'zagreb:clock-hardware','zagreb:clock-hardware-model','zagreb:clock-pause','zagreb:clock-control','zagreb:clock-add','zagreb:clock-design'].includes(event.data?.type)) return;
     if (event.data?.type === 'zagreb:board-controls-state') {
       if (typeof event.data.visible !== 'boolean' || typeof event.data.ready !== 'boolean') return;
@@ -506,6 +508,16 @@ export function install3DBoard(board) {
       syncOverlay();
       return;
     }
+    if (event.data?.type === 'zagreb:input-trace') {
+      const entry=event.data.entry;
+      if(entry && typeof entry.stage==='string' && JSON.stringify(entry).length<4000)
+        console.info('[3d-click] '+JSON.stringify(entry));
+      return;
+    }
+    if (event.data?.type === 'zagreb:undo') {
+      if(busy || board.watchActive || event.data.fen !== board.fen() || !board.undoCount?.()) return;
+      document.getElementById('btn-undo')?.click();sync(true);return;
+    }
     if (event.data?.type === 'zagreb:practice-action') {
       // Reject stale/double clicks and never let a watched game resign the
       // suspended practice session. Use the existing result/archive/clock flow.
@@ -531,11 +543,17 @@ export function install3DBoard(board) {
       return;
     }
     if (event.data?.type !== 'zagreb:move') return;
-    if (busy || window.__practiceStarting || !canAccept3DMove(board, event.data)) { sync(true); return; }
+    const result=(accepted,reason) => frame.contentWindow.postMessage({type:'zagreb:move-result',uci:event.data.uci,accepted,reason},location.origin);
+    if (busy || window.__practiceStarting || !canAccept3DMove(board, event.data)) {
+      result(false,busy?'move-in-progress':window.__practiceStarting?'loading-position':board.interactionLocked?'interaction-locked':event.data.fen!==board.fen()?'stale-position':'illegal-or-wrong-turn');
+      sync(true);return;
+    }
     busy = true;
     try {
       const uci = event.data.uci;
+      const before=board.fen();
       await board._onUserMove(uci.slice(0, 2), uci.slice(2, 4), {via: '3d-board', promotion: uci[4]});
+      result(board.fen()!==before,board.fen()!==before?'accepted':'controller-rejected');
     } finally { busy = false; sync(true); }
   });
   // Start the viewer after its bridge is listening. It restores the complete

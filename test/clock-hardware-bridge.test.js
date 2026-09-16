@@ -39,6 +39,16 @@ function harness(options={}) {
     turn: (side) => (turn = side),
   };
 }
+for (const family of ['dgt','zmf']) test(`${family}: takeback follows the restored turn without a bonus or reset`,()=>{
+  const h=harness();h.b.model(family);h.advance(2000);h.turn('b');h.b.moved();h.advance(1500);
+  const before=[h.clock.msWhite,h.clock.msBlack];
+  h.turn('w');h.b.followTurn();
+  assert.deepEqual([h.clock.msWhite,h.clock.msBlack],before);
+  assert.equal(h.clock.tickingFor,'w');
+  h.advance(1000);assert.equal(h.clock.msWhite,before[0]-1000);assert.equal(h.clock.msBlack,before[1]);
+  h.b.pause();h.turn('b');h.b.followTurn();h.advance(5000);
+  assert.equal(h.clock.paused,true);assert.equal(h.clock.msBlack,before[1]);
+});
 test("one timer; physical press cannot award a second increment", () => {
   const h = harness();
   h.b.model("dgt");

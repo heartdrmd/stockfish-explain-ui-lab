@@ -1,3 +1,4 @@
+import { practiceTakebackCount } from './practice-takeback.js';
 import { createClockHardwareBridge } from './clock-hardware-bridge.js';
 import { installNotationInput, isHistoryInputTarget } from './generated/notation-input.js';
 // main.js — entry point. Wires UI controls, engine events, and the
@@ -6844,8 +6845,7 @@ async function main() {
         document.body.classList.contains('practice-mode') &&
         !document.body.classList.contains('practice-finished');
       if (inActivePractice) {
-        if (!confirm('Take back the last move? The engine will re-think its next reply.')) return;
-        board.undo({ prune: true });   // T1: replace, don't branch
+        document.getElementById('btn-undo')?.click();
         return;
       }
       board.backward();
@@ -9229,26 +9229,11 @@ async function main() {
     document.body.classList.add('practice-finished');
     document.body.classList.remove('practice-thinking');
     setTimeout(() => { try { window.__showDefaultGraph?.(); } catch {} }, 0);
-    // Clear the practice-color backup signal — game's over, free
-    // analysis allows moves for both sides.
+    // Finish the interaction transition explicitly, including a selection or
+    // temporary input lock left by the final engine move. The archived game
+    // below stays frozen; further legal moves are analysis only.
     try { delete document.body.dataset.practiceColor; } catch {}
-    // Free-analysis mode: user can now move BOTH sides on the live
-    // board so they can explore the position freely. Variations they
-    // play branch off the mainline tree; the original game's plies
-    // stay locked as gospel because archiveCurrentGame uses
-    // board._archiveSnapshot (taken below) instead of live history.
-    try {
-      board.playerColor = 'both';
-      // Refresh chessground's movable.color so it picks up the new
-      // value without waiting for a navigation event.
-      const turn = board.chess.turn() === 'w' ? 'white' : 'black';
-      board.cg.set({
-        turnColor: turn,
-        movable: { color: 'both', dests: toDestsFrom(board.chess) },
-      });
-    } catch (err) {
-      console.warn('[practice] could not switch to both-side movable', err);
-    }
+    board.enterFreeAnalysis();
     // Restore toolbar expansion after the game — BUT on mobile there's
     // barely room for it, so leave it collapsed even if the user had
     // it expanded before. Desktop keeps the old "restore if they had
@@ -9276,8 +9261,9 @@ async function main() {
     // a bestmove fires after `stop` (as Stockfish does — it emits the
     // best move found so far) the listener bails rather than playing
     // a move onto a game that just ended.
-    engine.stop();
     practiceSearchToken++;
+    window.__pendingEngineTurnFen = null;
+    engine.stop();
     practiceResultTag = resultTag;
     practiceResultText = narrative;
     // Stop the chess clock if it was running.
@@ -10554,20 +10540,34 @@ async function main() {
       }
     });
   }
+  board.undoCount = () => {
+    if (board.watchActive || board.interactionLocked || window.__practiceStarting) return 0;
+    const active = document.body.classList.contains('practice-mode') && !document.body.classList.contains('practice-finished');
+    if (active && !board.isAtLive()) return 0;
+    return active ? practiceTakebackCount(board.chess.history({verbose:true}), practiceColor, window.__practiceOpeningPlies || 0)
+      : Number(board.chess.history().length > 0);
+  };
   document.getElementById('btn-undo').addEventListener('click', () => {
-    // Double-check during an ACTIVE practice game so a stray click on
-    // the header Undo button doesn't wipe the last move you just
-    // played. In analysis / post-game review, undo is harmless and
-    // the confirm would be annoying — so we skip it there.
-    const inActivePractice =
-      document.body.classList.contains('practice-mode') &&
-      !document.body.classList.contains('practice-finished');
+    const count=board.undoCount();
+    if (!count) return;
+    const inActivePractice = document.body.classList.contains('practice-mode') && !document.body.classList.contains('practice-finished');
+    if (inActivePractice && !confirm('Take back your last move'+(count>1?' and the computer reply':'')+'? Clock time already used is not refunded.')) return;
+    // Invalidate the old search before stop can emit its final bestmove.
+    practiceSearchToken++;
+    window.__pendingEngineTurnFen=null;
+    _clearPracticeHint({cancelSearch:true,clearResults:true,restartAnalysis:false});
+    engine.stop();
     if (inActivePractice) {
-      if (!confirm('Take back the last move? The engine will re-think its next reply.')) return;
+      clockTick();
+      if (document.body.classList.contains('practice-finished')) return;
     }
-    // T1: in active practice, prune the retracted node so the next move
-    // is the mainline; in analysis, keep it as a re-enterable branch.
-    board.undo(inActivePractice ? { prune: true } : undefined);
+    for(let i=0;i<count;i++) if(!board.undo(inActivePractice?{prune:true}:undefined)) break;
+    if(inActivePractice && clock.active) {
+      // Correct the running side without adding increment or resetting periods.
+      clock.tickingFor=board.chess.turn();clock.lastTickAt=Date.now();
+      hardwareClock.followTurn();renderClock();
+    }
+    scheduleDraftSave();
   });
 
   // Copy FEN

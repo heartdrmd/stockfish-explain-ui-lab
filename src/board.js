@@ -497,6 +497,14 @@ export class BoardController extends EventTarget {
     this.rootEl?.classList?.toggle('board-interaction-locked', this.interactionLocked);
   }
 
+  /** End practice input restrictions without replacing the game or its tree. */
+  enterFreeAnalysis() {
+    this.playerColor = 'both';
+    this.setInteractionLocked(false);
+    this._syncToChessground(lastMoveFromHistory(this.chess));
+    this.dispatchEvent(new CustomEvent('analysis-ready'));
+  }
+
   _allowUserToMoveIfTheirTurn() {
     // Analysis mode: always let the side-to-move act.
     this.cg.set({ movable: this._movableConfig(this.chess, 'both') });
