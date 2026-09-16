@@ -5572,6 +5572,17 @@ function validClockLayouts(value) {
 	return !!value && typeof value === "object" && !Array.isArray(value) && Object.entries(value).every(([key, views]) => isClockLayoutKey(key) && validClock3DViews(views));
 }
 //#endregion
+//#region lib/camera-state.ts
+function validCameraPose(value) {
+	const p = value;
+	const vector = (v) => Array.isArray(v) && v.length === 3 && v.every((n) => typeof n === "number" && Number.isFinite(n) && Math.abs(n) < 10);
+	return !!p && vector(p.position) && vector(p.target) && (p.autoFraming == null || typeof p.autoFraming === "boolean");
+}
+function validCameraState(value) {
+	const p = value;
+	return validCameraPose(p) && (p.levelBoard == null || typeof p.levelBoard === "boolean") && (p.frontReturn == null || validCameraPose(p.frontReturn));
+}
+//#endregion
 //#region lib/saved-layout.ts
 var finite = (v, min, max) => typeof v === "number" && Number.isFinite(v) && v >= min && v <= max;
 function validWorkspaceLayout(v) {
@@ -5583,12 +5594,12 @@ function validWorkspaceLayout(v) {
 	].every((k) => typeof s[k] === "boolean") && (s.ratio === null || finite(s.ratio, .01, .99)) && (s.sideWidth === null || finite(s.sideWidth, 0, 560)) && finite(s.squareScale, .35, 1);
 }
 function validBoardLayout(v) {
-	const s = v, vector = (v) => Array.isArray(v) && v.length === 3 && v.every((n) => finite(n, -9.999, 9.999));
+	const s = v;
 	return !!s && [
 		"3d",
 		"classic",
 		"materials"
-	].includes(s.display) && ["white", "black"].includes(s.orientation) && ["orbit", "pan"].includes(s.navigation) && !!s.camera && vector(s.camera.position) && vector(s.camera.target) && (s.camera.autoFraming == null || typeof s.camera.autoFraming === "boolean") && finite(s.flatScale, 35, 100) && finite(s.flatPan, -50, 50) && finite(s.flatPanY, -50, 50);
+	].includes(s.display) && ["white", "black"].includes(s.orientation) && ["orbit", "pan"].includes(s.navigation) && validCameraState(s.camera) && finite(s.flatScale, 35, 100) && finite(s.flatPan, -50, 50) && finite(s.flatPanY, -50, 50);
 }
 function validSavedLayout(v) {
 	const s = v;
@@ -5640,8 +5651,7 @@ function validateView(raw) {
 		"materials"
 	].includes(s.boardDisplay) || s.boardOrientation != null && !["white", "black"].includes(s.boardOrientation)) throw new Error("Invalid board display.");
 	parsePosition(s.fen);
-	const v = (x) => Array.isArray(x) && x.length === 3 && x.every((n) => typeof n === "number" && Number.isFinite(n) && Math.abs(n) < 10);
-	if (!s.camera || !v(s.camera.position) || !v(s.camera.target) || s.camera.autoFraming != null && typeof s.camera.autoFraming !== "boolean") throw new Error("The camera view could not be saved.");
+	if (!validCameraState(s.camera)) throw new Error("The camera view could not be saved.");
 	if (!s.line || !Array.isArray(s.line.moves) || s.line.moves.length > 5e3 || !Number.isInteger(s.line.cursor) || s.line.cursor < 0 || s.line.cursor > s.line.moves.length) throw new Error("Invalid move history.");
 	if (!s.line.moves.every((m) => typeof m === "string" && /^[a-h][1-8][a-h][1-8][qrbn]?$/.test(m))) throw new Error("Invalid move history.");
 	gameAt({
