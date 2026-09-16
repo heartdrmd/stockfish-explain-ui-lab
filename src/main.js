@@ -2198,8 +2198,9 @@ async function main() {
     const clockCard = document.getElementById('practice-clock');
     if (clockCard) clockCard.dataset.clockView = clock.style;
     const available = clockCard?.hidden === false;
-    const canAddUntimedClock = !available && !clock.active && !board.chess.isGameOver() &&
-      !document.body.classList.contains('practice-finished');
+    // A display-only counter is also useful while reviewing a finished game.
+    // It does not resume practice or change the recorded result/time control.
+    const canAddUntimedClock = !available && !clock.active;
     const addArea = document.getElementById('clock-add-area');
     const addButton = document.getElementById('btn-add-untimed-clock');
     if (addArea) addArea.hidden = available;
@@ -2536,8 +2537,6 @@ async function main() {
     if (window.__practiceStarting || board.interactionLocked) throw new Error('Wait for the position to finish loading.');
     // Repeated requests must never restart a clock or replace a timed game.
     if (clock.active || document.getElementById('practice-clock')?.hidden === false) return;
-    if (board.chess.isGameOver() || document.body.classList.contains('practice-finished'))
-      throw new Error('Start a new game or study position to add a clock.');
     startUntimedDisplay(clock, board.chess.turn(), Date.now());
     hardwareClock.restart();
     const card = document.getElementById('practice-clock');
