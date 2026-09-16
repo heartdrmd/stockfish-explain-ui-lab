@@ -16,14 +16,19 @@ export function fitClockArea({ left, right, top, bottom, width, height, x, y }) 
   };
 }
 
-export function visibleBoardRight(doc) {
+export function visibleBoardBounds(doc) {
   const frame = doc.getElementById("zagreb-board");
   if (frame && !frame.hidden) {
     const rect = frame.getBoundingClientRect(),
       points = frame.boardFootprint;
     if (Array.isArray(points) && points.length)
-      return rect.left + Math.max(0, Math.min(rect.width, Math.max(...points.map((p) => p.x))));
-    return rect.right;
+      return {
+        left: rect.left + Math.max(0, Math.min(rect.width, Math.min(...points.map((p) => p.x)))),
+        right: rect.left + Math.max(0, Math.min(rect.width, Math.max(...points.map((p) => p.x)))),
+      };
+    return {left:rect.left,right:rect.right};
   }
-  return doc.getElementById("board")?.getBoundingClientRect().right || 0;
+  const rect=doc.getElementById("board")?.getBoundingClientRect();
+  return {left:rect?.left || 0,right:rect?.right || 0};
 }
+export const visibleBoardRight = doc => visibleBoardBounds(doc).right;

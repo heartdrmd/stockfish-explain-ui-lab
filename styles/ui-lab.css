@@ -749,6 +749,8 @@ body.dividers-hidden .workspace-divider::after{display:none!important}
 .clock-move-mode #clock-float-drag{background:#506c3a!important;border-color:#d6df83!important;color:#fffac5!important;box-shadow:0 0 0 2px #d6df8344,0 0 14px #c4dc7166}
 #btn-move-clock[aria-pressed=true]{background:#506c3a!important;border-color:#d6df83!important;color:#fffac5!important;box-shadow:0 0 0 2px #d6df8344,0 0 14px #c4dc7166}
 .clock-move-mode .clock-live-canvas canvas{cursor:move!important}
+.watch-pane-clock.watch-clock-free{width:var(--docked-clock-width,100%);max-width:100%;max-height:none;overflow:visible;translate:var(--clock-dock-x,0px) var(--clock-dock-y,0px);position:relative;z-index:2}
+.watch-pane-clock :is(button,input,select,canvas){pointer-events:auto}
 #practice-clock{min-width:0;max-width:100%;container-type:inline-size}
 #practice-clock .clock-side{min-width:0}
 #practice-clock .clock-time{font-size:min(var(--clock-font-size,72px),22cqw)}

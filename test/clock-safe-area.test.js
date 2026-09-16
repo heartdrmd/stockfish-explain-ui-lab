@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { fitClockArea, visibleBoardRight } from "../src/clock-safe-area.js";
+import { fitClockArea, visibleBoardBounds, visibleBoardRight } from "../src/clock-safe-area.js";
 test("saved positions and oversized clocks stay outside board across available widths", () => {
   for (const left of [500, 900, 1250, 1390])
     for (const x of [-5000, 0, 900, 5000]) {
@@ -38,7 +38,7 @@ test("clock retains requested position when enough space exists and collapses at
   assert.equal(fitClockArea({ ...area, left: 1600 }).width, 0);
 });
 test("clock boundary follows projected 3D board, translated native 2D board, and safe loading fallback", () => {
-  const board = { getBoundingClientRect: () => ({ right: 920 }) };
+  const board = { getBoundingClientRect: () => ({ left: 220, right: 920 }) };
   const frame = {
     hidden: false,
     getBoundingClientRect: () => ({ left: 200, right: 1100, width: 900 }),
@@ -49,14 +49,19 @@ test("clock boundary follows projected 3D board, translated native 2D board, and
     1100,
     "Until model loading completes, protect entire iframe",
   );
+  assert.deepEqual(visibleBoardBounds(doc), {left:200,right:1100});
   frame.boardFootprint = [
     { x: 10, y: 50 },
     { x: 600, y: 70 },
     { x: 800, y: 500 },
   ];
   assert.equal(visibleBoardRight(doc), 1000);
+  assert.deepEqual(visibleBoardBounds(doc), {left:210,right:1000});
   frame.boardFootprint = [{ x: 1400, y: 0 }];
   assert.equal(visibleBoardRight(doc), 1100, "Offscreen projection clamps to visible frame");
+  frame.boardFootprint = [{x:-30,y:0},{x:1400,y:0}];
+  assert.deepEqual(visibleBoardBounds(doc), {left:200,right:1100});
   frame.hidden = true;
   assert.equal(visibleBoardRight(doc), 920);
+  assert.deepEqual(visibleBoardBounds(doc), {left:220,right:920});
 });
