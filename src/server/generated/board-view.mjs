@@ -4812,6 +4812,28 @@ var DEFAULT_BOARD_LIGHT = {
 //#region lib/appearance.ts
 var PIECE_FINISHES = [
 	{
+		id: "smoked-ebony",
+		label: "Warm ivory / smoked ebony",
+		light: "#d0b98c",
+		dark: "#41434a",
+		surface: "wood"
+	},
+	{
+		id: "slate-blue",
+		label: "Warm ivory / slate blue",
+		light: "#d0b98c",
+		dark: "#416b88",
+		surface: "wood"
+	},
+	{
+		id: "warm-rosewood",
+		label: "Warm ivory / warm rosewood",
+		light: "#d0b98c",
+		dark: "#784939",
+		surface: "wood",
+		grainPattern: "ribbon"
+	},
+	{
 		id: "burl",
 		label: "Maple / walnut burl",
 		light: "#c4a477",
