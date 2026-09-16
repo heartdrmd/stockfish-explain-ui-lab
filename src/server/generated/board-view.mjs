@@ -5580,7 +5580,12 @@ function validCameraPose(value) {
 }
 function validCameraState(value) {
 	const p = value;
-	return validCameraPose(p) && (p.levelBoard == null || typeof p.levelBoard === "boolean") && (p.frontReturn == null || validCameraPose(p.frontReturn));
+	return validCameraPose(p) && (p.levelBoard == null || typeof p.levelBoard === "boolean") && (p.levelEdge == null || [
+		"x+",
+		"x-",
+		"z+",
+		"z-"
+	].includes(p.levelEdge)) && (p.frontReturn == null || validCameraPose(p.frontReturn));
 }
 //#endregion
 //#region lib/saved-layout.ts
