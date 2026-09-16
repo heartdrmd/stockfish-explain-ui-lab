@@ -24,6 +24,7 @@
 // Everything else is served statically (HTML, JS, CSS, WASM, SVG).
 
 import express from 'express';
+import { broadcastDataResponse } from './src/server/generated/broadcast-proxy.mjs';
 import cookieParser from 'cookie-parser';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -384,6 +385,17 @@ wireVariations(app);
 wireLibrary(app);
 wireSync(app);
 wireBoardSettings(app);
+
+// Lichess tables do not send CORS headers. Only the allowlisted, small JSON
+// tables use this bridge; live move streams still go directly to Lichess.
+app.get('/api/broadcast-data', rateLimit({windowMs:60_000,max:40}), async (req,res) => {
+  try {
+    const origin=`${req.protocol}://${req.get('host')}`;
+    const request=new Request(new URL(req.originalUrl,origin),{headers:{...(req.headers.authorization?{authorization:req.headers.authorization}:{}),...(req.headers.origin?{origin:req.headers.origin}:{})}});
+    const response=await broadcastDataResponse(request);
+    res.status(response.status);response.headers.forEach((value,key)=>res.setHeader(key,value));res.send(await response.text());
+  } catch { res.status(502).json({error:'Could not reach Lichess. Try again shortly.'}); }
+});
 
 // ───── source/secret blocklist (audit S2) ─────
 // express.static(__dirname) serves the REPO ROOT, so without this guard

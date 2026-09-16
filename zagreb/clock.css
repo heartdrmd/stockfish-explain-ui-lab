@@ -1126,6 +1126,106 @@
 .notation-right-dock[hidden]{display:none!important}
 .notation-right-dock>.watch-pane{height:100%;min-height:0}
 
+/* Lichess-style broadcast browsing stays inside the settings layer, including fullscreen. */
+.watch-panel.watch-broadcast-panel{width:min(1040px,calc(100vw - 28px));height:min(850px,calc(100dvh - 112px));max-height:var(--available-height,calc(100dvh - 112px));overflow:hidden;padding:12px;gap:8px;background:#262421;color:#e0dfd9;border-color:#56524a}
+.watch-broadcast-panel>.watch-heading,.watch-broadcast-panel>.watch-connect{flex-shrink:0}
+.watch-broadcast-panel>.watch-heading{padding:0 6px 4px}
+.watch-broadcast-panel>.watch-connect{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;padding:8px 4px 0;border-color:#4b4943;font-size:13px}
+.watch-broadcast-panel>.watch-connect>small{flex:1;min-width:180px}
+.watch-broadcast-panel>.watch-credit{display:none}
+.broadcast-browser{min-height:0;display:flex;flex:1;flex-direction:column;font:14px/1.45 Arial,sans-serif;color:#dedbd3;text-align:left}
+.broadcast-browser button,.broadcast-browser select{font:inherit;color:inherit;cursor:pointer}
+.broadcast-browser button{border:1px solid #59554c;background:#34322e;border-radius:4px;min-height:32px;padding:5px 10px}
+.broadcast-browser button:hover:not(:disabled){background:#464239;border-color:#b9a271}
+.broadcast-browser button:disabled{opacity:.4;cursor:default}
+.broadcast-browser button[aria-pressed=true]{color:#f1d794;border-color:#a68a4b;background:#564929}
+.broadcast-browser :focus-visible{outline:2px solid #d7b464;outline-offset:2px}
+.broadcast-navigation{display:flex;align-items:center;gap:5px;padding-bottom:9px;flex-shrink:0;border-bottom:1px solid #48453e}
+.broadcast-navigation>button{display:grid;place-items:center;padding:5px;width:34px;flex-shrink:0}
+.broadcast-navigation>span{flex:1;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;font-weight:600;padding:0 5px}
+.broadcast-content{flex:1;overflow:auto;overscroll-behavior:contain;min-height:0;padding:14px 8px 18px;scrollbar-width:thin;scrollbar-color:#706957 #262421;position:relative}
+.broadcast-search{display:flex;align-items:center;gap:8px;margin-bottom:12px}
+.broadcast-search>input,.broadcast-filter>input{background:transparent;color:inherit;border:0;min-width:0;flex:1;font:inherit;outline-offset:4px}
+.broadcast-search,.broadcast-filter{background:#1f1e1b;border:1px solid #565248;border-radius:4px;padding:5px 9px}
+.broadcast-search>input{min-height:30px}
+.broadcast-tabs{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:16px}
+.broadcast-tabs>button{display:flex;align-items:center;gap:7px;padding:8px 15px}
+.broadcast-events{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.broadcast-events .broadcast-event{display:flex;align-items:stretch;text-align:left;overflow:hidden;min-width:0;padding:0;background:#302e29;border-color:#49453d;min-height:112px}
+.broadcast-event-image{width:110px;flex-shrink:0;object-fit:cover;background:#211f1c}
+.broadcast-event-image[hidden]{display:none}
+.broadcast-event-copy{display:flex;flex-direction:column;gap:6px;min-width:0;padding:12px}
+.broadcast-event-copy strong{font-size:16px;line-height:1.3;color:#f0e9d8}
+.broadcast-event-copy>span{font-size:13px;color:#bcb7aa}
+.broadcast-event-copy small{font-size:12px;color:#b7b19e}
+.broadcast-live{color:#b7d787!important;display:inline-flex;align-items:center;gap:4px}
+.broadcast-pagination{display:flex;align-items:center;justify-content:center;gap:12px;margin:12px 0;color:#c7c0b0;font-variant-numeric:tabular-nums}
+.broadcast-pagination button{display:flex;align-items:center;gap:4px}
+.broadcast-event-header h3{font-size:22px;line-height:1.3;font-weight:500;color:#debf7b;margin:0 0 12px}
+.broadcast-event-header>div{display:flex;align-items:center;gap:12px;margin-bottom:15px}
+.broadcast-event-header label{flex:1;display:flex;align-items:center;gap:8px}
+.broadcast-event-header select{flex:1;min-width:0}
+.broadcast-section-selector{display:flex;align-items:center;gap:8px;margin-bottom:12px}.broadcast-section-selector select{flex:1;min-width:0}
+.broadcast-browser select{background:#33312b;border:1px solid #5a5549;border-radius:4px;padding:7px;max-width:100%}
+.broadcast-board-tools{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:10px}
+.broadcast-filter{display:flex;align-items:center;gap:8px;min-height:37px;flex:1;min-width:180px}
+.broadcast-board-tools>label:last-child{display:flex;align-items:center;gap:8px}
+.broadcast-filters{display:flex;gap:15px;align-items:center;flex-wrap:wrap;margin:9px 0}
+.broadcast-filters label{display:flex;align-items:center;gap:6px}
+.broadcast-filters input{accent-color:#a9c46c;width:16px;height:16px}
+.broadcast-filters>span{margin-left:auto;font-size:12px;color:#aaa594}
+.broadcast-boards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.broadcast-boards[data-density=large]{grid-template-columns:repeat(3,minmax(0,1fr))}
+.broadcast-board-card{min-width:0;background:#302d26;border:1px solid #504a3e;border-radius:4px;overflow:hidden}
+.broadcast-board-card.is-selected{border-color:#abc578;box-shadow:0 0 0 1px #abc578}
+.broadcast-board-heading{display:flex;align-items:center;justify-content:space-between;padding:3px 6px;gap:4px}
+.broadcast-board-heading>small{font-size:12px;color:#b7ad96}
+.broadcast-board-heading>button{min-height:25px;padding:3px 6px;border-color:transparent;background:transparent}
+.broadcast-board-card .broadcast-board-select{display:block;text-align:left;padding:0;width:100%;border:0;border-radius:0;background:transparent}
+.broadcast-board-player{display:flex;align-items:center;gap:5px;padding:7px 6px;font-size:13px}
+.broadcast-board-player strong{min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500}
+.broadcast-board-player b{font-size:12px;color:#f0e9d8}
+.broadcast-board-player i{width:9px;height:9px;border-radius:50%;flex-shrink:0;border:1px solid #b0a891}
+.broadcast-board-player i.white{background:#f5ecd7}.broadcast-board-player i.black{background:#171713}
+.broadcast-board-score{display:flex;justify-content:space-between;padding:5px 8px;background:#22211d;color:#e0d8c3;min-height:31px;font-variant-numeric:tabular-nums}
+.broadcast-board-score>strong{margin:auto;color:#c9d994}
+.broadcast-browser .watch-mini-board{border-radius:0}
+.watch-mini-board .broadcast-last-move.light{background:#ced086}.watch-mini-board .broadcast-last-move.dark{background:#a5aa64}
+.broadcast-empty-board{display:grid;place-items:center;aspect-ratio:1;background:#474337;color:#cfc6ac}
+.broadcast-note{font-size:13px;color:#bbb49f;margin:10px 0}
+.broadcast-empty{padding:25px 10px;color:#c8c0aa;text-align:center}
+.broadcast-loading{padding:20px;text-align:center;color:#e0c27e}
+.broadcast-error{padding:12px;background:#53382b;border:1px solid #b98059;border-radius:4px;color:#ffe1bf}
+.broadcast-error button{margin-right:8px}
+.broadcast-footer{display:flex;gap:10px;justify-content:space-between;flex-shrink:0;border-top:1px solid #4a463d;padding:8px 4px 0;color:#aaa28d;font-size:12px}
+.broadcast-footer small{font-size:12px}
+.broadcast-overview dl{margin:5px 0 15px;display:grid;gap:10px}
+.broadcast-overview dl>div{display:grid;grid-template-columns:110px minmax(0,1fr);gap:12px}
+.broadcast-overview dt{color:#aaa38f}.broadcast-overview dd{margin:0}
+.broadcast-links{display:flex;flex-wrap:wrap;gap:14px;margin:12px 0}.broadcast-links a{color:#e1c480;text-decoration:underline}
+.broadcast-description{white-space:pre-wrap;overflow-wrap:anywhere;font-size:14px;color:#cbc3b1}
+.broadcast-overview h4,.broadcast-team-players h4{font-size:16px;margin:16px 0 10px}
+.broadcast-rounds{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.broadcast-rounds>button{display:flex;align-items:center;flex-wrap:wrap;gap:9px;text-align:left;padding:12px}
+.broadcast-rounds small{width:100%;color:#aaa38f}
+.broadcast-rounds strong{flex:1}
+.broadcast-table-wrap{overflow-x:auto;margin:12px 0}
+.broadcast-table{width:100%;border-collapse:collapse;text-align:left;font-size:14px;font-variant-numeric:tabular-nums}
+.broadcast-table caption{text-align:left;color:#cab789;padding:6px 0 10px;font-weight:600}
+.broadcast-table th{font-weight:500;color:#aba38f;white-space:nowrap;border-bottom:1px solid #5c5445;padding:9px 8px}
+.broadcast-table td{padding:8px;border-bottom:1px solid #454034}
+.broadcast-table tbody tr:nth-child(even){background:#ffffff04}
+.broadcast-browser .broadcast-player-link,.broadcast-browser .broadcast-text-button{background:transparent;border:0;color:#dec88f;padding:3px 0;text-align:left}
+.broadcast-player-link small{display:block;color:#a59e8b;font-size:12px}
+.broadcast-player-profile{display:flex;flex-wrap:wrap;gap:12px;align-items:center;background:#302c24;padding:14px;border-radius:4px;margin-top:10px}
+.broadcast-player-profile h4{font-size:20px;width:100%;margin:0;color:#f0dfb8}
+.broadcast-player-profile>div{display:flex;gap:14px;flex-wrap:wrap;width:100%;text-transform:capitalize}
+.broadcast-player-profile>span{color:#b7ad95}
+.broadcast-team-players>button{display:flex;justify-content:space-between;width:100%;margin:5px 0}
+@media(max-width:850px){.broadcast-boards{grid-template-columns:repeat(3,minmax(0,1fr))}.broadcast-event-image{width:80px}.broadcast-events{gap:9px}}
+@media(max-width:620px){.watch-panel.watch-broadcast-panel{width:calc(100vw - 20px);height:calc(100dvh - 110px);padding:8px}.broadcast-events{grid-template-columns:1fr}.broadcast-boards,.broadcast-boards[data-density=large]{grid-template-columns:repeat(2,minmax(0,1fr))}.broadcast-content{padding:10px 2px}.broadcast-tabs>button{padding:7px 10px}.broadcast-event-header h3{font-size:18px}.broadcast-event-image{width:90px}.broadcast-rounds{grid-template-columns:1fr}.broadcast-footer small{display:none}.watch-broadcast-panel>.watch-connect>small{display:none}.broadcast-filters{gap:10px}.broadcast-board-player{font-size:12px}}
+@media(pointer:coarse){.broadcast-browser button{min-height:40px}.broadcast-navigation>button{width:40px}.broadcast-browser select{min-height:40px}}
+
 .watch-pane .fullscreen-analysis { padding:10px; border:1px solid #81917a55; border-radius:6px; background:#15211bf5; color:#e2e8d4; max-height:min(36dvh,330px); overflow:auto; }
 .watch-pane .fullscreen-analysis header { display:flex; align-items:center; justify-content:space-between; font-size:14px; gap:6px; margin-bottom:6px; }
 .watch-pane .fullscreen-analysis button,.watch-pane .fullscreen-analysis select { min-height:28px; border:1px solid #81917a55; border-radius:4px; background:#24332b; color:inherit; font:inherit; font-size:12px; padding:4px 6px; }
