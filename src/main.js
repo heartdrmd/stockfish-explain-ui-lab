@@ -2208,6 +2208,7 @@ async function main() {
     // The immersive board displays this same clock; it never runs a second timer.
     board.studyClock = {
       available, canAddUntimedClock,
+      result: document.body.classList.contains('practice-finished') ? practiceResultTag || undefined : undefined,
       playerSide: practiceColor==='black'?'b':'w', hardware: clock.hardware,
       active: clock.active, paused: clock.paused === true, mode: clock.mode,
       whiteMs: clock.msWhite, blackMs: clock.msBlack,
@@ -2235,9 +2236,11 @@ async function main() {
       renderAnalogClock();
       return;
     }
-    wEl.textContent = formatClockTime(clock.msWhite);
-    bEl.textContent = formatClockTime(clock.msBlack);
+    const finalScores = {'1-0':['1','0'], '0-1':['0','1'], '1/2-1/2':['½','½']}[board.studyClock.result];
+    wEl.textContent = finalScores?.[0] ?? formatClockTime(clock.msWhite);
+    bEl.textContent = finalScores?.[1] ?? formatClockTime(clock.msBlack);
     [wSide, bSide].forEach(el => el.classList.remove('active', 'low-time', 'critical-time'));
+    if (finalScores) return;
     if (clock.tickingFor === 'w') wSide.classList.add('active');
     if (clock.tickingFor === 'b') bSide.classList.add('active');
     // Low/critical colours only make sense in count-DOWN mode.

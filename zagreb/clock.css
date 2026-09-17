@@ -907,6 +907,7 @@
 .clock-case .clock-paddles button.raised {transform:translateY(-3px)}
 .clock-menu-text {font:600 17px monospace;overflow-wrap:anywhere}
 .clock-lcd-footer {text-align:center;font:600 9px monospace;color:#b9c3ae;padding-bottom:6px}
+.game-clock .clock-result-caption {text-align:center;font:700 12px/1.4 Arial,sans-serif;color:#f4f0db;margin-top:7px;letter-spacing:.02em}
 .clock-operation-help {max-width:640px;margin:auto;font-size:13px;line-height:1.65;text-align:left}
 .clock-operation-help details {font-size:11px;color:#98a79b}
 .clock-operation-help a {color:#d2c8ad}
