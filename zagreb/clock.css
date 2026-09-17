@@ -1117,7 +1117,12 @@
 .watch-panel:has(.watch-preview-list){width:min(530px,calc(100vw - 24px))}
 
 .play-side-rail .watch-notation{height:100%;max-height:none}
-.play-side-rail .watch-players strong{white-space:normal;overflow-wrap:anywhere}
+.play-side-rail .watch-players strong{white-space:nowrap;overflow-wrap:normal}
+.watch-notation .watch-status>div:first-child{flex-wrap:wrap}
+.watch-notation .watch-player-rating{flex-shrink:0;white-space:nowrap}
+.watch-notation .watch-game-control>strong{min-width:0;overflow-wrap:normal}
+.watch-notation .watch-game-control>span{flex-shrink:0;white-space:nowrap}
+.watch-notation .watch-move-list button{white-space:nowrap}
 
 /* Independent right-edge dock when the app's right pane is hidden. */
 .notation-right-dock{position:fixed;top:max(60dvh,var(--notation-dock-top,80px));right:16px;bottom:12px;width:clamp(260px,26vw,440px);max-width:calc(100vw - 32px);z-index:31;display:flex;flex-direction:column;min-height:0;pointer-events:auto}
