@@ -767,7 +767,7 @@ body.native-board-panning,body.native-board-panning #board{cursor:move!important
 body.ui-lab #btn-board-fullscreen{order:7;min-width:36px;padding-inline:8px}
 body.ui-lab #btn-board-analysis{order:7;min-width:36px;padding-inline:8px}
 .board-analysis-host:empty{display:none}
-.board-analysis-host{order:-1;min-width:0;flex:none}
+.watch-pane.board-analysis-host{order:-1;min-width:0;flex:none;height:auto;max-height:none}
 body.compact-analysis-visible .clock-below-scroll > :is(.engine-power-row,.ceval),
 body.compact-analysis-visible .tools > :is(.engine-power-row,.ceval){display:none}
 @media(min-width:800px){
@@ -854,7 +854,7 @@ body.presentation-fullscreen .notation-right-dock{display:none!important}
 /* Keep the engine scroller above the independently anchored notation. */
 @media(min-width:800px){
   body.ui-lab.notation-bottom-docked:not(.right-pane-hidden):not(.mobile-mode) .uniboard > .tools{
-    height:calc(60dvh - var(--split-top,68px) - 12px);max-height:calc(60dvh - var(--split-top,68px) - 12px);overflow:visible;
+    height:var(--notation-analysis-height,calc(60dvh - var(--split-top,68px) - 12px));max-height:var(--notation-analysis-height,calc(60dvh - var(--split-top,68px) - 12px));overflow:visible;
   }
   body.notation-bottom-docked:not(.right-pane-hidden):not(.mobile-mode) .clock-below-scroll{
     display:flex;flex-direction:column;gap:12px;flex:1 1 0;min-height:0;overflow:auto;overscroll-behavior:contain;

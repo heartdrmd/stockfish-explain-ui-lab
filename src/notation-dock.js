@@ -20,7 +20,11 @@ export function installNotationDock(card, right) {
     dock.style.width=paneVisible?`${pane.width}px`:'';
     dock.style.right=paneVisible?`${Math.max(16,window.innerWidth-pane.right)}px`:'';
     const clockSlot=document.body.classList.contains('clock-docked-right') && !document.body.classList.contains('clock-presentation-hidden') && !card.hidden ? Math.min(card.getBoundingClientRect().height,window.innerHeight*.45)+28 : 0;
-    dock.style.setProperty('--notation-dock-top',`${Math.max(0,document.querySelector('.site-header')?.getBoundingClientRect().bottom||68)+12+clockSlot}px`);
+    const dockTop=Math.max(0,document.querySelector('.site-header')?.getBoundingClientRect().bottom||68)+12+clockSlot;
+    dock.style.setProperty('--notation-dock-top',`${dockTop}px`);
+    // Use the actual sticky column position, including a collapsed toolbar,
+    // so the analysis scroller ends before the independently docked moves.
+    tools.style.setProperty('--notation-analysis-height',`${Math.max(0,Math.max(window.innerHeight*.6,dockTop)-pane.top-12)}px`);
     if(detached){if(moves.parentNode!==dock)dock.append(moves);}
     else if(moves.previousSibling!==home)home.after(moves);
   };

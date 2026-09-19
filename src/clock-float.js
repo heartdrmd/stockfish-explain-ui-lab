@@ -28,6 +28,7 @@ export function installFloatingClock(practiceCard, practiceHost) {
     (watching() ? watchClock() : document.body.classList.contains('clock-docked-right')) &&
     !document.body.classList.contains('mobile-mode');
   const floating = () => !watchClock() && document.body.classList.contains('right-pane-hidden');
+  const aboveNotation = () => !watchClock() && !floating() && document.body.classList.contains('notation-bottom-docked');
   const safeHorizontal = () => {
     const bounds=panel.getBoundingClientRect();
     const board=visibleBoardBounds(document);
@@ -52,12 +53,22 @@ export function installFloatingClock(practiceCard, practiceHost) {
     panel.style.setProperty('--clock-float-y', `${offset.y}px`);
     card.style.setProperty('--clock-dock-x',`${offset.x}px`);
     card.style.setProperty('--clock-dock-y',`${offset.y}px`);
-    const availableHeight = `${Math.max(120, window.innerHeight - Math.max(8,card.getBoundingClientRect().top) - 48)}px`;
+    const clockTop=Math.max(8,card.getBoundingClientRect().top);
+    const availableHeight = `${aboveNotation() ? Math.max(1,safeBottom()-clockTop-40) : Math.max(120,window.innerHeight-clockTop-48)}px`;
     if(card.style.getPropertyValue('--clock-available-height') !== availableHeight)card.style.setProperty('--clock-available-height', availableHeight);
     if (!watchClock()) host.style.height = active() && !floating() ? `${Math.max(0,card.getBoundingClientRect().height)}px` : '';
   }
   const safeBottom = () => {
-    if (!watchClock()) return window.innerHeight-8;
+    if (!watchClock()) {
+      if (aboveNotation()) {
+        const bounds=panel.getBoundingClientRect();
+        // The right column ends above notation. Leave usable analysis space
+        // below the clock instead of letting its fixed slot consume it all.
+        const analysisHeight=Math.min(240,Math.max(120,bounds.height*.5));
+        return Math.min(window.innerHeight-8,bounds.bottom-analysisHeight-28);
+      }
+      return window.innerHeight-8;
+    }
     const moves=panel.querySelector('.watch-pane-moves:not(:empty)')?.getBoundingClientRect();
     return Math.min(window.innerHeight-8,panel.getBoundingClientRect().bottom,moves?.top ? moves.top-28 : Infinity);
   };
@@ -143,7 +154,7 @@ export function installFloatingClock(practiceCard, practiceHost) {
         const naturalWidth = parseFloat(face?.style.width || '300');
         const ratio = face?.offsetHeight / Math.max(1, naturalWidth) || .75;
         const clockTop = Math.max(8, card.getBoundingClientRect().top);
-        const widthForHeight = watchClock()
+        const widthForHeight = watchClock() || aboveNotation()
           ? Math.max(1,(safeBottom()-clockTop-56)/ratio+30)
           : Math.max(180,(window.innerHeight-clockTop-64)/ratio+30);
         const safe=safeHorizontal();
