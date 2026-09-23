@@ -5629,6 +5629,7 @@ function savedBoardOrientation(saved) {
 }
 function validateView(raw) {
 	const s = raw;
+	if (s?.previewImage != null && (typeof s.previewImage !== "string" || s.previewImage.length > 28e3 || !/^data:image\/(?:jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(s.previewImage))) throw new Error("Invalid preset preview.");
 	if (s?.watchNotationDisplay != null && ![
 		"full",
 		"players",
