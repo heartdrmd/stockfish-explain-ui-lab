@@ -29,15 +29,17 @@ export function installFloatingClock(practiceCard, practiceHost) {
     !document.body.classList.contains('mobile-mode');
   const floating = () => !watchClock() && document.body.classList.contains('right-pane-hidden');
   const aboveNotation = () => !watchClock() && !floating() && document.body.classList.contains('notation-bottom-docked');
-  const safeHorizontal = () => {
+  const safeHorizontal = (top, bottom) => {
     const bounds=panel.getBoundingClientRect();
-    const board=visibleBoardBounds(document);
+    const board=visibleBoardBounds(document,{top:top-16,bottom:bottom+16});
     if (watchClock() && panel.dataset.side === 'left') {
       const left=Math.max(8,bounds.left);
       return {left,right:Math.max(left,Math.min(bounds.right,board.left-16))};
     }
     const right=floating()?window.innerWidth-20:Math.min(window.innerWidth-12,bounds.right);
-    const left=Math.max(board.right+16,floating()?8:bounds.left);
+    // A right-docked practice clock can use clear space outside its column.
+    // Broadcast panes retain their own clipping/scrolling boundaries.
+    const left=Math.max(board.right+16,watchClock()?bounds.left:8);
     return {left:Math.min(right,left),right};
   };
   const save = () => {
@@ -89,13 +91,27 @@ export function installFloatingClock(practiceCard, practiceHost) {
     }
     top += above;
     // Keep the grip and clock reachable after a resize or a settings change.
-    const horizontal=safeHorizontal();
     if (watchClock()) top=Math.max(top,panel.getBoundingClientRect().top+above);
-    const fit=fitClockArea({...horizontal,top,bottom:safeBottom(),width:rect.width,height:rect.height,
+    const face=card.querySelector('.game-clock'), faceRect=face?.getBoundingClientRect();
+    const naturalWidth=parseFloat(face?.style.width || '300');
+    const ratio=face?.offsetHeight/Math.max(1,naturalWidth) || .75;
+    const inset=Math.max(0,rect.width-(faceRect?.width || rect.width));
+    const chromeHeight=Math.max(0,rect.height-(faceRect?.height || rect.height));
+    const fit=fitClockArea({top,bottom:safeBottom(),width:naturalWidth,height:rect.height,
+      horizontalAt:safeHorizontal,heightAtWidth:w=>chromeHeight+Math.max(0,w-inset)*ratio,
       x:baseX+x,y:baseY+y});
+    // Right-docked clocks grow toward the board; do not keep their old, small
+    // left edge as an artificial stop when additional room becomes available.
+    const horizontal=safeHorizontal(fit.top,fit.top+fit.height);
+    if(!watchClock())fit.left=Math.max(horizontal.left,Math.min(horizontal.right-fit.width,baseX+rect.width-fit.width+x));
+    const width=`${Math.max(1,fit.width)}px`;
+    card.style.visibility=fit.width<1?'hidden':'';
+    if(panel.style.getPropertyValue('--floating-clock-width')!==width)panel.style.setProperty('--floating-clock-width',width);
+    if(card.style.getPropertyValue('--docked-clock-width')!==width)card.style.setProperty('--docked-clock-width',width);
+    const resized=(floating()?panel:card).getBoundingClientRect();
     offset = {
-      x: Math.round(fit.left-baseX),
-      y: Math.round(fit.top-baseY),
+      x: Math.round(fit.left-(resized.left-offset.x)),
+      y: Math.round(fit.top-(resized.top-offset.y)),
     };
     // A smaller viewport may clamp the display, but must not overwrite where
     // the user placed it in this layout at its usual size.
@@ -150,18 +166,6 @@ export function installFloatingClock(practiceCard, practiceHost) {
       }
       if (toolbarToggle) toolbarToggle.disabled = !active() || !card.querySelector('canvas');
       if (active()) {
-        const face = card.querySelector('.game-clock');
-        const naturalWidth = parseFloat(face?.style.width || '300');
-        const ratio = face?.offsetHeight / Math.max(1, naturalWidth) || .75;
-        const clockTop = Math.max(8, card.getBoundingClientRect().top);
-        const widthForHeight = watchClock() || aboveNotation()
-          ? Math.max(1,(safeBottom()-clockTop-56)/ratio+30)
-          : Math.max(180,(window.innerHeight-clockTop-64)/ratio+30);
-        const safe=safeHorizontal();
-        const width = `${Math.max(1,Math.floor(Math.min(safe.right-safe.left,widthForHeight,naturalWidth||300)))}px`;
-        card.style.visibility=safe.right-safe.left<1?'hidden':'';
-        if (panel.style.getPropertyValue('--floating-clock-width') !== width) panel.style.setProperty('--floating-clock-width', width);
-        if (card.style.getPropertyValue('--docked-clock-width') !== width) card.style.setProperty('--docked-clock-width', width);
         move(desired.x, desired.y);
       }
       else {setMoveMode(false);host.style.height='';card.style.visibility='';}

@@ -65,3 +65,30 @@ test("clock boundary follows projected 3D board, translated native 2D board, and
   assert.equal(visibleBoardRight(doc), 920);
   assert.deepEqual(visibleBoardBounds(doc), {left:220,right:920});
 });
+
+test("angled boards leave usable space at clock height on either side", () => {
+  const frame={hidden:false,getBoundingClientRect:()=>({left:60,top:75,right:2013,width:1953}),
+    boardFootprint:[{x:600,y:150},{x:1200,y:165},{x:1460,y:690},{x:280,y:725}]};
+  const doc={getElementById:id=>id==='zagreb-board'?frame:null};
+  assert.equal(visibleBoardBounds(doc).right,1520);
+  const high=visibleBoardBounds(doc,{top:240,bottom:440});
+  assert.ok(high.right<1360,'Far bottom corner must not block the upper clock');
+  assert.ok(high.left>visibleBoardBounds(doc).left,'Left clocks also follow the sloping edge');
+  assert.deepEqual(visibleBoardBounds(doc,{top:80,bottom:200}),{left:Infinity,right:-Infinity});
+  for(const y of [150,250,450,650]) {
+    const horizontalAt=(top,bottom)=>({left:Math.max(8,visibleBoardBounds(doc,{top:top-16,bottom:bottom+16}).right+16),right:2028});
+    const fit=fitClockArea({top:140,bottom:890,width:1036,height:500,x:0,y,
+      horizontalAt,heightAtWidth:w=>62+Math.max(0,w-30)*.46});
+    assert.ok(fit.left>=horizontalAt(fit.top,fit.top+fit.height).left,'No visible board overlap');
+    assert.ok(fit.left+fit.width<=2028);
+    assert.ok(fit.top+fit.height<=890);
+    if(y===150)assert.ok(fit.width>600,'Clock grows into available space instead of shrinking to 492px');
+  }
+});
+
+test("native 2D remains protected where the clock and board share height",()=>{
+  const board={getBoundingClientRect:()=>({left:100,right:900,top:200,bottom:1000})};
+  const doc={getElementById:id=>id==='board'?board:null};
+  assert.deepEqual(visibleBoardBounds(doc,{top:100,bottom:300}),{left:100,right:900});
+  assert.deepEqual(visibleBoardBounds(doc,{top:80,bottom:150}),{left:Infinity,right:-Infinity});
+});
