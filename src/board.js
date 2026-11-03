@@ -4,6 +4,7 @@ import { Chessground } from '../vendor/chessground/chessground.js';
 import { Chess }       from '../vendor/chess.js/chess.js';
 import { showPromotion } from './promotion.js';
 import { GameTree }     from './tree.js';
+import { traceMoveRequest } from './move-diagnostics.js';
 
 export class BoardController extends EventTarget {
   constructor(rootEl, overlayEl) {
@@ -29,6 +30,7 @@ export class BoardController extends EventTarget {
     // node. Mainline = children[0] at every level.
     this.tree = new GameTree(this.startingFen);
     this.livePath = '';
+    this.reviewingGame = false;
   }
 
   init() {
@@ -316,6 +318,14 @@ export class BoardController extends EventTarget {
 
   isAtLive()   { return !!this.tree && this.tree.currentPath === this.livePath; }
   totalPlies() { return this.tree?.nodesAlong?.(this.livePath || '').length || 0; }
+
+  // Historical moves are analysis branches. Keep the game's endpoint so End
+  // returns to the actual game, including after several moves in a variation.
+  _preserveGameEndpoint() {
+    const classes = globalThis.document?.body?.classList;
+    return this.reviewingGame || !this.isAtLive() || ['practice-finished', 'analysis-archived', 'learn-active']
+      .some(name => classes?.contains(name));
+  }
 
   /** Sync tree.currentPath to match the first `n` plies of chess.history
    *  along the tree's mainline. Called during navigation. */
@@ -632,15 +642,15 @@ export class BoardController extends EventTarget {
   }
 
   async _onUserMove(orig, dest, _meta) {
+    const finish = traceMoveRequest(this, orig, dest, _meta?.via);
     if (this.interactionLocked) {
       this._clearTargetFirst();
       this._syncToChessground();
-      return;
+      return finish(false, 'interaction-locked');
     }
     console.log('[move] _onUserMove called', {
       orig, dest,
       via: _meta?.via || 'unknown',         // 'chessground-after' | 'pending-source' | 'target-first-click' | 'target-drag' | ...
-      meta: _meta || {},
       chessTurn: this.chess.turn(),
       isAtLive: this.isAtLive(),
       viewPly: this.viewPly,
@@ -690,76 +700,34 @@ export class BoardController extends EventTarget {
         // until the next unrelated sync. Snap it back now.
         this._renderPosition(this.chess.fen(), lastMoveFromHistory(this.chess));
         this._resetInputState();
-        return;   // ← do not apply the move
+        return finish(false, 'wrong-turn');
       }
     }
-    // Post-game exploration is allowed: archiveCurrentGame uses a
-    // snapshot taken at finishPracticeGame time (board._archiveSnapshot),
-    // not live chess.history(), so extending the tree after game-end
-    // can't corrupt the saved record.
-    if (!this.isAtLive()) {
-      // User moved from an old ply — truncate chess.js to the view ply
-      // and branch from here. The variation tree keeps the old line as a
-      // sibling; chess.js is rebuilt for legality of the new move.
-      console.log('[move] branching from historical ply', { viewPly: this.viewPly });
-      const verbose = this.chess.history({ verbose: true });
-      const keep = this.viewPly || 0;
-      this.chess = new Chess(this.startingFen);
-      for (let i = 0; i < keep; i++) {
-        const m = verbose[i];
-        this.chess.move({ from: m.from, to: m.to, promotion: m.promotion });
-      }
-      this.viewPly = null;
-      this._historicalChess = null;    // no longer needed
-      // POST-GAME REPLACE-MAINLINE: when the game has finished
-      // (practice-finished) or the user is in free analysis on a
-      // previously-archived game (analysis-archived), playing a move
-      // from a historical ply REPLACES the rest of the mainline
-      // instead of creating a sibling variation. User asked for
-      // edit-the-game semantics: "take a back move and play a new
-      // one [should] stay as main line of the game". The original
-      // game stays gospel via board._archiveSnapshot which was
-      // frozen at game-end time and never touched after — so the
-      // saved/exported PGN is unaffected by this re-edit.
-      try {
-        const cls = document.body.classList;
-        const isPostGame = cls.contains('practice-finished') ||
-                           cls.contains('analysis-archived');
-        // AUDIT L1: do NOT replace the mainline while learn-from-mistakes
-        // is active. Learn mode navigates to the pre-mistake ply via
-        // goToPly (viewPly set) and lets the user try a move — but that
-        // guess is a SCRATCH move, not an edit of the game. The old code
-        // dropped cur.children here, deleting the played mistake move AND
-        // every later ply of the archived game, which then made
-        // _findMistakePlies fire a premature "Session complete" and Save
-        // PGN export a truncated game. When learn is active the guess is
-        // kept as a harmless sibling variation instead.
-        const isLearnActive = cls.contains('learn-active');
-        if (isPostGame && !isLearnActive && this.tree && this.tree.currentPath != null) {
-          const cur = this.tree.nodeAtPath(this.tree.currentPath);
-          if (cur && cur.children && cur.children.length) {
-            console.log('[move] post-game mainline-replace: dropping continuation children', {
-              path: this.tree.currentPath, dropped: cur.children.length,
-            });
-            cur.children = [];
-          }
-        }
-      } catch (err) {
-        console.warn('[move] post-game mainline-replace failed (continuing as variation)', err);
-      }
+    // chess already IS the displayed position. Never truncate it using a
+    // nullable viewPly, and never delete existing children while trying a move.
+    const sourceTree = this.tree;
+    const sourcePath = sourceTree.currentPath;
+    const sourceFen = this.fen();
+    const preserveEndpoint = this._preserveGameEndpoint();
+    if (sourceTree.nodeAtPath(sourcePath)?.fen !== sourceFen) {
+      this._syncToChessground();
+      this._resetInputState();
+      return finish(false, 'position-tree-mismatch');
     }
 
     const piece = this.chess.get(orig);
     if (!piece) {
       console.warn('[move] no piece at orig square — bailing', { orig });
-      return;
+      this._syncToChessground();
+      this._resetInputState();
+      return finish(false, 'missing-piece');
     }
 
     let promotion = null;
     if (piece.type === 'p'
         && ((piece.color === 'w' && dest[1] === '8')
          || (piece.color === 'b' && dest[1] === '1'))) {
-      const supplied = _meta?.via === '3d-board' ? {q: 'queen', r: 'rook', b: 'bishop', n: 'knight'}[_meta.promotion] : null;
+      const supplied = {q: 'queen', r: 'rook', b: 'bishop', n: 'knight'}[_meta?.promotion];
       promotion = supplied || await showPromotion(
         this.overlayEl, dest, piece.color === 'w' ? 'white' : 'black', this.orientation,
       );
@@ -772,6 +740,14 @@ export class BoardController extends EventTarget {
     const PROMO_LETTER = { queen: 'q', rook: 'r', bishop: 'b', knight: 'n' };
     const promoLetter = promotion ? (PROMO_LETTER[promotion] || 'q') : undefined;
 
+    // A promotion picker can outlive navigation or a newly loaded game.
+    if (this.interactionLocked || this.tree !== sourceTree ||
+        this.tree.currentPath !== sourcePath || this.fen() !== sourceFen) {
+      this._syncToChessground();
+      this._resetInputState();
+      return finish(false, 'position-changed');
+    }
+
     let move;
     try {
       move = this.chess.move({ from: orig, to: dest, promotion: promoLetter });
@@ -781,13 +757,13 @@ export class BoardController extends EventTarget {
       console.warn('[move] chess.move threw (illegal)', { orig, dest, promotion, err: String(e) });
       this._renderPosition(this.chess.fen(), lastMoveFromHistory(this.chess));
       this._resetInputState();
-      return;
+      return finish(false, 'illegal-move');
     }
     if (!move) {
       console.warn('[move] chess.move returned null (illegal move rejected)', { orig, dest, promotion });
       this._renderPosition(this.chess.fen(), lastMoveFromHistory(this.chess));
       this._resetInputState();
-      return;
+      return finish(false, 'illegal-move');
     }
     console.log('[move] chess.move OK', { san: move.san, from: move.from, to: move.to, captured: move.captured || null, flags: move.flags });
 
@@ -811,12 +787,10 @@ export class BoardController extends EventTarget {
     );
     if (addRes) {
       this.tree.currentPath = addRes.path;
-      // Learn guesses are scratch branches and must never redefine the
-      // user's active analysis line. Every ordinary played move does.
-      const isLearnGuess = document.body?.classList?.contains('learn-active');
-      if (!isLearnGuess) this.livePath = addRes.path;
+      if (!preserveEndpoint) this.livePath = addRes.path;
     }
     this.viewPly = this.isAtLive() ? null : this.tree.nodesAlong(this.tree.currentPath).length;
+    this._historicalChess = this.isAtLive() ? null : this.chess;
     console.log('[move] tree updated', {
       uci, created: addRes?.created, path: this.tree.currentPath,
       newFen: this.chess.fen(),
@@ -834,8 +808,20 @@ export class BoardController extends EventTarget {
     // headroom before listeners run — invisible to the human eye.
     const moveFen = this.chess.fen();
     requestAnimationFrame(() => {
+      if (this.tree !== sourceTree || this.tree.currentPath !== addRes?.path || this.fen() !== moveFen) return;
       this.dispatchEvent(new CustomEvent('move', { detail: { move, fen: moveFen } }));
     });
+    return finish(true, addRes?.created ? 'variation-added' : 'existing-move');
+  }
+
+  // Typed SAN uses exactly the same legality, variation and event pipeline.
+  async playSanMove(san) {
+    let move;
+    try { move = new Chess(this.fen()).move(san, { strict: false }); } catch {
+      return traceMoveRequest(this, null, null, 'keyboard-san')(false, 'invalid-san');
+    }
+    if (!move) return false;
+    return this._onUserMove(move.from, move.to, { via: 'keyboard-san', promotion: move.promotion });
   }
 
   _syncToChessground(lastMove) {
@@ -905,6 +891,7 @@ export class BoardController extends EventTarget {
     this.viewPly = null;
     this.tree = new GameTree(this.startingFen);
     this.livePath = '';
+    this.reviewingGame = false;
     this.cg.set({
       fen: this.chess.fen(),
       turnColor: 'white',
@@ -921,14 +908,16 @@ export class BoardController extends EventTarget {
     this._clearTargetFirst();   // audit B5
     // Analysis mode: undo one ply at a time.
     const retractedPath = this.tree.currentPath;   // node being undone
+    const preserveEndpoint = this._preserveGameEndpoint();
     const undone = this.chess.undo();
     if (!undone) return null;
-    this.viewPly = null;
     // Move tree cursor back one node on the current path.
     if (this.tree.currentPath) {
       this.tree.currentPath = this.tree.parentPath(this.tree.currentPath) || '';
     }
-    this.livePath = this.tree.currentPath;
+    if (!preserveEndpoint) this.livePath = this.tree.currentPath;
+    this.viewPly = this.isAtLive() ? null : this.tree.nodesAlong(this.tree.currentPath).length;
+    this._historicalChess = this.isAtLive() ? null : this.chess;
     // AUDIT T1: practice takeback = REPLACE, not branch. When prune is
     // set (an active-practice takeback), delete the retracted node so
     // the move the user plays next becomes the tree MAINLINE (children[0])
@@ -938,7 +927,7 @@ export class BoardController extends EventTarget {
     // move — the user's "the new line is always MAIN LINE" report.
     // Analysis mode (prune=false) keeps the old branch so the user can
     // re-enter it later, as before.
-    if (prune && retractedPath) {
+    if (prune && !preserveEndpoint && retractedPath) {
       try { this.tree.deleteAt(retractedPath); } catch (err) {
         console.warn('[undo] prune failed', err);
       }
@@ -979,6 +968,7 @@ export class BoardController extends EventTarget {
     preserveLivePath = false,
   } = {}) {
     if (this.interactionLocked && !force) return false;
+    preserveLivePath ||= fromCurrent && this._preserveGameEndpoint();
     if (!fromCurrent && !this.isAtLive()) this.toEnd();
     if (!uciList || !uciList.length) return false;
 

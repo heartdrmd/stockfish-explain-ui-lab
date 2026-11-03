@@ -45,6 +45,17 @@
 // thresholds and project them as virtual mistake entries.
 
 import { moverWinDrop, classifySeverity } from './evals.js';
+import { Chess } from '../vendor/chess.js/chess.js';
+
+// A completed game's PGN must come from the same frozen history as its
+// saved plies, even if the user explores while the analysis sweep finishes.
+export function completedGamePgn(tree, snapshot, tags) {
+  if (!snapshot) return tree.pgn({ tags });
+  const replay = new Chess(snapshot.startingFen);
+  for (const move of snapshot.history) replay.move(move.san);
+  replay.header(...Object.entries(tags).flat());
+  return replay.pgn();
+}
 
 const GAMES_KEY   = 'stockfish-explain.archive.games';
 const MAX_GAMES   = 300;

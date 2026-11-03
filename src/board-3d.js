@@ -551,9 +551,8 @@ export function install3DBoard(board) {
     busy = true;
     try {
       const uci = event.data.uci;
-      const before=board.fen();
-      await board._onUserMove(uci.slice(0, 2), uci.slice(2, 4), {via: '3d-board', promotion: uci[4]});
-      result(board.fen()!==before,board.fen()!==before?'accepted':'controller-rejected');
+      const accepted = await board._onUserMove(uci.slice(0, 2), uci.slice(2, 4), {via: '3d-board', promotion: uci[4]});
+      result(accepted === true, accepted === true ? 'accepted' : 'controller-rejected');
     } finally { busy = false; sync(true); }
   });
   // Start the viewer after its bridge is listening. It restores the complete

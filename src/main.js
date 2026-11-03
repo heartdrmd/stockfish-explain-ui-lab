@@ -80,6 +80,7 @@ import { installClockPresentation } from './clock-presentation.js';
 import { installClockDock } from './clock-dock.js';
 import { createWatchGuard } from './watch-guard.js';
 import { installStudyAnalysis } from './board-analysis.js';
+import { readMoveDiagnostics } from './move-diagnostics.js';
 
 // Expose Chess to eval-graph's computeDivision helper — avoids a
 // circular import while still letting it replay SAN to count pieces
@@ -173,7 +174,8 @@ function buildLogFile() {
     '---- captured console output ----',
     '',
   ].join('\n');
-  return header + LOG_BUFFER.join('\n') + '\n';
+  return header + LOG_BUFFER.join('\n') + '\n\n---- recent move attempts (survive reload; last 7 days, max 200 events) ----\n' +
+    readMoveDiagnostics().map(entry => JSON.stringify(entry)).join('\n') + '\n';
 }
 
 // ─── User-action trace ─────────────────────────────────────────
@@ -5827,12 +5829,12 @@ async function main() {
                       ? `Stockfish (skill ${ui.rangeSkill?.value || '?'})`
                       : 'n/a',
       opening,
-      startingFen: board.startingFen,
-      pgn:         board.tree.pgn({ tags: {
+      startingFen,
+      pgn:         Archive.completedGamePgn(board.tree, snap, {
                       Event: mode === 'practice' ? 'Practice vs Stockfish' : 'Analysis session',
                       Date:  today.replace(/-/g, '.'),
                       Result: result || '*',
-                    }}),
+                    }),
       plies,
       hints:       mode === 'practice' ? practiceHintHistory.slice() : [],
     };
@@ -6744,31 +6746,9 @@ async function main() {
     } catch {}
   }
 
-  // Replay chess.js up to `path` and update UI. Treats the tree path's
-  // nodes as authoritative; chess.js is rebuilt from startingFen + path.
+  // Use the same history/variation navigation as the embedded 2D/3D view.
   function navigateToTreePath(path) {
-    const tree = board.tree;
-    const nodes = tree.nodesAlong(path);
-    const replay = new Chess(board.startingFen);
-    for (const n of nodes) {
-      const uci = n.uci;
-      try {
-        replay.move({ from: uci.slice(0,2), to: uci.slice(2,4), promotion: uci.length>4 ? uci[4] : undefined });
-      } catch { break; }
-    }
-    board.chess = replay;
-    tree.currentPath = path;
-    // If we're on the mainline, keep viewPly behavior; otherwise just
-    // render the position directly.
-    board.viewPly = null;
-    board.cg.set({
-      fen: replay.fen(),
-      turnColor: replay.turn() === 'w' ? 'white' : 'black',
-      lastMove: nodes.length ? [nodes[nodes.length-1].uci.slice(0,2), nodes[nodes.length-1].uci.slice(2,4)] : undefined,
-      check: replay.inCheck() ? (replay.turn() === 'w' ? 'white' : 'black') : false,
-      movable: { color: 'both', dests: toDestsFrom(replay) },
-    });
-    board.dispatchEvent(new CustomEvent('nav', { detail: { path, live: true } }));
+    return board.goToPath(path);
   }
 
   // The same wheel behavior in docked and fullscreen notation. Broadcasts
@@ -9657,6 +9637,7 @@ async function main() {
         if (uciMoves.length) {
           board.playUciMoves(uciMoves, { animate: false });
         }
+        board.reviewingGame = true;
         if (savedAnalysisMeta(g.plies)) markNotationAnalysisReady();
         try { fireAnalysis(); } catch {}
         const savedLabel = savedAnalysisLabel(g.plies);
@@ -10908,6 +10889,7 @@ async function main() {
       }
     }
     if (uciMoves.length) board.playUciMoves(uciMoves, { animate: false });
+    board.reviewingGame = true;
     if (savedAnalysisMeta(plies)) markNotationAnalysisReady();
     try { fireAnalysis(); } catch {}
     if (ui.narrationText) {
@@ -14153,19 +14135,14 @@ async function main() {
   });
 
   // Keyboard move input — accept SAN (Nf3, e4, O-O, etc.)
-  ui.kbdMove.addEventListener('keydown', (e) => {
+  ui.kbdMove.addEventListener('keydown', async (e) => {
     if (e.key !== 'Enter') return;
     e.preventDefault();
     if (board.interactionLocked) return;
     const txt = ui.kbdMove.value.trim();
     if (!txt) return;
     try {
-      const mv = board.chess.move(txt, { strict: false });
-      if (mv) {
-        // chess.js accepted it — sync chessground and fire our normal pipeline
-        board.cg.move(mv.from, mv.to);
-        board._syncToChessground([mv.from, mv.to]);
-        board.dispatchEvent(new CustomEvent('move', { detail: { move: mv, fen: board.fen() } }));
+      if (await board.playSanMove(txt)) {
         ui.kbdMove.value = '';
       } else {
         flashInput(ui.kbdMove, 'illegal');
@@ -15136,6 +15113,7 @@ function setupTournament(board, fireAnalysis, pauseControl) {
     board.newGame();
     if (game.uciMoves && game.uciMoves.length) {
       board.playUciMoves(game.uciMoves, { animate: false });
+      board.reviewingGame = true;
       setTimeout(() => board.toStart(), 50);
     }
   }
