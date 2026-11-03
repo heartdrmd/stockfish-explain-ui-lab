@@ -87,6 +87,27 @@ node build.js --lite --single-threaded --skip-em-check --force --no-split
 
 ## Tech stack
 
+### Computer engine CPU headroom
+
+The computer website defaults to half the reported logical cores and caps each
+engine at the lower of 75% of those cores, all-but-two, and 32 threads (minimum
+one thread on small machines). `src/engine-resources.js` supplies the shared
+policy; both settings and outgoing worker commands enforce it. Conservative
+boot/prewarm limits and the existing mobile policy are retained.
+
+This limits parallelism, not strength: engine flavor, full NNUE, Skill Level,
+depth/time settings and continuous `go infinite` are unchanged. No cooling
+pauses, idle timeout or periodic search restarts are added. It is not an OS CPU
+percentage/temperature guarantee or a machine-wide limit across browser tabs.
+Native Vision app bundles are not part of this change.
+
+Private thread-setting diagnostics retain at most 100 events for seven days in
+browser storage and are included by Download Log; they contain no positions or
+account data. `npm test` includes the resource/lifecycle regressions. Run
+`node scripts/check-cpu-thread-guard.mjs` with Playwright available (or set
+`PLAYWRIGHT_MODULE` to its module path) for the Chrome fake-worker check. Neither
+test runs real Stockfish or performs a CPU load test.
+
 | Layer | What |
 |---|---|
 | Engine | [Stockfish 17 WASM](https://github.com/nmrugg/stockfish.js) (nmrugg's Emscripten port), lite + full-NNUE variants |

@@ -6,6 +6,7 @@
 //   - full:      108 MB, full NNUE, multi-thread (strongest)
 
 import { assetUrl } from './asset-url.js';
+import { isComputerBrowser, computerThreadPolicy, clampComputerThreads, recordCpuThreadLimit } from './engine-resources.js';
 
 export const ENGINE_FLAVORS = {
   // ─── Lichess Stockfish 18 — full bignet, FULL THROTTLE policy ───
@@ -198,6 +199,7 @@ export class Engine extends EventTarget {
     this.multipv    = 3;
     this.skill      = 20;
     this.threads    = 1;
+    this._cpuGuardId = globalThis.crypto?.randomUUID?.() || `engine-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     // Safari does not expose navigator.deviceMemory, so the previous UI
     // assumed 16 GB and eventually raised this to 512 MB. The table is
     // allocated on the first real search — exactly when iOS killed the page
@@ -262,7 +264,8 @@ export class Engine extends EventTarget {
     //    8 cores -> 4 threads
     //    4 cores -> 2 threads
     //    2 cores -> 1 thread
-    // User can still crank higher via the UI slider for pure analysis.
+    // The computer website uses the shared continuous-analysis thread policy.
+    // Other platforms keep their existing boot defaults.
     //
     // Cap dropped 32 → 8 after a 64-core/Edge user reproduced
     // mid-search wedges with the 32-thread default. Stockfish WASM
@@ -280,6 +283,9 @@ export class Engine extends EventTarget {
     this.threads = spec.threaded
       ? Math.max(1, Math.min(Math.floor(hw / 2), WASM_THREAD_CAP))
       : 1;
+    // Keep the conservative boot/prewarm cap too; main.js applies the
+    // computer's half-core UI default after the worker is ready.
+    if (spec.threaded && isComputerBrowser()) this.threads = Math.min(this.threads, computerThreadPolicy(hw).default);
     if (Number.isInteger(threads) && threads > 0) this.threads=Math.min(this.threads,threads);
 
     try {
@@ -582,8 +588,14 @@ export class Engine extends EventTarget {
   }
 
   setThreads(n) {
-    this.threads = n;
-    this._queueOrApply({ threads: n });
+    this.threads = this._limitThreads(n);
+    this._queueOrApply({ threads: this.threads });
+  }
+
+  _limitThreads(n) {
+    if (!isComputerBrowser()) return n;
+    if (ENGINE_FLAVORS[this.flavor]?.threaded === false) return 1;
+    return clampComputerThreads(n);
   }
 
   /** Resize Stockfish's transposition table ("hash"). Unit = MB. */
@@ -618,6 +630,17 @@ export class Engine extends EventTarget {
 
   _send(cmd) {
     if (!this.worker) return;
+    // Enforce at the worker boundary as well as the slider/setter: settings
+    // restoration and direct option writers cannot bypass the desktop cap.
+    // This never stops an active search; normal option queuing still owns
+    // when a Threads change is safe to send.
+    const threadsCommand = /^setoption name Threads value (.+)$/i.exec(cmd);
+    if (threadsCommand && isComputerBrowser()) {
+      const requested = Number(threadsCommand[1]);
+      this.threads = this._limitThreads(requested);
+      cmd = `setoption name Threads value ${this.threads}`;
+      recordCpuThreadLimit({ id: this._cpuGuardId, requested, applied: this.threads, policy: computerThreadPolicy() });
+    }
     // Pre-uciok gate: was blocking LEGITIMATE commands in practice when
     // a clear uciok-reset path exists. The narrower, safer guard: drop
     // only commands issued before we've even posted 'uci' (worker not

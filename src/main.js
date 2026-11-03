@@ -81,6 +81,7 @@ import { installClockDock } from './clock-dock.js';
 import { createWatchGuard } from './watch-guard.js';
 import { installStudyAnalysis } from './board-analysis.js';
 import { readMoveDiagnostics } from './move-diagnostics.js';
+import { isComputerBrowser, computerThreadPolicy, readCpuGuardDiagnostics } from './engine-resources.js';
 
 // Expose Chess to eval-graph's computeDivision helper — avoids a
 // circular import while still letting it replay SAN to count pieces
@@ -175,7 +176,8 @@ function buildLogFile() {
     '',
   ].join('\n');
   return header + LOG_BUFFER.join('\n') + '\n\n---- recent move attempts (survive reload; last 7 days, max 200 events) ----\n' +
-    readMoveDiagnostics().map(entry => JSON.stringify(entry)).join('\n') + '\n';
+    readMoveDiagnostics().map(entry => JSON.stringify(entry)).join('\n') + '\n\n---- CPU thread limits (last 7 days, max 100 events) ----\n' +
+    readCpuGuardDiagnostics().map(entry => JSON.stringify(entry)).join('\n') + '\n';
 }
 
 // ─── User-action trace ─────────────────────────────────────────
@@ -1166,7 +1168,11 @@ async function main() {
       try {
         if (ui.rangeSkill)   engine.setSkill(+ui.rangeSkill.value);
         if (ui.rangeMultipv) engine.setMultiPV(+ui.rangeMultipv.value);
-        if (ui.rangeThreads && engine.setThreads) engine.setThreads(+ui.rangeThreads.value);
+        if (ui.rangeThreads && engine.setThreads) {
+          engine.setThreads(+ui.rangeThreads.value);
+          ui.rangeThreads.value = String(engine.threads);
+          ui.threadsVal.textContent = String(engine.threads);
+        }
         // Literal key (not the HASH_STORAGE const, which is declared later
         // in main() — referencing it here would TDZ on the initial boot).
         let savedHash = +(localStorage.getItem('stockfish-explain.hash-mb') || 0);
@@ -1182,7 +1188,7 @@ async function main() {
       const shortName = (spec?.label || info.flavor).split(/[·—(]/)[0].trim();
       const netSuffix = info.activeNet === 'small' ? ' · smallnet' : '';
       ui.engineMode.textContent = info.threaded
-        ? `${shortName} · ${info.threads} thread${info.threads === 1 ? '' : 's'}${netSuffix}`
+        ? `${shortName} · ${engine.threads} thread${engine.threads === 1 ? '' : 's'}${netSuffix}`
         : `${shortName} · 1 thread${netSuffix}`;
       ui.engineMode.title = spec?.label || info.flavor;
       if (info.threaded) ui.engineMode.classList.add('threaded');
@@ -1663,25 +1669,34 @@ async function main() {
     requestAnimationFrame(() => updateAria(panel.getBoundingClientRect().height));
   })();
 
-  // Hardware concurrency — set max on thread slider. Default: 75% of
-  // available cores rounded up, capped at N-1 AND at 32 (Stockfish
-  // WASM thread-pool ceiling; beyond that the worker crashes without
-  // a useful error).
+  // Computer CPU headroom: half the reported cores by default, at most
+  // 75% and all-but-two. Searches stay continuous at their selected strength.
+  // Phones/native Vision keep their existing resource policy.
   const detectedThreads = Math.max(1, navigator.hardwareConcurrency || 4);
   const maxThreads = IS_IOS ? 1 : (IS_MOBILE ? Math.min(2, detectedThreads) : detectedThreads);
   const WASM_THREAD_CAP = 32;
-  ui.rangeThreads.max = String(Math.min(maxThreads, WASM_THREAD_CAP));
-  const defaultThreads = IS_MOBILE
+  const computerPolicy = isComputerBrowser() ? computerThreadPolicy() : null;
+  ui.rangeThreads.max = String(computerPolicy?.max ?? Math.min(maxThreads, WASM_THREAD_CAP));
+  const defaultThreads = computerPolicy?.default ?? (IS_MOBILE
     ? 1
-    : Math.max(1, Math.min(maxThreads - 1, Math.ceil(maxThreads * 0.75), WASM_THREAD_CAP));
+    : Math.max(1, Math.min(maxThreads - 1, Math.ceil(maxThreads * 0.75), WASM_THREAD_CAP)));
   ui.rangeThreads.value = String(defaultThreads);
   ui.threadsVal.textContent = ui.rangeThreads.value;
-  ui.threadsHw.textContent = IS_MOBILE
+  ui.threadsHw.textContent = computerPolicy
+    ? `(${detectedThreads} logical cores · default: ${defaultThreads} · ceiling: ${computerPolicy.max})`
+    : IS_MOBILE
     ? `(${detectedThreads} cores detected · phone-safe default: ${defaultThreads})`
     : `(${maxThreads} cores detected · default: ${defaultThreads})`;
+  const threadsHelp = document.getElementById('threads-help');
+  if (computerPolicy && threadsHelp) threadsHelp.textContent =
+    'Continuous analysis, with CPU headroom. Default: half the logical cores. Ceiling: 75%, leaving at least two where possible (32 threads maximum). Full engine and strength unchanged; no scheduled pauses.';
   // Sync engine to UI default so the two always agree, even if engine
   // was loaded with a different initial thread count before UI init.
-  try { engine.setThreads(defaultThreads); } catch (_) { /* engine may still be booting */ }
+  try {
+    engine.setThreads(defaultThreads);
+    ui.rangeThreads.value = String(engine.threads);
+    ui.threadsVal.textContent = String(engine.threads);
+  } catch (_) { /* engine may still be booting */ }
 
   ui.rangeSkill.addEventListener('input', () => {
     if (window.__learnOwnsEngine || window.__practiceHintOwnsEngine) return;
@@ -1694,8 +1709,9 @@ async function main() {
   });
   ui.rangeThreads.addEventListener('input', () => {
     if (window.__learnOwnsEngine || window.__practiceHintOwnsEngine) return;
-    ui.threadsVal.textContent = ui.rangeThreads.value;
     engine.setThreads(+ui.rangeThreads.value);
+    ui.rangeThreads.value = String(engine.threads);
+    ui.threadsVal.textContent = String(engine.threads);
     fireAnalysis();
   });
   ui.limitMode.addEventListener('change', () => {
