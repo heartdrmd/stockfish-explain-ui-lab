@@ -845,8 +845,10 @@ body.presentation-fullscreen { overflow:hidden; }
 body.presentation-fullscreen .uniboard .board-area { position:static!important; translate:none!important; transform:none!important; z-index:10000!important; }
 
 /* The native notation dock stays at the right edge; the clock can move freely. */
-#notation-right-dock>.move-list-wrap{display:flex;flex-direction:column;flex:1;min-height:0;height:100%;max-height:none;margin:0;overflow:hidden;background:var(--board-surround,#151c1a);border:1px solid #81917a55;border-radius:5px}
-#notation-right-dock .move-list-wrap>#move-list{flex:1;min-height:0;overflow:auto;max-height:none}
+#notation-right-dock>.move-list-wrap{display:flex;flex-direction:column;flex:1;min-height:0;height:100%;max-height:none;margin:0;overflow:auto;background:var(--board-surround,#151c1a);border:1px solid #81917a55;border-radius:5px}
+/* Review stats must not collapse notation to zero. Keep several move rows
+   usable; the outer dock scrolls any extra review controls below them. */
+#notation-right-dock .move-list-wrap>#move-list{flex:1 0 120px;min-height:120px;overflow:auto;max-height:none}
 #notation-right-dock .move-list-header{flex:0 0 auto}
 /* Leave notation readable when the graph and its statistics are also open. */
 #notation-right-dock .notation-graph-slot{flex:0 1 auto;min-height:0;max-height:45%;overflow:auto;overscroll-behavior:contain}

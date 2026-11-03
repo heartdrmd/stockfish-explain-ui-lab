@@ -10,7 +10,7 @@ const main = await readFile(new URL('src/main.js', root), 'utf8');
 const navigation = main.slice(main.indexOf('  function navigateToTreePath('), main.indexOf('  // The same wheel behavior'));
 const keyboard = main.slice(main.indexOf('  // Keyboard move input'), main.indexOf('  // Gauge matches'));
 const original = 'd4 Nf6 c4 c5 d5 b5 cxb5 a6 bxa6 e6 dxe6 fxe6 Nc3 Bxa6 g3 Nc6 Nh3 Be7 Bg2 O-O Bxc6 dxc6 Ng5 Bc4 O-O h6 Qxd8 Rfxd8 b3 Bxb3 Nf3 Bd5 Nd2 e5 a4 Bf7 Nf3 Nd7 Bd2 Bg6'.split(' ');
-const html = `<!doctype html><html><head>
+const html = `<!doctype html><html><head><meta charset="utf-8">
 <link rel="stylesheet" href="/vendor/chessground/chessground.base.css"><link rel="stylesheet" href="/styles/board.css">
 <style>body{background:#17221d;color:#eee;font:18px system-ui;margin:24px}#area{width:640px;height:640px;position:relative}#board{width:640px;height:640px}.board-nav{position:absolute;left:700px;top:0}button,input{font:inherit;padding:8px;margin:4px}#zagreb-board{position:absolute;width:1px;height:1px;pointer-events:none}#status{white-space:pre-wrap}#overlay[hidden]{display:none}</style></head>
 <body class="practice-finished"><h1>Review preserves the played game</h1><div id="area"><div id="board"></div><div id="overlay" hidden></div><div class="board-nav"></div></div>
@@ -76,6 +76,7 @@ try {
   await page.locator('#review').click();await page.locator('#san').fill('Nd5');await page.locator('#san').press('Enter');
   await page.waitForFunction(() => document.getElementById('san').value === '');
   await assertOriginal();
+  await page.waitForFunction(() => !qa.board.cg.state.animation.current);
   await page.screenshot({ path: '/tmp/chess-review-Nd5.png' });
   // The embedded viewer's real parent handler must acknowledge actual success.
   await page.evaluate(() => qa.installBridge());

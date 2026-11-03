@@ -69,9 +69,10 @@ test('desktop notation keeps a protected internal scroller above the graph', () 
   assert.match(layout, /\.move-list-wrap > #move-list \{[\s\S]*?flex:\s*0 0 clamp\(220px, 36vh, 380px\)/);
   assert.match(layout, /\.move-list-wrap > #move-list \{[\s\S]*?min-height:\s*220px[\s\S]*?overflow-y:\s*auto/);
   assert.match(html, /id="move-list"[\s\S]*?id="notation-graph-slot"/);
-  assert.match(main, /ui\.moveList\?\.addEventListener\('wheel'[\s\S]*?ui\.moveList\.scrollTop \+=/);
-  assert.match(main, /moveListWrap\?\.addEventListener\('wheel'[\s\S]*?scroller\.scrollTop \+=/);
-  assert.match(main, /event\.target\?\.closest\?\.\('#move-list'\)/);
+  // Wheel-to-history input was unified for native and embedded notation.
+  assert.match(main, /installNotationInput\(document, direction => direction < 0 \? board\.backward\(\) : board\.forward\(\)/);
+  assert.match(main, /keyboard: false, selector: '#move-list,\.move-list-header,#board'/);
+  assert.match(main, /enabled: \(\) => !board\.watchActive && !board\.interactionLocked/);
 });
 
 test('a hidden loaded-game graph reopens below the board', () => {
