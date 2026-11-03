@@ -81,7 +81,7 @@ import { installClockDock } from './clock-dock.js';
 import { createWatchGuard } from './watch-guard.js';
 import { installStudyAnalysis } from './board-analysis.js';
 import { readMoveDiagnostics } from './move-diagnostics.js';
-import { isComputerBrowser, computerThreadPolicy, readCpuGuardDiagnostics } from './engine-resources.js';
+import { isComputerBrowser, computerThreadPolicy, readComputerThreads, saveComputerThreads, readCpuGuardDiagnostics } from './engine-resources.js';
 
 // Expose Chess to eval-graph's computeDivision helper — avoids a
 // circular import while still letting it replay SAN to count pieces
@@ -1160,7 +1160,7 @@ async function main() {
 
       // E6: re-apply the user's engine settings on EVERY boot (initial,
       // dropdown, crash-recovery, auto-fallback). A fresh Engine() boots
-      // with defaults (skill 20 / MultiPV 3 / threads = half-cores); the
+      // with defaults (skill 20 / MultiPV 3 / device-safe threads); the
       // old code only re-applied on the dropdown path, so a mid-game
       // crash silently turned the practice opponent up to full strength.
       // (Practice re-sets skill per engine-turn too, so this is a floor,
@@ -1169,7 +1169,9 @@ async function main() {
         if (ui.rangeSkill)   engine.setSkill(+ui.rangeSkill.value);
         if (ui.rangeMultipv) engine.setMultiPV(+ui.rangeMultipv.value);
         if (ui.rangeThreads && engine.setThreads) {
-          engine.setThreads(+ui.rangeThreads.value);
+          // Initial boot precedes the settings UI setup. Read the saved
+          // computer choice here, not the HTML slider's placeholder value.
+          engine.setThreads(readComputerThreads() ?? +ui.rangeThreads.value);
           ui.rangeThreads.value = String(engine.threads);
           ui.threadsVal.textContent = String(engine.threads);
         }
@@ -1669,7 +1671,7 @@ async function main() {
     requestAnimationFrame(() => updateAria(panel.getBoundingClientRect().height));
   })();
 
-  // Computer CPU headroom: half the reported cores by default, at most
+  // Computer CPU headroom: six threads by default (fewer on small CPUs), at most
   // 75% and all-but-two. Searches stay continuous at their selected strength.
   // Phones/native Vision keep their existing resource policy.
   const detectedThreads = Math.max(1, navigator.hardwareConcurrency || 4);
@@ -1680,7 +1682,8 @@ async function main() {
   const defaultThreads = computerPolicy?.default ?? (IS_MOBILE
     ? 1
     : Math.max(1, Math.min(maxThreads - 1, Math.ceil(maxThreads * 0.75), WASM_THREAD_CAP)));
-  ui.rangeThreads.value = String(defaultThreads);
+  const selectedThreads = computerPolicy ? readComputerThreads(computerPolicy) : defaultThreads;
+  ui.rangeThreads.value = String(selectedThreads);
   ui.threadsVal.textContent = ui.rangeThreads.value;
   ui.threadsHw.textContent = computerPolicy
     ? `(${detectedThreads} logical cores · default: ${defaultThreads} · ceiling: ${computerPolicy.max})`
@@ -1689,13 +1692,18 @@ async function main() {
     : `(${maxThreads} cores detected · default: ${defaultThreads})`;
   const threadsHelp = document.getElementById('threads-help');
   if (computerPolicy && threadsHelp) threadsHelp.textContent =
-    'Continuous analysis, with CPU headroom. Default: half the logical cores. Ceiling: 75%, leaving at least two where possible (32 threads maximum). Full engine and strength unchanged; no scheduled pauses.';
-  // Sync engine to UI default so the two always agree, even if engine
-  // was loaded with a different initial thread count before UI init.
-  try {
-    engine.setThreads(defaultThreads);
+    'Continuous analysis, with CPU headroom. Default: 6 threads (fewer on smaller computers). Your choice is saved on this browser, including 9 where supported. Ceiling: 75%, leaving at least two where possible (32 threads maximum). Full engine and strength unchanged; no scheduled pauses.';
+  function updateThreadDisplay() {
     ui.rangeThreads.value = String(engine.threads);
     ui.threadsVal.textContent = String(engine.threads);
+    if (computerPolicy && ui.engineMode) {
+      ui.engineMode.textContent = ui.engineMode.textContent.replace(/\b\d+ threads?\b/, `${engine.threads} thread${engine.threads === 1 ? '' : 's'}`);
+    }
+  }
+  // Sync engine to the restored choice, never overwrite it with the default.
+  try {
+    engine.setThreads(selectedThreads);
+    updateThreadDisplay();
   } catch (_) { /* engine may still be booting */ }
 
   ui.rangeSkill.addEventListener('input', () => {
@@ -1709,9 +1717,9 @@ async function main() {
   });
   ui.rangeThreads.addEventListener('input', () => {
     if (window.__learnOwnsEngine || window.__practiceHintOwnsEngine) return;
+    if (computerPolicy) saveComputerThreads(+ui.rangeThreads.value, computerPolicy);
     engine.setThreads(+ui.rangeThreads.value);
-    ui.rangeThreads.value = String(engine.threads);
-    ui.threadsVal.textContent = String(engine.threads);
+    updateThreadDisplay();
     fireAnalysis();
   });
   ui.limitMode.addEventListener('change', () => {

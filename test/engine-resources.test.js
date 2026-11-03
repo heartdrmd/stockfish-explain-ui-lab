@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Engine, ENGINE_FLAVORS } from '../src/engine.js';
-import { isComputerBrowser, computerThreadPolicy, clampComputerThreads, readCpuGuardDiagnostics } from '../src/engine-resources.js';
+import { isComputerBrowser, computerThreadPolicy, clampComputerThreads, readComputerThreads, saveComputerThreads, readCpuGuardDiagnostics } from '../src/engine-resources.js';
 
 const mac = { userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)', platform: 'MacIntel', maxTouchPoints: 0, hardwareConcurrency: 16 };
 const fen = '8/8/8/8/8/8/4P3/K6k w - - 0 1';
@@ -28,10 +28,68 @@ test('desktop policy leaves headroom even on small CPUs and respects the WASM ce
     if (cores >= 3) assert.ok(p.max <= cores - 2);
     if (cores >= 2) assert.ok(p.max <= Math.floor(cores * .75));
   }
-  assert.deepEqual(computerThreadPolicy(16), { cores: 16, default: 8, max: 12 });
-  assert.deepEqual(computerThreadPolicy(18), { cores: 18, default: 9, max: 13 });
-  assert.deepEqual(computerThreadPolicy(64), { cores: 64, default: 32, max: 32 });
+  assert.deepEqual(computerThreadPolicy(16), { cores: 16, default: 6, max: 12 });
+  assert.deepEqual(computerThreadPolicy(18), { cores: 18, default: 6, max: 13 });
+  assert.deepEqual(computerThreadPolicy(64), { cores: 64, default: 6, max: 32 });
   for (const bad of [null, 0, -4, NaN, Infinity, 'bad']) assert.equal(computerThreadPolicy(bad).cores, 4);
+});
+
+function preferenceStorage(t) {
+  const prior = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+  const data = new Map();
+  Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: {
+    getItem: key => data.get(key) ?? null,
+    setItem: (key, value) => data.set(key, value),
+  } });
+  t.after(() => prior ? Object.defineProperty(globalThis, 'localStorage', prior) : delete globalThis.localStorage);
+  return data;
+}
+
+test('computer preference defaults to six and remembers explicit nine or six', t => {
+  const { engine } = readyEngine(t);
+  preferenceStorage(t);
+  assert.equal(readComputerThreads(), 6);
+  saveComputerThreads(9);
+  assert.equal(readComputerThreads(), 9);
+  engine.setThreads(2);
+  assert.equal(readComputerThreads(), 9, 'temporary engine settings do not overwrite preference');
+  engine.flavor = 'lite-single';
+  engine.setThreads(readComputerThreads());
+  assert.equal(engine.threads, 1);
+  assert.equal(readComputerThreads(), 9, 'single-thread fallback does not erase preference');
+  saveComputerThreads(6);
+  assert.equal(readComputerThreads(), 6);
+});
+
+test('invalid saved values fall back safely; a different computer clamps the saved choice', t => {
+  readyEngine(t);
+  const data = preferenceStorage(t);
+  const key = 'stockfish-explain.computer-threads.v1';
+  for (const value of ['', '0', '-2', '9.5', 'NaN', 'Infinity', 'bad']) {
+    data.set(key, value);
+    assert.equal(readComputerThreads(), 6);
+  }
+  data.set(key, '32');
+  assert.equal(readComputerThreads(computerThreadPolicy(18)), 13);
+  assert.equal(readComputerThreads(computerThreadPolicy(4)), 2);
+  assert.equal(data.get(key), '32', 'reading on a smaller device does not overwrite the preference');
+});
+
+test('blocked browser storage never prevents the default or engine setting', t => {
+  readyEngine(t);
+  preferenceStorage(t);
+  Object.defineProperty(globalThis, 'localStorage', { configurable: true, get() { throw new Error('storage blocked'); } });
+  assert.equal(readComputerThreads(), 6);
+  assert.doesNotThrow(() => saveComputerThreads(9));
+});
+
+test('Vision/mobile paths never read or save the computer thread preference', t => {
+  readyEngine(t, { ...mac, userAgent: 'AtelierVision visionOS', maxTouchPoints: 5 });
+  const data = preferenceStorage(t);
+  data.set('stockfish-explain.computer-threads.v1', '9');
+  assert.equal(readComputerThreads(), undefined);
+  saveComputerThreads(6);
+  assert.equal(data.get('stockfish-explain.computer-threads.v1'), '9');
 });
 
 test('invalid or oversized restored preferences cannot exceed the ceiling', () => {

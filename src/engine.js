@@ -284,7 +284,7 @@ export class Engine extends EventTarget {
       ? Math.max(1, Math.min(Math.floor(hw / 2), WASM_THREAD_CAP))
       : 1;
     // Keep the conservative boot/prewarm cap too; main.js applies the
-    // computer's half-core UI default after the worker is ready.
+    // computer's saved choice (or six-thread default) after the worker is ready.
     if (spec.threaded && isComputerBrowser()) this.threads = Math.min(this.threads, computerThreadPolicy(hw).default);
     if (Number.isInteger(threads) && threads > 0) this.threads=Math.min(this.threads,threads);
 

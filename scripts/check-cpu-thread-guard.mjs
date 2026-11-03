@@ -9,12 +9,14 @@ const main = await readFile(new URL('src/main.js', root), 'utf8');
 const index = await readFile(new URL('index.html', root), 'utf8');
 const settings = main.slice(main.indexOf('  // Computer CPU headroom:'), main.indexOf("  ui.limitMode.addEventListener('change'"));
 assert.ok(settings.includes('computerThreadPolicy()') && settings.includes('fireAnalysis()'));
+const bootThreads = main.slice(main.indexOf('        if (ui.rangeThreads && engine.setThreads)'), main.indexOf('        // Literal key (not the HASH_STORAGE'));
+assert.ok(bootThreads.includes('readComputerThreads()'));
 const threadHtml = index.slice(index.lastIndexOf('<div class="setting">', index.indexOf('<label for="range-threads">')), index.indexOf('<label for="limit-mode">'));
 const html = `<!doctype html><meta charset="utf-8"><title>CPU guard browser check</title>
-${threadHtml}<input id="range-skill" value="20"><input id="range-multipv" value="3"><span id="skill-val"></span>
+${threadHtml}<input id="range-skill" value="20"><input id="range-multipv" value="3"><span id="skill-val"></span><span id="engine-mode"></span>
 <script type="module">
 import {Engine} from '/src/engine.js';
-import {isComputerBrowser, computerThreadPolicy, readCpuGuardDiagnostics} from '/src/engine-resources.js';
+import {isComputerBrowser, computerThreadPolicy, readComputerThreads, saveComputerThreads, readCpuGuardDiagnostics} from '/src/engine-resources.js';
 const messages=[];
 class FakeWorker extends EventTarget {
   postMessage(cmd) {
@@ -26,13 +28,20 @@ class FakeWorker extends EventTarget {
 }
 window.Worker=FakeWorker;
 const engine=new Engine();
-await engine.boot({flavor:'lite'});
 const IS_IOS=false, IS_MOBILE=false;
-const ui=Object.fromEntries(Object.entries({rangeThreads:'range-threads',threadsVal:'threads-val',threadsHw:'threads-hw',rangeSkill:'range-skill',skillVal:'skill-val',rangeMultipv:'range-multipv'}).map(([key,id])=>[key,document.getElementById(id)]));
+const ui=Object.fromEntries(Object.entries({rangeThreads:'range-threads',threadsVal:'threads-val',threadsHw:'threads-hw',rangeSkill:'range-skill',skillVal:'skill-val',rangeMultipv:'range-multipv',engineMode:'engine-mode'}).map(([key,id])=>[key,document.getElementById(id)]));
+async function reboot(flavor='lite') {
+  engine.terminate();
+  await engine.boot({flavor});
+  ${bootThreads}
+  ui.engineMode.textContent=flavor+' · '+engine.threads+' thread'+(engine.threads===1?'':'s');
+}
+await reboot();
+const bootAppliedThreads=engine.threads;
 const fireAnalysis=()=>{};
 const applyAnalysisLineCount=()=>{};
 ${settings}
-window.qa={engine,messages,readCpuGuardDiagnostics};
+window.qa={engine,messages,readCpuGuardDiagnostics,readComputerThreads,reboot,bootAppliedThreads};
 </script>`;
 const server=createServer(async (req,res)=>{
   try {
@@ -54,12 +63,28 @@ try {
   page.on('pageerror',err=>errors.push(err.message));
   await page.goto('http://127.0.0.1:'+server.address().port);
   await page.waitForFunction(()=>!!window.qa);
-  assert.equal(await page.locator('#range-threads').inputValue(),'9');
+  assert.equal(await page.locator('#range-threads').inputValue(),'6');
   assert.equal(await page.locator('#range-threads').getAttribute('max'),'13');
-  assert.equal(await page.locator('#threads-val').textContent(),'9');
+  assert.equal(await page.locator('#threads-val').textContent(),'6');
+  assert.equal(await page.evaluate(()=>qa.bootAppliedThreads),6);
+  assert.match(await page.locator('#engine-mode').textContent(),/6 threads/);
   assert.match(await page.locator('#threads-help').textContent(),/no scheduled pauses/);
-  await page.locator('#range-threads').fill('13');
-  assert.equal(await page.evaluate(()=>qa.engine.threads),13);
+  await page.locator('#range-threads').fill('9');
+  assert.equal(await page.evaluate(()=>qa.engine.threads),9);
+  assert.match(await page.locator('#engine-mode').textContent(),/9 threads/);
+  // Both the initial boot and subsequent UI initialization must restore nine.
+  await page.reload();await page.waitForFunction(()=>!!window.qa);
+  assert.equal(await page.evaluate(()=>qa.bootAppliedThreads),9);
+  assert.equal(await page.locator('#range-threads').inputValue(),'9');
+  assert.equal(await page.evaluate(()=>qa.engine.threads),9);
+  assert.match(await page.locator('#engine-mode').textContent(),/9 threads/);
+  // Temporary engine owners / single-thread fallback must not erase that choice.
+  await page.evaluate(()=>qa.engine.setThreads(2));
+  await page.evaluate(()=>qa.reboot('lite-single'));
+  assert.equal(await page.evaluate(()=>qa.engine.threads),1);
+  assert.equal(await page.evaluate(()=>qa.readComputerThreads()),9);
+  await page.evaluate(()=>qa.reboot());
+  assert.equal(await page.evaluate(()=>qa.engine.threads),9);
   await page.evaluate(()=>{
     qa.engine.setThreads(999);
     qa.engine.start('8/8/8/8/8/8/4P3/K6k w - - 0 1',{infinite:true});
@@ -69,10 +94,11 @@ try {
   const records=await page.evaluate(()=>qa.readCpuGuardDiagnostics());
   assert.ok(records.length>0 && records.every(r=>r.applied<=13));
   assert.ok(await page.evaluate(()=>qa.messages.filter(m=>m.startsWith('setoption name Threads')).every(m=>Number(m.split(' ').at(-1))<=13)));
-  // Reload exercises a new worker and settings initialization, not just a slider edit.
+  await page.locator('#range-threads').fill('6');
   await page.reload();await page.waitForFunction(()=>!!window.qa);
-  assert.equal(await page.locator('#range-threads').inputValue(),'9');
-  assert.equal(await page.evaluate(()=>qa.engine.threads),9);
+  assert.equal(await page.locator('#range-threads').inputValue(),'6');
+  assert.equal(await page.evaluate(()=>qa.bootAppliedThreads),6);
+  assert.equal(await page.evaluate(()=>qa.engine.threads),6);
   assert.deepEqual(errors,[]);
-  console.log('PASS: Chrome fake-worker boot, 18-core default 9 / ceiling 13, slider, oversized restore, continuous infinite search, reload, durable logs; no real Stockfish loaded.');
+  console.log('PASS: Chrome fake-worker boot, 18-core default 6 / ceiling 13, saved 9 and 6 across reload, engine reboot / single-thread fallback preference, thread badge, oversized restore, continuous infinite search, durable logs; no real Stockfish loaded.');
 } finally {await browser.close();await new Promise(resolve=>server.close(resolve));}
